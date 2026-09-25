@@ -1,0 +1,44 @@
+# ---------- .NET ----------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+*.received.*
+TestResults/
+[Cc]overage*/
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+artifacts/
+
+# ---------- Node / frontend ----------
+node_modules/
+dist/
+.vite/
+*.local
+.eslintcache
+npm-debug.log*
+pnpm-debug.log*
+
+# ---------- Segreti ----------
+# Non committare mai credenziali: la connection string di sviluppo
+# vive in user-secrets, quella di produzione nel secret store del deploy.
+appsettings.*.local.json
+*.pfx
+*.p12
+.env
+.env.*
+!.env.example
+
+# ---------- Sistema ----------
+Thumbs.db
+desktop.ini
+.DS_Store

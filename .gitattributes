@@ -1,0 +1,23 @@
+# Normalizza i fine riga nel repository: LF in git, nativo sul disco.
+* text=auto
+
+*.cs        text diff=csharp
+*.csproj    text
+*.sln       text eol=crlf
+*.props     text
+*.targets   text
+*.json      text
+*.md        text
+*.yml       text
+*.yaml      text
+*.ts        text
+*.tsx       text
+*.css       text
+
+*.ps1       text eol=crlf
+*.sh        text eol=lf
+
+*.png       binary
+*.jpg       binary
+*.woff2     binary
+*.pfx       binary
