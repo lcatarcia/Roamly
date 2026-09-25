@@ -21,7 +21,7 @@ Il criterio che governa tutta la suite (**R31**): **ogni verificatore vive al li
 | **L3** | design system, i18n, budget, contrasto | Vitest + lint + script Node | `frontend/roamly-web` | ~2 min |
 | **L4** | accessibilità, reduced motion, flussi critici | Playwright + `@axe-core/playwright` | `frontend/roamly-web/e2e` | 4-6 min |
 
-> **Il fatto più importante di questo documento:** costruire `DbContext.Model` **non richiede un database**. Si usa `UseSqlServer` con una connection string mai aperta e si legge `IModel`. È fedele, costa ~200 ms per assembly, e su di esso girano **17 dei 25 verificatori R1-R25**.
+> **Il fatto più importante di questo documento:** costruire il modello EF **non richiede un database**. Si usa `UseSqlServer` con una connection string mai aperta e si legge `IModel`. È fedele, costa ~200 ms per assembly, e su di esso girano **17 dei 25 verificatori R1-R25**.
 >
 > ❌ **Non** si usa il provider EF in-memory nemmeno per questo: produce un `Model` **diverso** (ignora delete behavior, precisione, nomi delle constraint, layout della PK) — cioè un modello che non va in produzione.
 
@@ -31,7 +31,11 @@ var options = new DbContextOptionsBuilder<FullSchemaDbContext>()
     .UseSqlServer("Server=none;Database=none;")
     .Options;
 using var ctx = new FullSchemaDbContext(options);
-IModel model = ctx.Model;
+
+// ⚠️ NON `ctx.Model`: e' il modello read-optimized, privo delle annotazioni
+// del provider (fra cui SqlServer:Clustered). Vedi §8.2 — e' un reperto, non
+// una preferenza stilistica.
+IModel model = ctx.GetService<IDesignTimeModel>().Model;
 ```
 
 ---
@@ -90,6 +94,12 @@ frontend/roamly-web/
 ├── scripts/design-guard/           # R11, R12, R14, R18, R19, R22
 └── e2e/                            # Playwright (L4), matrice sui due temi
 ```
+
+> 🔴 **Contraddizione aperta, scoperta al Blocco 3.** Questo albero colloca `IEntityBuilder`, `BuilderRegistry` e i builder concreti in **`Roamly.IntegrationTests/TestData/`**, ma il loro verificatore di copertura (`BuilderRegistryCoverageTests.cs`, R33 di ADR-0009) in **`Roamly.Model.Tests/TestData/`**. **Non è implementabile così com'è scritto**: un progetto di test non referenzia un altro progetto di test, e non deve iniziare a farlo.
+>
+> Per questa ragione **R33 è stato rinviato al Blocco 4**, dove i builder servono davvero (test R9). Scriverlo al Blocco 3 avrebbe prodotto o un test rosso su 13 entità, o — peggio — un verificatore permissivo e sempre verde, cioè esattamente il difetto di §8.1 e §8.2. **Un verificatore a cui non si può applicare R38 non è consegnabile.**
+>
+> La collocazione di `IEntityBuilder`/`BuilderRegistry` è una decisione di **struttura** (@archimedes), da prendere all'apertura del Blocco 4.
 
 **Perché quattro progetti e non tre**: L0 deve poter girare **senza Docker, in meno di 5 secondi**, anche in un pre-commit hook. Tenerlo dentro `IntegrationTests` gli farebbe trascinare il container e ne annullerebbe il beneficio principale.
 
@@ -338,6 +348,16 @@ var model = context.GetService<Microsoft.EntityFrameworkCore.Metadata.IDesignTim
 
 > ⚠️ **Il tipo sta in `Microsoft.EntityFrameworkCore.Metadata`, non in `...Infrastructure`**, contrariamente a quanto suggerisce la memoria: la documentazione lo colloca spesso nel secondo. Verificato per riflessione sull'assembly `Microsoft.EntityFrameworkCore.dll` 10.0.12.
 
+> ✅ **Confermato al Blocco 3 in forma dimostrabile.** Il verificatore di R26 legge ora `IsClustered()` su `IDesignTimeModel` e ottiene `False` — un valore, non `null` e non un'eccezione. La differenza tra «annotazione assente» e «annotazione presente e falsa» è esattamente ciò che separa un verificatore inerte da uno in vigore.
+
+### 8.3 R32 è cieco sulle entità raggiungibili per navigazione
+
+**Reperto del Blocco 3.** R32 (ADR-0009) confronta `DomainModelManifest.AllEntityTypes` con gli entity type di `FullSchemaDbContext`. Ma EF Core **scopre per convenzione** ogni tipo raggiungibile per navigazione da un tipo già mappato: togliere la `IEntityTypeConfiguration` di un'entità **non la rimuove dal modello**, e R32 resta **verde**.
+
+Ciò che diventa rosso in quel caso sono R26-R29, perché l'entità scoperta per convenzione prende `PK(Id)` semplice invece di `(OwnerId, Id)` clusterizzata. **La rete regge**, ma per una ragione diversa da quella scritta.
+
+> **Conseguenza operativa.** R32 protegge davvero il caso che ADR-0009 §*Modo A vs modo B* descrive — un'entità nuova **non raggiungibile** da nessuna navigazione esistente, cioè una radice di aggregato nuova. Non protegge dalla rimozione di una configuration. Il verificatore resta necessario e resta scritto così; è la sua **motivazione** che va letta con questa precisazione, altrimenti si scambia per copertura ciò che è copertura di R26-R29.
+
 ---
 
 ## 9. Test data builder
@@ -473,6 +493,9 @@ npm run e2e
 | Suite L0 a progetto singolo, build inclusa (1 test) | < 5 s | Blocco 1 | **3,9 s** di esecuzione, 18,8 s a freddo con build |
 | `dotnet build` dell'intera solution, 7 progetti, incrementale | — | Blocco 2 | **11,1 s**, 0 avvisi, 0 errori |
 | Costruzione offline di `FullSchemaDbContext.Model` (21 entity type) | — | Blocco 2 | inclusa nei **6,6 s** della suite L0 con sonda, mai connessa |
+| **Suite L0 `Roamly.Model.Tests`, 13 test** (analizzatore 1785, R26-R29, R40, R32) | < 5 s | **Blocco 3** | **2,8-3,3 s**, esecuzione 2,55-2,97 s |
+| **Suite L0 `Roamly.Domain.Tests`, 3 test** (COMB) | — | **Blocco 3** | **1,4 s** |
+| **Tutto L0 insieme, 16 test** | < 5 s | **Blocco 3** | **3,5 s** — ✅ Checkpoint 3 |
 | Pull immagine su runner GHA (non cachata) | 40-70 s | — | — |
 | Readiness del container | 20-45 s | — | — |
 | `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | — | — |
