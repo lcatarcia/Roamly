@@ -2,12 +2,13 @@
 
 ## Contesto di progetto (leggere prima di operare)
 
-Il progetto è in **pre-implementazione**: nessun codice scritto. **Il gate alle decisioni bloccanti è superato** — ciò che resta prima della prima slice è lavoro, non più decisioni.
+Il progetto è **in implementazione**. Il gate alle decisioni bloccanti è superato e le nove ADR sono accettate.
 
 - Indice documentazione: `docs/README.md`
 - **Decisioni aperte: `docs/OPEN-DECISIONS.md`**. Restano aperte #3 (geo, blocca la Phase 3), #5, #8, #9, #10: **nessuna blocca l'MVP**.
 - Vincoli non negoziabili già stabiliti: **SQL Server** (non PostgreSQL), **ASP.NET Core 10**, **GitHub Actions**, ownership owner-scoped su ogni query, **PK composita `(OwnerId, Id)`** (ADR-0008).
-- Prossimo passo: `docs/product/ROADMAP.md` §4 passo **3d** — infrastruttura di test, ~1,5 giorni in 5 checkpoint.
+- Avanzamento: `docs/adr/0009-test-strategy.md` §9. **Blocchi 1 e 2 chiusi** — solution, toolchain, e il modello completo (14 entità, 5 complex type, 27 FK) costruibile offline. **Prossimo: Blocco 3**, i verificatori senza Docker.
+- ⛔ **Nessuna slice di dominio prima del Checkpoint 3.**
 
 ### Comandi di test
 
@@ -15,8 +16,10 @@ Due livelli, separati per **costo**, non per livello architetturale ([`docs/adr/
 
 | Comando | Cosa | Costo | Docker |
 |---|---|---|---|
-| `dotnet test tests/Roamly.Domain.Tests tests/Roamly.Model.Tests` | **L0** — dominio + 17 dei 25 verificatori | **< 5 s** | **no** |
-| `dotnet test` | suite completa, include Testcontainers | 60-100 s in CI, 5-15 s in locale | sì |
+| `dotnet test --project tests/Roamly.Model.Tests` | **L0** — dominio + 17 dei 25 verificatori | **< 5 s** | **no** |
+| `dotnet test --solution Roamly.slnx` | suite completa, include Testcontainers | 60-100 s in CI, 5-15 s in locale | sì |
+
+> ⚠️ Col runner Microsoft.Testing.Platform di .NET 10 RTM il percorso del progetto **non è più posizionale**: serve `--project` o `--solution`. E un progetto di test **senza test** fa uscire il comando con **exit code 8** — finché `Roamly.Domain.Tests` e `Roamly.IntegrationTests` sono vuoti, la suite completa è rossa per questo motivo, non per un test fallito ([`TESTING.md`](docs/architecture/TESTING.md) §13).
 
 Usa **L0 durante il lavoro**: EF Core costruisce `DbContext.Model` offline con `UseSqlServer` senza mai connettersi, quindi la maggior parte delle regole si verifica senza database. La suite completa prima di consegnare.
 

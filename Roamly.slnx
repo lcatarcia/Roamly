@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Roamly.Api/Roamly.Api.csproj" />
+    <Project Path="src/Roamly.Common/Roamly.Common.csproj" />
     <Project Path="src/Roamly.Domain/Roamly.Domain.csproj" />
     <Project Path="src/Roamly.Infrastructure/Roamly.Infrastructure.csproj" />
   </Folder>

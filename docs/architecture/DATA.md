@@ -58,7 +58,7 @@ L'upgrade a `geography` SRID 4326 è **pre-approvato** al verificarsi di uno dei
 
 - **`CreatedAtUtc` obbligatorio** (`datetime2`, NOT NULL, UTC) su **ogni** entità owned. Non è un "audit field dove utile": senza, nessuna politica di retention è esprimibile a posteriori. Aggiungerlo dopo costa un backfill su dati per cui il valore vero **non esiste più**;
 - **`OwnerId → AspNetUsers(Id)` è sempre `ON DELETE NO ACTION`**, senza eccezioni;
-- il **cascade esiste solo lungo la gerarchia di dominio**, sulle FK composite `(ParentId, OwnerId) → Parent(Id, OwnerId)` già imposte da R4;
+- il **cascade esiste solo lungo la gerarchia di dominio**, sulle FK composite `(OwnerId, ParentId) → Parent(OwnerId, Id)` già imposte da R4 — con `OwnerId` come **prima** colonna, R29;
 - **una sola cascade path per coppia di tabelle.** Il caso `Expense` è ora risolto dal domain model: `CamperId` è **obbligatorio e in cascade**, `TripId` è **opzionale e `NO ACTION`** — non `SET NULL`, che conta anch'esso come percorso. La cancellazione del viaggio slega le spese esplicitamente nel job. Niente trigger;
 - **nessun soft delete di privacy.** Se servirà un cestino, è una funzionalità di prodotto e va chiamata con un altro nome.
 

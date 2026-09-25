@@ -246,7 +246,8 @@ Il verificatore di @oracle **vive in `Roamly.Model.Tests/Keys/`** ed è L0, con 
 | **Nessuna chiave alternata** su alcuna entità (`GetKeys().Count() == 1`) | L0 |
 | Nessuna FK con `SetNull`/`ClientSetNull` | L0 |
 | `Id` è `ValueGeneratedNever()` | L0 |
-| PK **CLUSTERED**, `CreatedAtUtc` fuori dalla clustering key | **L1**, nel test B |
+| PK **CLUSTERED** (annotazione `SqlServer:Clustered` sull'`IKey`) | **L0**, ma **solo via `IDesignTimeModel`** — vedi §8.2 |
+| `CreatedAtUtc` fuori dalla clustering key | L0, stessa lettura |
 | Monotonicità del generatore COMB | L0, in `Domain.Tests` |
 
 ### 6.3 Privacy — R8-R10 ([`ADR-0004`](../adr/0004-privacy-and-erasure.md))
@@ -318,6 +319,24 @@ Gli integration test non possono usare un header `Authorization`. Servono:
 Nella prima stesura di questo progetto tutte e quattro le voci temporali erano in quella forma. Il file esisteva, la build era verde, e il divieto **non era in vigore**. È stato scoperto solo applicando **R38** — scrivere una violazione deliberata e pretendere di vedere il rosso — e sarebbe altrimenti passato per settimane, fino al primo `DateTime.UtcNow` in un handler.
 
 > **Conseguenza operativa.** Le due voci `UseSqlite` e `UseInMemoryDatabase` (R30) **non sono ancora verificate**: i rispettivi pacchetti non sono referenziati, quindi non c'è modo di distinguere "divieto attivo" da "voce non risolta". Vanno messe alla prova nel momento esatto in cui qualcuno aggiunge uno di quei pacchetti — che è anche l'unico momento in cui servono davvero.
+
+---
+
+### 8.2 `DbContext.Model` non contiene le annotazioni del provider — reperto del Blocco 2
+
+`ModelFixture` (Blocco 3) **non deve leggere `DbContext.Model`**, ma:
+
+```csharp
+var model = context.GetService<Microsoft.EntityFrameworkCore.Metadata.IDesignTimeModel>().Model;
+```
+
+`DbContext.Model` è il **modello read-optimized** di runtime, da cui EF Core **rimuove le annotazioni che servono solo alla generazione dello schema** — fra cui `SqlServer:Clustered`. Leggendolo, `key.FindAnnotation("SqlServer:Clustered")` restituisce `null` su **tutte** le entità, e `key.IsClustered()` non restituisce `false`: **lancia** `InvalidOperationException` con il messaggio *"The requested configuration is not stored in the read-optimized model, please use `DbContext.GetService<IDesignTimeModel>().Model`"*.
+
+> **Perché è un rischio e non un dettaglio.** Un verificatore di R26 scritto con `FindAnnotation` su `DbContext.Model` è **rosso su tutto** — rumoroso, quindi innocuo: ci si accorge subito. Ma la forma speculare, `FindAnnotation(...) is not null` usata come guardia permissiva, sarebbe **verde su tutto** e il controllo `IsClustered` **non sarebbe mai in vigore**. È lo stesso schema di fallimento silenzioso di §8.1, su un'annotazione diversa.
+
+**Conseguenza operativa:** la verifica *PK CLUSTERED* **scende da L1 a L0** (§6.2). Non richiede Docker, non richiede il test B, costa millisecondi e vale su tutte e 13 le entità owned. Il test B del Blocco 4 resta necessario per ciò che solo il database può dire: l'errore 1785 e l'**ordine delle colonne in `REFERENCES`** (R33).
+
+> ⚠️ **Il tipo sta in `Microsoft.EntityFrameworkCore.Metadata`, non in `...Infrastructure`**, contrariamente a quanto suggerisce la memoria: la documentazione lo colloca spesso nel secondo. Verificato per riflessione sull'assembly `Microsoft.EntityFrameworkCore.dll` 10.0.12.
 
 ---
 
@@ -440,6 +459,9 @@ npm run lint && npm run design:guard && npm run contrast:check && npm run test
 npm run e2e
 ```
 
+> ⚠️ **Un progetto di test senza test fa fallire il comando — reperto del Blocco 2.** Microsoft.Testing.Platform tratta *"zero test eseguiti"* come **fallimento**, con **exit code 8**, non come successo vacuo. Oggi `dotnet test --solution Roamly.slnx` esce `8` pur con `non riuscito: 0`, perché `Roamly.Domain.Tests` e `Roamly.IntegrationTests` sono ancora vuoti. Si risolve da sé nei Blocchi 3-4, quando quei progetti ricevono i loro test.
+> Va però ricordato in `ci.yml` (Blocco 5): **un filtro `--filter` che non seleziona nulla rende il job rosso**, e il messaggio (`non riuscito: 0`) non lo fa sembrare un errore. È l'opposto del fallimento silenzioso di §8.1 — qui è il *successo* a essere silenzioso — ma la lezione è la stessa: leggere l'exit code, non il riepilogo.
+
 ---
 
 ## 14. Tempi misurati
@@ -449,6 +471,8 @@ npm run e2e
 | Grandezza | Stima | Misurato il | Valore reale |
 |---|---|---|---|
 | Suite L0 a progetto singolo, build inclusa (1 test) | < 5 s | Blocco 1 | **3,9 s** di esecuzione, 18,8 s a freddo con build |
+| `dotnet build` dell'intera solution, 7 progetti, incrementale | — | Blocco 2 | **11,1 s**, 0 avvisi, 0 errori |
+| Costruzione offline di `FullSchemaDbContext.Model` (21 entity type) | — | Blocco 2 | inclusa nei **6,6 s** della suite L0 con sonda, mai connessa |
 | Pull immagine su runner GHA (non cachata) | 40-70 s | — | — |
 | Readiness del container | 20-45 s | — | — |
 | `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | — | — |

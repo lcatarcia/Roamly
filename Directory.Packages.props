@@ -9,6 +9,12 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <!--
+      Identity fornisce ApplicationUser/AspNetUsers, il principal di tutte le FK OwnerId.
+      Versione allineata a EF Core 10.0.12: le due famiglie di pacchetti condividono la
+      stessa cadenza di patch, disallinearle rompe il restore.
+    -->
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Analyzers">

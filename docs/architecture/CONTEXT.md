@@ -52,7 +52,7 @@ Questo non è più un'osservazione ma un **vincolo implementato**: ogni entità 
 | `OwnerId` | `Guid` NOT NULL, FK → `AspNetUsers(Id)` **`ON DELETE NO ACTION`**, mai bindabile dal client, immutabile | [`ADR-0003`](../adr/0003-auth-and-ownership.md), [`ADR-0004`](../adr/0004-privacy-and-erasure.md) |
 | `CreatedAtUtc` | `datetime2(3)` NOT NULL, sempre UTC | ADR-0004 |
 | `UpdatedAtUtc` | `datetime2(3)` NULL — `NULL` significa "mai modificata dopo la creazione", ed è il segnale che spegne il badge "suggerita" (§2.2, `MaintenanceItem.Origin`) | questo documento |
-| FK verso il padre | sempre **composita**: `(ParentId, OwnerId) → Parent(OwnerId, Id)` — referenzia **direttamente la PK** | R4, ADR-0008 |
+| FK verso il padre | sempre **composita**, con **`OwnerId` come PRIMA colonna**: `(OwnerId, ParentId) → Parent(OwnerId, Id)` — referenzia **direttamente la PK** | R4, ADR-0008 **R29** |
 | Indici | `OwnerId` è **sempre la prima colonna** | ADR-0003 |
 | Query filter | filtro nominato `"OwnerScope"`, l'unico del sistema | R2 |
 
@@ -140,7 +140,7 @@ PK: `(OwnerId, Id)` CLUSTERED — è padre di 6 entità e la sua PK basta a tutt
 Oggetti e accessori presenti sul camper: pannelli solari, batteria, inverter, bombole, portabici, tendalino, livellatori.
 
 `Id`, `OwnerId`, `CamperId`, `Name nvarchar(60)` NOT NULL, `Category tinyint`, `Notes nvarchar(500)?`, `InstalledOnUtc date?`, `CreatedAtUtc`.
-FK: `(CamperId, OwnerId) → Camper(Id, OwnerId)` **CASCADE**. Indice `(OwnerId, CamperId)`.
+FK: `(OwnerId, CamperId) → Camper(OwnerId, Id)` **CASCADE**. Indice `(OwnerId, CamperId)`.
 
 #### `MaintenanceItem` — owned, figlio di `Camper`, **CASCADE**
 
@@ -195,7 +195,7 @@ Il **catalogo dei seed** vive come **risorsa versionata nel codice** (JSON embed
 Il **fatto** che un intervento è stato eseguito. Immutabile.
 
 `Id`, `OwnerId`, `MaintenanceItemId`, `PerformedOnUtc date` NOT NULL, `OdometerKm int?`, `Cost` (**complex type `Money`, nullable**), `Workshop nvarchar(80)?`, `Notes nvarchar(1000)?`, `CreatedAtUtc`.
-FK: `(MaintenanceItemId, OwnerId) → MaintenanceItem(Id, OwnerId)` **CASCADE**. Indice `(OwnerId, MaintenanceItemId, PerformedOnUtc DESC)`.
+FK: `(OwnerId, MaintenanceItemId) → MaintenanceItem(OwnerId, Id)` **CASCADE**. Indice `(OwnerId, MaintenanceItemId, PerformedOnUtc DESC)`.
 
 > **Il costo dell'intervento vive qui, non in `Expense`.** Di conseguenza **la categoria `Maintenance` non esiste** tra le categorie di `Expense`: evita il doppio inserimento e il doppio conteggio. Il Cost Management legge da **entrambe** le fonti e le somma per valuta.
 
@@ -206,7 +206,7 @@ Ogni `MaintenanceLog` con `OdometerKm` valorizzato **genera automaticamente** un
 Una lettura **datata** del contachilometri. È il prerequisito dell'asse km del `Ribbon`, ma non nasce per lui: i widget "km annuali" e "€/km" la richiedono comunque.
 
 `Id`, `OwnerId`, `CamperId`, `ReadingKm int` NOT NULL, `TakenOnUtc date` NOT NULL, `Source tinyint` (`Manual=0`, `Service=1`, `TripEnd=2` da Phase 2), `CreatedAtUtc`.
-FK: `(CamperId, OwnerId) → Camper(Id, OwnerId)` **CASCADE**.
+FK: `(OwnerId, CamperId) → Camper(OwnerId, Id)` **CASCADE**.
 Indice `(OwnerId, CamperId, TakenOnUtc DESC)` — è insieme la query "lettura corrente" e quella dei km annuali.
 `UNIQUE (OwnerId, CamperId, TakenOnUtc)`: **una lettura al giorno per camper**.
 
@@ -289,7 +289,7 @@ Implementazione: `enum byte` + metodo di dominio `Trip.TransitionTo(status)` con
 Una **tappa di un viaggio specifico**, con posizione e momento propri. Appartiene a un solo viaggio: non è un luogo riusabile.
 
 Campi: `Id`, `OwnerId`, `TripId`, `SequenceNo int`, `Name nvarchar(80)`, `Position` (complex type `Coordinates`, **nullable** — una tappa senza posizione ha senso: "da qualche parte in Bretagna"), `ArrivalOnUtc?`, `DepartureOnUtc?`, `SavedPlaceId?`, `Notes?`, `CreatedAtUtc`.
-FK: `(TripId, OwnerId) → Trip` **CASCADE**; `(SavedPlaceId, OwnerId) → SavedPlace` **NO ACTION**.
+FK: `(OwnerId, TripId) → Trip` **CASCADE**; `(OwnerId, SavedPlaceId) → SavedPlace` **NO ACTION**.
 PK: `(OwnerId, Id)` CLUSTERED — referenziata dalla FK composita opzionale di `JournalEntry`.
 
 La posizione è uno **snapshot**: se il `SavedPlace` collegato cambia o sparisce, la tappa resta leggibile.
@@ -330,14 +330,14 @@ Catena a 3 livelli (`Trip → Checklist → ChecklistItem`): un solo percorso pe
 
 Una nota o un ricordo del viaggio, **opzionalmente ancorata a una tappa**.
 Campi: `Id`, `OwnerId`, `TripId`, `TripStopId?`, `EntryOnUtc date`, `Title nvarchar(120)?`, `Body nvarchar(max)`, `CreatedAtUtc`, `UpdatedAtUtc`.
-FK: `(TripId, OwnerId) → Trip` **CASCADE**; `(TripStopId, OwnerId) → TripStop` **NO ACTION**.
+FK: `(OwnerId, TripId) → Trip` **CASCADE**; `(OwnerId, TripStopId) → TripStop` **NO ACTION**.
 
 > 🔴 **La seconda FK è `NO ACTION` per obbligo, non per stile.** `Trip → JournalEntry` diretto e `Trip → TripStop → JournalEntry` sono due percorsi verso la stessa tabella: se entrambi fossero in cascade, la migration fallirebbe con l'errore **1785**. Vedi §5.2 caso (c).
 
 #### `Document` — owned, figlio di `Camper`, **CASCADE** — 🟡 Phase 4
 
 Documenti relativi al camper e al viaggio (libretto, assicurazione, revisione, ricevute). **Fuori dall'MVP per decisione esplicita**: introduce lo storage di file, che è un sottosistema a sé (e un secondo grafo di cancellazione, quello degli oggetti binari).
-Topologia prevista: `(CamperId, OwnerId) → Camper` **CASCADE**, più una FK opzionale `NO ACTION` verso `Trip` se servirà. La sua introduzione richiede di **rileggere §5 prima di scrivere la migration**.
+Topologia prevista: `(OwnerId, CamperId) → Camper` **CASCADE**, più una FK opzionale `NO ACTION` verso `Trip` se servirà. La sua introduzione richiede di **rileggere §5 prima di scrivere la migration**.
 
 ### 2.4 Diagramma del modello
 
@@ -629,28 +629,30 @@ La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotne
 |---|---|---|---|---|
 | 1 | `Camper.OwnerId → AspNetUsers.Id` | user→camper | **NO ACTION** | no |
 | 2 | `Equipment.OwnerId → AspNetUsers.Id` | user→equipment | **NO ACTION** | no |
-| 3 | `Equipment.(CamperId,OwnerId) → Camper(OwnerId,Id)` | camper→equipment | **CASCADE** | 1 |
+| 3 | `Equipment.(OwnerId,CamperId) → Camper(OwnerId,Id)` | camper→equipment | **CASCADE** | 1 |
 | 4 | `MaintenanceItem.OwnerId → AspNetUsers.Id` | user→item | **NO ACTION** | no |
-| 5 | `MaintenanceItem.(CamperId,OwnerId) → Camper` | camper→item | **CASCADE** | 1 |
+| 5 | `MaintenanceItem.(OwnerId,CamperId) → Camper` | camper→item | **CASCADE** | 1 |
 | 6 | `MaintenanceLog.OwnerId → AspNetUsers.Id` | user→log | **NO ACTION** | no |
-| 7 | `MaintenanceLog.(MaintenanceItemId,OwnerId) → MaintenanceItem` | item→log | **CASCADE** | 1 |
+| 7 | `MaintenanceLog.(OwnerId,MaintenanceItemId) → MaintenanceItem` | item→log | **CASCADE** | 1 |
 | 8 | `OdometerReading.OwnerId → AspNetUsers.Id` | user→reading | **NO ACTION** | no |
-| 9 | `OdometerReading.(CamperId,OwnerId) → Camper` | camper→reading | **CASCADE** | 1 |
+| 9 | `OdometerReading.(OwnerId,CamperId) → Camper` | camper→reading | **CASCADE** | 1 |
 | 10 | `Trip.OwnerId → AspNetUsers.Id` | user→trip | **NO ACTION** | no |
-| 11 | `Trip.(CamperId,OwnerId) → Camper` | camper→trip | **CASCADE** | 1 |
-| 12 | `TripStop.(TripId,OwnerId) → Trip` | trip→stop | **CASCADE** | 1 |
-| 13 | `TripStop.(SavedPlaceId,OwnerId) → SavedPlace` | place→stop | **NO ACTION** | no |
-| 14 | `Checklist.(TripId,OwnerId) → Trip` | trip→checklist | **CASCADE** | 1 |
-| 15 | `ChecklistItem.(ChecklistId,OwnerId) → Checklist` | checklist→item | **CASCADE** | 1 |
-| 16 | `JournalEntry.(TripId,OwnerId) → Trip` | trip→journal | **CASCADE** | 1 |
-| 17 | `JournalEntry.(TripStopId,OwnerId) → TripStop` | stop→journal | **NO ACTION** | no |
-| 18 | `Expense.(CamperId,OwnerId) → Camper` | camper→expense | **CASCADE** | 1 |
-| 19 | `Expense.(TripId,OwnerId) → Trip` | trip→expense | **NO ACTION** | no |
+| 11 | `Trip.(OwnerId,CamperId) → Camper` | camper→trip | **CASCADE** | 1 |
+| 12 | `TripStop.(OwnerId,TripId) → Trip` | trip→stop | **CASCADE** | 1 |
+| 13 | `TripStop.(OwnerId,SavedPlaceId) → SavedPlace` | place→stop | **NO ACTION** | no |
+| 14 | `Checklist.(OwnerId,TripId) → Trip` | trip→checklist | **CASCADE** | 1 |
+| 15 | `ChecklistItem.(OwnerId,ChecklistId) → Checklist` | checklist→item | **CASCADE** | 1 |
+| 16 | `JournalEntry.(OwnerId,TripId) → Trip` | trip→journal | **CASCADE** | 1 |
+| 17 | `JournalEntry.(OwnerId,TripStopId) → TripStop` | stop→journal | **NO ACTION** | no |
+| 18 | `Expense.(OwnerId,CamperId) → Camper` | camper→expense | **CASCADE** | 1 |
+| 19 | `Expense.(OwnerId,TripId) → Trip` | trip→expense | **NO ACTION** | no |
 | 20 | `SavedPlace.OwnerId → AspNetUsers.Id` | user→place | **NO ACTION** | no |
-| 21 | `Document.(CamperId,OwnerId) → Camper` *(Phase 4)* | camper→document | **CASCADE** | 1 |
+| 21 | `Document.(OwnerId,CamperId) → Camper` *(Phase 4)* | camper→document | **CASCADE** | 1 |
 | — | `ErasureReceipt` | — | **nessuna FK** | — |
 
 Ogni entità owned ha inoltre la propria FK `OwnerId → AspNetUsers`, sempre **NO ACTION**, anche dove non elencata sopra.
+
+> ⚠️ **"21" è il numero di righe di questa tabella, non il numero di FK del modello.** Sopra sono elencate solo **7** delle **13** FK `OwnerId` (mancano quelle di `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `Expense`, `Document`). Il modello EF costruito nel Blocco 2 contiene **27 FK di dominio** = 13 `OwnerId` + 14 verso il padre, più 6 FK interne a Identity, per un totale di **33** in `FullSchemaDbContext`. Un verificatore che asserisse `== 21` sarebbe rosso a torto. *Misurato sul modello, 2026-09-25.*
 
 ### 5.2 Dimostrazione: nessuna coppia con due percorsi
 
