@@ -75,7 +75,7 @@ Come in ADR-0003 e ADR-0004, questa tabella è il contenuto informativo principa
 | «la causa del problema di v7 è il layout little-endian di `System.Guid`» (spiegazione allegata alla ❌ in §3.8) | ❌ **impreciso, e va corretto.** `Guid.CreateVersion7()` produce byte **conformi all'RFC**. La causa è **l'ordinamento di confronto di `uniqueidentifier` in SQL Server**. Vedi §*La verifica su GUID v7* per perché la differenza conta |
 | «il default di EF Core per i `Guid` è un GUID casuale» | ❌ **falso.** È `SequentialGuidValueGenerator`, ordinato **per SQL Server** (sorgente letto) |
 | «`UNIQUE (Id, OwnerId)` su ogni tabella-padre è un requisito non negoziabile» (`CONTEXT.md` §5.3) | ❌ **smentito da questo ADR.** È non negoziabile **solo se** la PK è `Id` da solo. Con `PK(OwnerId, Id)` **scompare** |
-| «`ON DELETE SET NULL` è la via d'uscita per le FK opzionali» | ❌ già smentito in ADR-0004: `SET NULL` **conta come percorso** ai fini dell'errore 1785. Confermato, e reso verificabile da R30 |
+| «`ON DELETE SET NULL` è la via d'uscita per le FK opzionali» | ❌ già smentito in ADR-0004: `SET NULL` **conta come percorso** ai fini dell'errore 1785. Confermato, e reso verificabile da R40 |
 
 ---
 
@@ -312,7 +312,7 @@ modelBuilder.Entity<Expense>(b =>
 });
 ```
 
-### 4. Cosa NON scrivere — vietato, e verificato da R26-R31
+### 4. Cosa NON scrivere — vietato, e verificato da R26-R29, R40 e R41
 
 ```csharp
 b.HasAlternateKey(e => new { e.Id, e.OwnerId });                // non serve piu'
@@ -340,9 +340,13 @@ Proposta **minima**, da rivedere quando le query esisteranno davvero. `DATA.md` 
 
 ---
 
-## Regole invarianti — R26-R33
+## Regole invarianti — R26-R29 e R40-R43
 
 > Numerazione in continuità con **R1-R7** (`SECURITY.md` §2.2), **R8-R10** (ADR-0004) e **R11-R25** (ADR-0007). **R1-R25 non vengono toccate.**
+>
+> ⚠️ **Salto di numerazione, 2026-09-25.** Questo ADR aveva originariamente numerato **R26-R33**. [`ADR-0009`](0009-test-strategy.md) ha però letto la serie come terminante a R29 e ha numerato le proprie regole **da R30**, creando quattro regole con due significati (R30-R33). La collisione è stata scoperta all'apertura del Blocco 3, quando i file di test — che per convenzione portano il codice della regola nel nome (`TESTING.md` §3) — avrebbero reso ambigua proprio la ricerca testuale che quella convenzione esiste per garantire.
+>
+> **Risoluzione:** le quattro regole di questo ADR che collidevano sono state spostate in coda, **R30→R40, R31→R41, R32→R42, R33→R43**. ADR-0009 conserva R30-R39. R26-R29 sono invariate. Da qui in avanti **nessun ADR numera da un valore dedotto**: il prossimo numero libero è **R44**.
 
 Criterio, invariato: *una regola che si applica "ricordandosene" non è una regola, è un proposito. La differenza è che la prima rompe la build.*
 
@@ -354,10 +358,10 @@ Senza questi verificatori, la prima entità aggiunta tra sei mesi prenderà `PK(
 | **R27** | **Nessuna alternate key.** Nessuna entità owned dichiara `HasAlternateKey`, e nessun indice `UNIQUE (Id, OwnerId)` esiste nello schema | test di convenzione (**bloccante**): `entityType.GetKeys()` deve contenere **una sola** chiave, che è la PK. È la regola che impedisce al requisito eliminato di rientrare dalla finestra |
 | **R28** | **Id generato dal dominio.** `Id` e `OwnerId` hanno `ValueGenerated == Never`; nessuna proprietà chiave ha un default SQL (`NEWID()`, `NEWSEQUENTIALID()`) né un `ValueGenerator` registrato. Ogni `Id` proviene da `IIdGenerator` | test di convenzione (**bloccante**): verifica `ValueGenerated`, assenza di `GetDefaultValueSql()` e assenza di `GetValueGeneratorFactory()` su tutte le proprietà chiave |
 | **R29** | **FK composite verso la PK.** Ogni FK tra due entità owned è composita, ha **`OwnerId` come prima colonna**, e il suo `PrincipalKey` **è la PK** del principal — mai una alternate key | test di convenzione (**bloccante**): per ogni `GetForeignKeys()` verso un `IOwnedResource`, `Properties[0].Name == "OwnerId"` e `PrincipalKey.IsPrimaryKey() == true` |
-| **R30** | **Nessun `SetNull` / `SetDefault`.** Nessuna FK del modello usa `DeleteBehavior.SetNull` o `SetDefault`: entrambe contano come cascade path ai fini dell'errore 1785 e rompono la dimostrazione di ADR-0004 | test di convenzione (**bloccante**). Formalizza una regola finora solo scritta in `CONTEXT.md` §5.2 |
-| **R31** | **Il generatore di id è iniettato, mai istanziato.** Nessun tipo di dominio chiama `Guid.NewGuid()`, `Guid.CreateVersion7()` o `new Guid(...)` per produrre un `Id`: l'unica sorgente è `IIdGenerator` | lint / analyzer (**bloccante**): regex su `src/**/Domain/**` che vieta quelle chiamate fuori da `Roamly.Common.SequentialGuidGenerator`. **`Guid.CreateVersion7()` è vietato ovunque nella persistenza**, con il messaggio che rimanda a questo ADR |
-| **R32** | **`CreatedAtUtc` fuori dalla clustering key.** La clustering key è **`(OwnerId, Id)` e nient'altro**. `CreatedAtUtc` può comparire **solo** in indici non clusterizzati, e solo se una query esistente lo usa | coperta da R26 per la parte bloccante. La seconda metà è una regola di review: **un indice nuovo va giustificato con la query che lo usa**, riferita per nome in `DATA.md` |
-| **R33** | **Lo schema generato è verificato sul database reale.** Il test dello schema completo (`DATA.md` §2.2) verifica, oltre all'assenza dell'errore 1785, che ogni clausola `REFERENCES` generata elenchi le colonne **nell'ordine della PK** `(OwnerId, Id)` | integration test su database reale (**bloccante in CI, non a ogni salvataggio**): applica tutte le migration e interroga `sys.foreign_key_columns` confrontando `referenced_column_id` con l'ordine della PK. **Dipende dalla decisione #6.** Se fallisce → §*Piano B* |
+| **R40** | **Nessun `SetNull` / `SetDefault`.** Nessuna FK del modello usa `DeleteBehavior.SetNull` o `SetDefault`: entrambe contano come cascade path ai fini dell'errore 1785 e rompono la dimostrazione di ADR-0004 | test di convenzione (**bloccante**). Formalizza una regola finora solo scritta in `CONTEXT.md` §5.2 |
+| **R41** | **Il generatore di id è iniettato, mai istanziato.** Nessun tipo di dominio chiama `Guid.NewGuid()`, `Guid.CreateVersion7()` o `new Guid(...)` per produrre un `Id`: l'unica sorgente è `IIdGenerator` | lint / analyzer (**bloccante**): regex su `src/**/Domain/**` che vieta quelle chiamate fuori da `Roamly.Common.SequentialGuidGenerator`. **`Guid.CreateVersion7()` è vietato ovunque nella persistenza**, con il messaggio che rimanda a questo ADR |
+| **R42** | **`CreatedAtUtc` fuori dalla clustering key.** La clustering key è **`(OwnerId, Id)` e nient'altro**. `CreatedAtUtc` può comparire **solo** in indici non clusterizzati, e solo se una query esistente lo usa | coperta da R26 per la parte bloccante. La seconda metà è una regola di review: **un indice nuovo va giustificato con la query che lo usa**, riferita per nome in `DATA.md` |
+| **R43** | **Lo schema generato è verificato sul database reale.** Il test dello schema completo (`DATA.md` §2.2) verifica, oltre all'assenza dell'errore 1785, che ogni clausola `REFERENCES` generata elenchi le colonne **nell'ordine della PK** `(OwnerId, Id)` | integration test su database reale (**bloccante in CI, non a ogni salvataggio**): applica tutte le migration e interroga `sys.foreign_key_columns` confrontando `referenced_column_id` con l'ordine della PK. **Dipende dalla decisione #6.** Se fallisce → §*Piano B* |
 
 **R27 è la regola che protegge il contenuto di questo ADR.** R26 e R29 descrivono la forma di oggi; R27 impedisce che tra un anno qualcuno, davanti a un errore di FK, "risolva" aggiungendo un `HasAlternateKey` e riporti dentro il requisito che questa decisione ha eliminato, senza che nessuno se ne accorga.
 
@@ -365,9 +369,9 @@ Senza questi verificatori, la prima entità aggiunta tra sei mesi prenderà `PK(
 
 ## Piano B — se EF Core 10 generasse le colonne di `REFERENCES` in un ordine diverso
 
-Il solo punto empirico non verificato è se EF Core 10 emetta `REFERENCES Camper (OwnerId, Id)` nell'ordine della PK, oppure riordini le colonne secondo l'ordine di dichiarazione della FK. **Non blocca la decisione**, perché la verifica è R33 e vive dentro un test già previsto per l'errore 1785.
+Il solo punto empirico non verificato è se EF Core 10 emetta `REFERENCES Camper (OwnerId, Id)` nell'ordine della PK, oppure riordini le colonne secondo l'ordine di dichiarazione della FK. **Non blocca la decisione**, perché la verifica è R43 e vive dentro un test già previsto per l'errore 1785.
 
-**Se R33 fallisce**, nell'ordine:
+**Se R43 fallisce**, nell'ordine:
 
 1. **Tentativo 1 — riordinare la FK.** Dichiarare `HasForeignKey(e => new { e.OwnerId, e.CamperId })` con `HasPrincipalKey(p => new { p.OwnerId, p.Id })` esplicito. Se l'ordine segue il `PrincipalKey` dichiarato, la questione è chiusa senza cambiare nulla di strutturale.
 2. **Tentativo 2 — forzare l'ordine delle colonne della PK** con `HasKey(...).HasName(...)` e l'ordine di dichiarazione delle proprietà nell'entity type. Costo: una convenzione in più, nessun impatto sul modello.
@@ -439,7 +443,7 @@ Ogni query owner-scoped legge pagine contigue; `R2` è garantita dalla forma del
 | Adottare questa decisione | **oggi, nessuna migration** | **ZERO** — una riga di convenzione in `OnModelCreating` |
 | Da `PK(Id)` a `PK(OwnerId, Id)` | dopo la prima migration, con dati | 🔴 **ALTO** — drop delle 21 FK, drop e ricreazione di ogni PK e di ogni clustered index, ricostruzione di tutti gli NCI, downtime proporzionale alla tabella più grande. **Non è una migration EF automatica** |
 | Da `Guid` a `bigint` | dopo la prima migration | 🔴 **MOLTO ALTO** — riscrittura di ogni riga, ogni FK, ogni id già esposto in URL e negli export. Praticamente: si rifà il database |
-| Passare al fallback §*Piano B* | prima della migration, su fallimento di R33 | 🟢 **BASSO** — una riga in `ConfigureOwnedResource` |
+| Passare al fallback §*Piano B* | prima della migration, su fallimento di R43 | 🟢 **BASSO** — una riga in `ConfigureOwnedResource` |
 | Cambiare **solo** la strategia di generazione dell'`Id` | in qualsiasi momento | 🟢 **BASSO** — le righe vecchie restano, le nuove sono generate diversamente. Unica conseguenza: un salto di ordinamento e qualche page split. **È l'unico pezzo rivedibile senza dolore** |
 | Aggiungere `UNIQUE(Id)` su una singola tabella | quando servisse | 🟢 **BASSO** — una migration |
 
@@ -469,7 +473,7 @@ Ogni query owner-scoped legge pagine contigue; `R2` è garantita dalla forma del
 | **T3** | Si valuta una **migrazione a PostgreSQL** | L'ordinamento di `uuid` in PostgreSQL è bytewise: lì il COMB diventa **controproducente** e `Guid.CreateVersion7()` diventa la scelta giusta. Cambio di generatore, costo BASSO |
 | **T4** | Si introduce **replica read-only, sharding o multi-tenant fisico** | `OwnerId` come prima colonna diventa anche la shard key: la decisione **si rafforza** |
 | **T5** | `AccountErasureJob` supera **5 secondi** o causa lock escalation misurata | Riaprire con batch `DELETE TOP (n)`. **Non prima** |
-| **T6** | **R33 fallisce** sul database reale | §*Piano B*, nell'ordine indicato |
+| **T6** | **R43 fallisce** sul database reale | §*Piano B*, nell'ordine indicato |
 | **T7** | EF Core introduce value generation per convenzione sulle **chiavi composite** | Semplificare R28. Cosmetico |
 | **T8** | Serve un `Id` **globalmente univoco** per un'integrazione esterna | `UNIQUE(Id)` sulla singola tabella interessata, oppure il fallback §*Piano B* se il requisito è generale |
 
@@ -499,23 +503,23 @@ Ogni query owner-scoped legge pagine contigue; `R2` è garantita dalla forma del
 | **`architecture/CONTEXT.md`** | **§2.0** | riga `Id`: *"PK — tipo non ancora deciso 🔴"* → **"parte della PK composita `(OwnerId, Id)` CLUSTERED, `Guid` sequenziale generato dal dominio"**. **Eliminare la riga "Chiave alternativa"** e il box ⚠️ sotto la tabella |
 | **`architecture/CONTEXT.md`** | **§5.3** | 🔴 **sezione da eliminare**, o da riscrivere come *"requisito superato dalla PK composita"* con la cronistoria. Sparisce anche la **regola operativa** finale sulle alternate key |
 | `architecture/CONTEXT.md` | §5.1 | **nessuna modifica alle 21 FK.** Aggiungere una nota: le FK referenziano la **PK**, non una alternate key |
-| `architecture/CONTEXT.md` | §5.2 | la riga su `SET NULL` diventa **R30**, con verificatore |
-| `architecture/CONTEXT.md` | §2.6 / §3.11 | aggiungere **R33** al test dello schema completo (ordine delle colonne in `REFERENCES`) |
+| `architecture/CONTEXT.md` | §5.2 | la riga su `SET NULL` diventa **R40**, con verificatore |
+| `architecture/CONTEXT.md` | §2.6 / §3.11 | aggiungere **R43** al test dello schema completo (ordine delle colonne in `REFERENCES`) |
 | `architecture/CONTEXT.md` | §4 glossario | aggiungere: **COMB**, **clustering key**, **`IIdGenerator`** |
 | **`architecture/DATA.md`** | §2 | aggiungere alle regole di persistenza: **PK composita `(OwnerId, Id)` clusterizzata su ogni entità owned**; **nessuna alternate key**. **Riscrivere il terzo bullet** di *"Regole introdotte dal domain model"* (⚠️ alternate key) come **risolto** |
 | `architecture/DATA.md` | §2.1 | l'indice `(OwnerId, Latitude, Longitude)` resta valido; nota: **ora è un NCI con clustering key da 32 byte** |
-| `architecture/DATA.md` | §2.2 | aggiungere il caso **R33** al test dello schema completo, accanto al 1785 |
+| `architecture/DATA.md` | §2.2 | aggiungere il caso **R43** al test dello schema completo, accanto al 1785 |
 | `architecture/DATA.md` | §6 | grafo di cancellazione: aggiungere che il `DELETE` per owner è un **range seek locale**, e che il beneficio è l'**isolamento**, non la velocità |
 | `architecture/DATA.md` | **§7 (nuova)** | **gli indici non clusterizzati** della tabella in §*Configurazione EF Core → 5*, con la query che ciascuno serve |
-| **`architecture/TESTING.md`** | verificatori | aggiungere **R26-R32** ai test di convenzione bloccanti (famiglia R1-R25) e **R33** agli integration test |
-| `architecture/TESTING.md` | §4 | rafforzare la nota sulla **#6**: anche R33 richiede un database reale. **Non aggiunge un prerequisito** — si appoggia a quello già dichiarato da `DATA.md` §2.2 |
+| **`architecture/TESTING.md`** | verificatori | aggiungere **R26-R29, R40-R42** ai test di convenzione bloccanti (famiglia R1-R25) e **R43** agli integration test |
+| `architecture/TESTING.md` | §4 | rafforzare la nota sulla **#6**: anche R43 richiede un database reale. **Non aggiunge un prerequisito** — si appoggia a quello già dichiarato da `DATA.md` §2.2 |
 | `architecture/API-CONVENTIONS.md` | id in URL | `{id}` è un `Guid`; la lookup è **sempre** `(OwnerId, Id)`; `404` uniforme invariato |
 | **`adr/0003-auth-and-ownership.md`** | **R4** | **non si modifica l'ADR** (`ADR-FORMAT.md`): va letto insieme a questo. Emendamento: le FK composite referenziano la **PK composita**, non una alternate key. **R4 si rafforza** — non esiste accesso per chiave senza `OwnerId` |
 | **`adr/0004-privacy-and-erasure.md`** | *Sul tipo della chiave primaria* / R9 | **non si modifica**: questo ADR **chiude** il rinvio. Nota: la cancellazione per owner è un'operazione **locale** sul clustered; la topologia delle FK e la dimostrazione anti-1785 restano valide **integralmente** |
 | `adr/0001-use-sql-server.md` | emendamenti | nota: la forma della chiave **dipende dall'ordinamento di `uniqueidentifier` di SQL Server** → **nuovo trigger di riesame** in caso di cambio di database (**T3**) |
 | **`OPEN-DECISIONS.md`** | gap *"Tipo della chiave primaria"* | ⬜ → ✅ **chiuso**, con esito sintetico e link a questo ADR |
 | **`OPEN-DECISIONS.md`** | gap *"`UNIQUE (Id, OwnerId)` su ogni tabella-padre"* | ⬜ *"da quantificare"* → ✅ **chiuso: il requisito non esiste più.** Non si quantifica ciò che non si paga |
-| `OPEN-DECISIONS.md` | decisione **#6** (DB di test) | nota di sequenza: **R33** è un'ulteriore verifica che richiede il DB reale, **senza aggiungere un prerequisito** |
+| `OPEN-DECISIONS.md` | decisione **#6** (DB di test) | nota di sequenza: **R43** è un'ulteriore verifica che richiede il DB reale, **senza aggiungere un prerequisito** |
 | `OPEN-DECISIONS.md` | rischi | aggiungere ✅ *"Rework sulla forma della chiave"* → mitigato |
 
 ---

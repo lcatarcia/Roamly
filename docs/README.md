@@ -39,7 +39,7 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | [`adr/0003-auth-and-ownership.md`](adr/0003-auth-and-ownership.md) | ✅ Identity + cookie httpOnly; ownership a tre livelli, `OwnerId` su ogni entità, `404` uniforme |
 | [`adr/0004-privacy-and-erasure.md`](adr/0004-privacy-and-erasure.md) | ✅ Topologia FK `NO ACTION`, export model-driven, hard delete con 30 giorni di grazia, R8-R10 |
 | [`adr/0007-design-system.md`](adr/0007-design-system.md) | ✅ Tailwind v4 + shadcn/ui + token proprietari; identità su `Ribbon`, dato numerico e materiale sand/contour; dark mode in Phase 1; R11-R25 |
-| [`adr/0008-primary-key-strategy.md`](adr/0008-primary-key-strategy.md) | ✅ **PK composita `(OwnerId, Id)` CLUSTERED**, `Guid` COMB generato client-side via `IIdGenerator`; le 6 chiavi alternate `UNIQUE (Id, OwnerId)` **spariscono**; ❌ GUID v7 non è sequenziale su SQL Server (causa: ordinamento del tipo `uniqueidentifier`, non .NET); R26-R33 |
+| [`adr/0008-primary-key-strategy.md`](adr/0008-primary-key-strategy.md) | ✅ **PK composita `(OwnerId, Id)` CLUSTERED**, `Guid` COMB generato client-side via `IIdGenerator`; le 6 chiavi alternate `UNIQUE (Id, OwnerId)` **spariscono**; ❌ GUID v7 non è sequenziale su SQL Server (causa: ordinamento del tipo `uniqueidentifier`, non .NET); R26-R29, R40-R43 |
 | [`adr/0009-test-strategy.md`](adr/0009-test-strategy.md) | ✅ Testcontainers `MsSql` pinnato + Respawn, un container per run; **4 progetti di test** separati per costo, non per livello; 💡 **17 verificatori su 25 non toccano il database**; doppio test 1785 (analizzatore + `EnsureCreated` reale); `TimeProvider` dal primo commit; R30-R39 |
 
 ### Archivio

@@ -138,7 +138,7 @@ Il principio importante: ogni feature verticale contiene **vicini tra loro** req
 
 > **Quattro progetti di test, non tre** ([`ADR-0009`](../adr/0009-test-strategy.md)). La separazione che conta non è per livello architetturale ma per **costo di esecuzione**: `Roamly.Model.Tests` esiste perché **17 dei 25 verificatori non toccano alcun database** — EF Core costruisce `DbContext.Model` offline con `UseSqlServer` senza mai connettersi. Tenerli in un progetto senza Docker li rende eseguibili in meno di 5 secondi a ogni salvataggio, invece che in 60-100 secondi in CI.
 
-> **`BannedSymbols.txt`** è parte dell'impianto, non un accessorio: vieta `DateTime.UtcNow` e `DateTimeOffset.UtcNow` (si usa `TimeProvider`, **R34**), `UseSqlite` e `UseInMemoryDatabase` (un solo motore di persistenza nei test, **R30**), e `Guid.NewGuid()` nel dominio (**R31**, ADR-0008). Sono tutte regole che nessun test funzionale intercetta: violarle non rompe nulla, degrada soltanto.
+> **`BannedSymbols.txt`** è parte dell'impianto, non un accessorio: vieta `DateTime.UtcNow` e `DateTimeOffset.UtcNow` (si usa `TimeProvider`, **R34**), `UseSqlite` e `UseInMemoryDatabase` (un solo motore di persistenza nei test, **R30**), e `Guid.NewGuid()` nel dominio (**R41**, ADR-0008). Sono tutte regole che nessun test funzionale intercetta: violarle non rompe nulla, degrada soltanto.
 
 ---
 

@@ -6,7 +6,7 @@
 - **Decisore:** utente
 - **Severità:** MEDIUM (con conseguenze HIGH su CI/CD e sulla sequenza di lavoro)
 - **Chiude:** decisione **#6** — provisioning del database di test
-- **Dipende da:** [`ADR-0001`](0001-use-sql-server.md) (SQL Server), [`ADR-0003`](0003-auth-and-ownership.md) (R1-R7), [`ADR-0004`](0004-privacy-and-erasure.md) (R8-R10), [`ADR-0007`](0007-design-system.md) (R11-R25), [`ADR-0008`](0008-primary-key-strategy.md) (PK composita, R26-R29)
+- **Dipende da:** [`ADR-0001`](0001-use-sql-server.md) (SQL Server), [`ADR-0003`](0003-auth-and-ownership.md) (R1-R7), [`ADR-0004`](0004-privacy-and-erasure.md) (R8-R10), [`ADR-0007`](0007-design-system.md) (R11-R25), [`ADR-0008`](0008-primary-key-strategy.md) (PK composita, R26-R29 e R40-R43)
 
 ---
 
@@ -169,7 +169,9 @@ IModel model = ctx.Model;                          // costruito offline, fedele
 
 ## Regole invarianti — R30-R39
 
-> R1-R7 in `SECURITY.md` §2.2 (ADR-0003) · R8-R10 (ADR-0004) · R11-R25 (ADR-0007) · **R26-R29 (ADR-0008, @oracle)**. Questo ADR numera da **R30**.
+> R1-R7 in `SECURITY.md` §2.2 (ADR-0003) · R8-R10 (ADR-0004) · R11-R25 (ADR-0007) · **R26-R29 e R40-R43 (ADR-0008, @oracle)**. Questo ADR numera **R30-R39**.
+>
+> ⚠️ Nella prima stesura questo ADR affermava che ADR-0008 terminasse a R29. Non era vero: ADR-0008 arrivava a R33, e R30-R33 avevano due significati. La collisione è stata risolta il 2026-09-25 spostando le quattro regole di ADR-0008 in **R40-R43** (vedi la nota in ADR-0008 §*Regole invarianti*). Il prossimo numero libero è **R44**.
 
 Vale il criterio di ADR-0004, invariato: **nessun requisito deve dipendere dalla memoria dello sviluppatore.**
 

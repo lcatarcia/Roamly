@@ -405,7 +405,7 @@ Le CASCADE farebbero gran parte del lavoro da sole; **il job non deve dipendere 
 
 > ⚠️ Senza questo test, §5 resta una dimostrazione **analitica**: l'errore 1785 **non emerge in `migrations add`**, emerge all'esecuzione.
 
-> Lo stesso test copre un secondo fallimento della medesima natura: **R33** ([`ADR-0008`](../adr/0008-primary-key-strategy.md)) richiede che EF Core generi le colonne della clausola `REFERENCES` nell'ordine corretto delle FK composite. Un ordine invertito produce uno schema **sintatticamente valido ma semanticamente sbagliato**, che nessuna analisi del modello intercetta — si vede solo a schema creato.
+> Lo stesso test copre un secondo fallimento della medesima natura: **R43** ([`ADR-0008`](../adr/0008-primary-key-strategy.md)) richiede che EF Core generi le colonne della clausola `REFERENCES` nell'ordine corretto delle FK composite. Un ordine invertito produce uno schema **sintatticamente valido ma semanticamente sbagliato**, che nessuna analisi del modello intercetta — si vede solo a schema creato.
 
 ---
 
@@ -567,7 +567,7 @@ Il **catalogo** è una **risorsa versionata nel codice** (JSON embedded + test d
 
 La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotnet ef migrations add`**: emerge quando lo schema viene creato. Finché il test "schema completo" di §2.6 non gira su un SQL Server reale, §5.2 resta una convinzione ben argomentata, non un fatto.
 
-**Va eseguita come prima attività tecnica del progetto**, quando scoprire un 1785 costa un'ora. Insieme a 1785 il test dimostra anche **R33** (ordine delle colonne in `REFERENCES`).
+**Va eseguita come prima attività tecnica del progetto**, quando scoprire un 1785 costa un'ora. Insieme a 1785 il test dimostra anche **R43** (ordine delle colonne in `REFERENCES`).
 
 ---
 
@@ -582,7 +582,7 @@ La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotne
 | **`OwnerId`** | Identificativo dell'utente proprietario, presente su **ogni** entità persistente, anche sui figli. Assegnato dal server, mai dal client, mai modificabile dopo la creazione | [`ADR-0003`](../adr/0003-auth-and-ownership.md) |
 | **Clustering key** | Le colonne che determinano l'**ordine fisico** delle righe su disco. In Roamly coincide con la PK: `(OwnerId, Id)`. Non è un dettaglio di tuning: è ciò che rende locale il `DELETE` dell'erasure | [`ADR-0008`](../adr/0008-primary-key-strategy.md) |
 | **COMB** | `Guid` costruito in modo da risultare **crescente nell'ordinamento di confronto di SQL Server** — cioè con la componente temporale nei byte 10-15, non nei primi. Distinto da GUID v7, che mette il tempo dove SQL Server guarda per ultimo | ADR-0008 |
-| **`IIdGenerator`** | Il solo punto del sistema autorizzato a produrre un `Id`. Circa venti righe. Esiste perché `Guid.NewGuid()` sparso nel dominio reintrodurrebbe la frammentazione senza che nulla fallisca (**R31**) | ADR-0008 |
+| **`IIdGenerator`** | Il solo punto del sistema autorizzato a produrre un `Id`. Circa venti righe. Esiste perché `Guid.NewGuid()` sparso nel dominio reintrodurrebbe la frammentazione senza che nulla fallisca (**R41**) | ADR-0008 |
 | **owner-scoped** | Proprietà di una query o di un'operazione che vede esclusivamente le entità con `OwnerId` uguale all'identità corrente. È il **default** del sistema, non una scelta della slice | `SECURITY.md` §2 |
 | **system scope** | Esecuzione fuori da una richiesta HTTP tramite `RunAsSystem("motivo")`: nessuna identità, le query owner-scoped lanciano. Per il polling di `AspNetUsers`, il seed, la scrittura della ricevuta | `SECURITY.md` §2.5 |
 | **`RunAsUser(userId, "motivo")`** | Esecuzione fuori da HTTP **per conto di un utente identificato**: il filtro resta pienamente attivo e punta a lui. È il modo in cui girano `MaintenanceReminderJob` e `AccountErasureJob` | [`ADR-0004`](../adr/0004-privacy-and-erasure.md) |
@@ -623,7 +623,7 @@ La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotne
 
 **Regola applicata:** un *percorso di azione referenziale* esiste solo su FK con `ON DELETE CASCADE`, **`SET NULL`** o **`SET DEFAULT`**. Le FK `NO ACTION` non creano percorsi. SQL Server esige che **per ogni coppia (tabella A, tabella B) esista al massimo un percorso** da A a B: altrimenti rifiuta la constraint con l'errore **1785**.
 
-> Dal 2026-09-25 ogni FK composita referenzia **direttamente la PK `(OwnerId, Id)`** del principal, non più una chiave alternata (§5.3). Le 21 FK e la dimostrazione di §5.2 sono **invariate**: cambia ciò che la FK punta, non la topologia. Cambia però l'**ordine delle colonne** della clausola `REFERENCES`, che diventa verificabile solo a schema creato — vedi **R33**.
+> Dal 2026-09-25 ogni FK composita referenzia **direttamente la PK `(OwnerId, Id)`** del principal, non più una chiave alternata (§5.3). Le 21 FK e la dimostrazione di §5.2 sono **invariate**: cambia ciò che la FK punta, non la topologia. Cambia però l'**ordine delle colonne** della clausola `REFERENCES`, che diventa verificabile solo a schema creato — vedi **R43**.
 
 | # | Foreign key | Coppia | Azione | Percorso? |
 |---|---|---|---|---|
@@ -677,7 +677,7 @@ Cancellare un luogo salvato richiede di sganciare le tappe **nell'handler applic
 
 > 🔴 **`ON DELETE SET NULL` è VIETATO in questo modello.**
 > È la soluzione che sembra naturale per ogni FK opzionale (`Trip → Expense`, `SavedPlace → TripStop`) ed **è una trappola**: `SET NULL` e `SET DEFAULT` sono **azioni referenziali a tutti gli effetti** e **contano** ai fini di 1785 esattamente come `CASCADE`. Usarli su #17 o #19 riaprirebbe i casi (b) e (c).
-> **L'unica uscita è `NO ACTION` + codice applicativo.** Il prezzo è che gli sganciamenti sono **dimenticabili**: il database non li protegge, li proteggono i test (@argus). Dal 2026-09-25 il divieto non è più solo scritto qui: è il verificatore **R30** di [`ADR-0008`](../adr/0008-primary-key-strategy.md), che fallisce la build se un `DeleteBehavior.SetNull` compare nel modello.
+> **L'unica uscita è `NO ACTION` + codice applicativo.** Il prezzo è che gli sganciamenti sono **dimenticabili**: il database non li protegge, li proteggono i test (@argus). Dal 2026-09-25 il divieto non è più solo scritto qui: è il verificatore **R40** di [`ADR-0008`](../adr/0008-primary-key-strategy.md), che fallisce la build se un `DeleteBehavior.SetNull` compare nel modello.
 
 > ⚠️ **Riserva esplicita:** questa dimostrazione è **analitica, non eseguita**. L'errore 1785 non emerge in `migrations add`, emerge alla creazione dello schema. Vedi §3.11 e il test "schema completo" di §2.6.
 

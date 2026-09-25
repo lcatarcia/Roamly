@@ -197,7 +197,7 @@ Assert.True(offenders.Count == 0, "Errore 1785 in arrivo. Percorsi multipli:\n" 
 | # | Asserzione | Fonte |
 |---|---|---|
 | 1 | ogni FK `OwnerId → AspNetUsers` è `NO ACTION` | `DATA.md` §6 |
-| 2 | ogni PK è `(OwnerId, Id)`, **CLUSTERED**, e `CreatedAtUtc` **non** è nella clustering key | ADR-0008, R26-R29 |
+| 2 | ogni PK è `(OwnerId, Id)`, **CLUSTERED**, e `CreatedAtUtc` **non** è nella clustering key | ADR-0008, R26-R29 e R42 |
 | 3 | **nessuna chiave alternata esiste** — ADR-0008 le ha eliminate tutte | ADR-0008 |
 | 4 | ogni FK figlia è **composita** e punta alla PK del padre (il "morso" di R4, **una volta sola**) | ADR-0003 |
 | 5 | le colonne `Money` sono `decimal(19,4)`, `Coordinates` `decimal(8,6)`/`decimal(9,6)` | `CONTEXT.md` §2.1 |
@@ -334,7 +334,7 @@ var model = context.GetService<Microsoft.EntityFrameworkCore.Metadata.IDesignTim
 
 > **Perché è un rischio e non un dettaglio.** Un verificatore di R26 scritto con `FindAnnotation` su `DbContext.Model` è **rosso su tutto** — rumoroso, quindi innocuo: ci si accorge subito. Ma la forma speculare, `FindAnnotation(...) is not null` usata come guardia permissiva, sarebbe **verde su tutto** e il controllo `IsClustered` **non sarebbe mai in vigore**. È lo stesso schema di fallimento silenzioso di §8.1, su un'annotazione diversa.
 
-**Conseguenza operativa:** la verifica *PK CLUSTERED* **scende da L1 a L0** (§6.2). Non richiede Docker, non richiede il test B, costa millisecondi e vale su tutte e 13 le entità owned. Il test B del Blocco 4 resta necessario per ciò che solo il database può dire: l'errore 1785 e l'**ordine delle colonne in `REFERENCES`** (R33).
+**Conseguenza operativa:** la verifica *PK CLUSTERED* **scende da L1 a L0** (§6.2). Non richiede Docker, non richiede il test B, costa millisecondi e vale su tutte e 13 le entità owned. Il test B del Blocco 4 resta necessario per ciò che solo il database può dire: l'errore 1785 e l'**ordine delle colonne in `REFERENCES`** (R43).
 
 > ⚠️ **Il tipo sta in `Microsoft.EntityFrameworkCore.Metadata`, non in `...Infrastructure`**, contrariamente a quanto suggerisce la memoria: la documentazione lo colloca spesso nel secondo. Verificato per riflessione sull'assembly `Microsoft.EntityFrameworkCore.dll` 10.0.12.
 

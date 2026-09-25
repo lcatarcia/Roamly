@@ -88,7 +88,7 @@ Tre fatti che ADR-0003 e ADR-0004 non avevano dichiarato e che cambiano la forma
 
 Il motivo è che entrambi i casi 1785 noti coinvolgono entità future. Senza questo test, la verifica della topologia resta **analitica**: corretta sulla carta e non dimostrata. È la prima attività tecnica del progetto, e ha avuto una conseguenza di sequenza — ha reso la **decisione #6** (provisioning del DB di test) un prerequisito pratico, chiuso in [`ADR-0009`](../adr/0009-test-strategy.md).
 
-Lo stesso test copre un secondo difetto della stessa famiglia: **R33** ([`ADR-0008`](../adr/0008-primary-key-strategy.md)) richiede che EF Core emetta le colonne della clausola `REFERENCES` **nell'ordine corretto**. Un ordine invertito genera uno schema che si crea senza errori ma che vincola le colonne sbagliate: a differenza di 1785, **non fallisce affatto**. È il caso peggiore dei due, e si vede solo leggendo lo schema creato.
+Lo stesso test copre un secondo difetto della stessa famiglia: **R43** ([`ADR-0008`](../adr/0008-primary-key-strategy.md)) richiede che EF Core emetta le colonne della clausola `REFERENCES` **nell'ordine corretto**. Un ordine invertito genera uno schema che si crea senza errori ma che vincola le colonne sbagliate: a differenza di 1785, **non fallisce affatto**. È il caso peggiore dei due, e si vede solo leggendo lo schema creato.
 
 Non introdurre un database separato per CQRS finché non esiste una necessità concreta.
 

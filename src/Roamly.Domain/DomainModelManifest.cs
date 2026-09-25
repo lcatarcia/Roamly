@@ -3,7 +3,7 @@ using Roamly.Domain.Entities;
 namespace Roamly.Domain;
 
 /// <summary>
-/// Elenco esplicito delle entita' del dominio. Alimenta il verificatore R32 dello schema completo:
+/// Elenco esplicito delle entita' del dominio. Alimenta il verificatore R32 (ADR-0009) dello schema completo:
 /// una lista dichiarata rende visibile l'entita' dimenticata, una scansione dell'assembly no.
 /// </summary>
 public static class DomainModelManifest
