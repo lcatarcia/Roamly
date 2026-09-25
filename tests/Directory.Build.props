@@ -1,0 +1,37 @@
+<Project>
+
+  <!-- Eredita dal Directory.Build.props della radice, non lo sostituisce. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    xUnit v3 su Microsoft.Testing.Platform (R35, ADR-0009).
+    v3 e' necessaria, non preferita: IAssemblyFixture non esiste in v2, e
+    senza di essa il container SQL Server andrebbe condiviso da una
+    collection che abbraccia l'intera assembly, perdendo il parallelismo.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Nei test il nome del metodo e' una frase, non un identificatore: e' la
+    prima cosa che si legge quando la CI diventa rossa. CA1707 (niente
+    underscore) e CA1515 (tipi internal) vanno contro questo scopo, e valgono
+    solo qui: nel codice di produzione restano attivi.
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1707;CA1515</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

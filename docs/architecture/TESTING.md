@@ -311,6 +311,14 @@ Gli integration test non possono usare un header `Authorization`. Servono:
 
 > Senza questo, i test di revoca, di grazia scaduta e di lettura stantia **non sono scrivibili** o sono flaky. Aggiungerlo dopo significa toccare **ogni** handler che scrive `CreatedAtUtc`: è additivo solo il primo giorno.
 
+### 8.1 La sintassi di `BannedSymbols.txt` è essa stessa un rischio — reperto del Blocco 1
+
+`UtcNow` è una **proprietà**, quindi la voce deve essere `P:System.DateTime.UtcNow`. Scritta come `M:System.DateTime.get_UtcNow` — la forma del *getter*, plausibile e sbagliata — l'analyzer **non segnala nulla e non protesta**: le voci che non risolvono a un simbolo vengono ignorate in silenzio.
+
+Nella prima stesura di questo progetto tutte e quattro le voci temporali erano in quella forma. Il file esisteva, la build era verde, e il divieto **non era in vigore**. È stato scoperto solo applicando **R38** — scrivere una violazione deliberata e pretendere di vedere il rosso — e sarebbe altrimenti passato per settimane, fino al primo `DateTime.UtcNow` in un handler.
+
+> **Conseguenza operativa.** Le due voci `UseSqlite` e `UseInMemoryDatabase` (R30) **non sono ancora verificate**: i rispettivi pacchetti non sono referenziati, quindi non c'è modo di distinguere "divieto attivo" da "voce non risolta". Vanno messe alla prova nel momento esatto in cui qualcuno aggiunge uno di quei pacchetti — che è anche l'unico momento in cui servono davvero.
+
 ---
 
 ## 9. Test data builder
@@ -412,12 +420,18 @@ Derivano da R14, R17, R20, R23, R25 ([`ADR-0007`](../adr/0007-design-system.md))
 
 ## 13. Comandi
 
+> ⚠️ **La CLI è cambiata in .NET 10 RTM.** VSTest è stato rimosso e il runner si seleziona in `global.json` (`"test": { "runner": "Microsoft.Testing.Platform" }`) — **non** in `dotnet.config`, sintassi valida solo fino a RC1, né con `TestingPlatformDotnetTestSupport`, che attiva il bridge VSTest deprecato. Con il nuovo runner il percorso di un progetto **non è più posizionale**: serve `--project` o `--solution`.
+
 ```powershell
 # L0 — nessun Docker, < 5 s. È quello da tenere aperto mentre si lavora.
-dotnet test tests/Roamly.Domain.Tests tests/Roamly.Model.Tests
+dotnet test --project tests/Roamly.Domain.Tests
+dotnet test --project tests/Roamly.Model.Tests
 
 # L1 + L2 — richiede Docker in esecuzione. Primo avvio a freddo: 2-4 min.
-dotnet test tests/Roamly.IntegrationTests
+dotnet test --project tests/Roamly.IntegrationTests
+
+# Tutto
+dotnet test --solution Roamly.slnx
 
 # Frontend
 npm run lint && npm run design:guard && npm run contrast:check && npm run test
@@ -434,6 +448,7 @@ npm run e2e
 
 | Grandezza | Stima | Misurato il | Valore reale |
 |---|---|---|---|
+| Suite L0 a progetto singolo, build inclusa (1 test) | < 5 s | Blocco 1 | **3,9 s** di esecuzione, 18,8 s a freddo con build |
 | Pull immagine su runner GHA (non cachata) | 40-70 s | — | — |
 | Readiness del container | 20-45 s | — | — |
 | `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | — | — |

@@ -1,0 +1,6 @@
+P:System.DateTime.UtcNow; usa TimeProvider iniettato (R34, ADR-0009). Senza, scadenze e ricorrenze non sono testabili senza attese reali.
+P:System.DateTime.Now; usa TimeProvider iniettato (R34, ADR-0009). L'ora locale non esiste nel dominio: tutto e' UTC.
+P:System.DateTimeOffset.UtcNow; usa TimeProvider iniettato (R34, ADR-0009).
+P:System.DateTimeOffset.Now; usa TimeProvider iniettato (R34, ADR-0009).
+M:Microsoft.EntityFrameworkCore.SqliteDbContextOptionsBuilderExtensions.UseSqlite(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder,System.String,System.Action{Microsoft.EntityFrameworkCore.Infrastructure.SqliteDbContextOptionsBuilder}); un solo motore di persistenza nei test (R30, ADR-0009). Un secondo dialetto non e' un'alternativa, e' un raddoppio permanente.
+M:Microsoft.EntityFrameworkCore.InMemoryDbContextOptionsExtensions.UseInMemoryDatabase(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder,System.String,System.Action{Microsoft.EntityFrameworkCore.Infrastructure.InMemoryDbContextOptionsBuilder}); il provider in-memory non ha FK ne' cascade: un test verde contro di esso non dimostra nulla di cio' che questo progetto deve garantire (R30, ADR-0009).
