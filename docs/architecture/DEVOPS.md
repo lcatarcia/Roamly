@@ -1,7 +1,7 @@
 # Roamly — CI/CD e deploy
 
-Stato: **bozza — target di deploy non dichiarato** · Ultimo aggiornamento: 2026-09-24
-Origine: `docs/archive/Roamly_Planning_2026-09-24.md` §20 — **rivisto** secondo review I10
+Stato: **bozza — target di deploy non dichiarato** · Ultimo aggiornamento: 2026-09-28
+Origine: `docs/archive/Roamly_Planning_2026-09-24.md` §20 — **rivisto** secondo review I10, aggiornato al Blocco 5 (passo 18: `ci.yml`)
 Owner: **@vulcan**
 
 ---
@@ -32,11 +32,19 @@ Il planning originale proponeva 5 workflow (`ci.yml`, `backend.yml`, `frontend.y
 
 **Struttura adottata:**
 
-- **`ci.yml`** — un workflow con **quattro job**: `fast` (L0: build + test senza database, **< 60 s, nessun Docker**), `integration` (L1: Testcontainers + test dello schema completo), `frontend`, `docker`;
+- **`ci.yml`** — un workflow con **quattro job**: `backend-fast` (L0: build + test senza database, **nessun Docker**), `backend-integration` (L1: Testcontainers + test dello schema completo), `frontend`, `docker`;
 - **`nightly.yml`** — suite completa, bundle di migration, `axe` di accessibilità;
 - **`deploy.yml`** — separato, con approvazione.
 
 Si splitta solo quando la CI diventa effettivamente lenta o eterogenea.
+
+> **Stato al Blocco 5, passo 18 di [`ADR-0009`](../adr/0009-test-strategy.md) §9.** `.github/workflows/ci.yml` esiste con i **primi due** job, `backend-fast` e `backend-integration`. Gli altri arrivano col frontend, che oggi non esiste.
+>
+> ⚠️ **Nomi corretti in questo documento.** Fino al Blocco 5 qui i job si chiamavano `fast` e `integration`, mentre ADR-0009 §*La pipeline* e `TESTING.md` §12.1 li chiamano `backend-fast` e `backend-integration`. L'ADR ha precedenza: i nomi sono stati allineati. Anche la stima *"< 60 s"* del job `fast` era locale a questo documento e in contrasto con i **90-120 s** dell'ADR; vale quella dell'ADR, e la misura reale va presa alla prima esecuzione (`TESTING.md` §14).
+>
+> ⚠️ **Il quarto job dell'elenco diverge fra i documenti**: qui è `docker`, in ADR-0009 e in `TESTING.md` è `e2e`. Non è risolto qui perché nessuno dei due esiste ancora: va deciso quando arriva il frontend.
+>
+> **Trigger scelto:** `push` su ogni branch + `workflow_dispatch`, **senza** `pull_request`. Con entrambi ogni commit di PR verrebbe costruito due volte sullo stesso SHA, e il repository è privato. Il prezzo è che il **merge commit** non viene verificato: da riconsiderare all'apertura della prima PR.
 
 > **Perché `fast` e `integration` sono job distinti** ([`ADR-0009`](../adr/0009-test-strategy.md)): **17 dei 25 verificatori non richiedono alcun database**. Tenerli dietro l'avvio di un container SQL Server (60-100 s in CI) significherebbe pagare un minuto per sapere qualcosa che si può sapere in cinque secondi. Il primo segnale utile deve arrivare presto, altrimenti si smette di aspettarlo.
 

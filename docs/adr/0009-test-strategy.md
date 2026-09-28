@@ -612,6 +612,10 @@ dotnet sln add (Get-ChildItem -Recurse -Filter *.csproj)
 18. `ci.yml` con `backend-fast` e `backend-integration`. Gli altri due job arrivano col frontend.
 ✅ **Checkpoint 5:** push su branch, CI verde, tempo di parete misurato e annotato.
 
+> **Passo 18 — stato al 2026-09-28.** `.github/workflows/ci.yml` è scritto: due job, nessun `needs:` fra loro, nessun `services:` e nessun `docker pull` (il tag resta l'unica occorrenza in `SqlServerImage.cs`, **R36** verificata: 1 sola riga in tutta la soluzione), nessun retry (**R37**), test selezionati con `--project` e mai con `--solution` così che `Roamly.Benchmarks` non possa entrare da solo nella pipeline (**R39**). I comandi sono stati eseguiti in locale nella stessa configurazione `Release` del workflow: **38/38, exit 0**; build 0 avvisi, 0 errori (`TESTING.md` §13.1 e §14).
+>
+> ⚠️ **Il Checkpoint 5 non è chiuso:** manca la prima esecuzione reale su GitHub Actions, e con essa il **tempo di parete misurato**. In `TESTING.md` §14 c'è oggi una **stima** (≈ 4-6 min, contro i 3-4 min di questo ADR) e le righe dei due job restano da compilare. Va chiuso dopo il primo push, non prima.
+
 | Blocco | Tempo | Risultato |
 |---|---|---|
 | 1 | ~1 h | build verde |

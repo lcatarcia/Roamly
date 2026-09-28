@@ -483,6 +483,10 @@ Derivano da R14, R17, R20, R23, R25 ([`ADR-0007`](../adr/0007-design-system.md))
 
 ⚠️ `backend-fast` **non** è un gate di `backend-integration` (niente `needs:`): devono poter fallire entrambi.
 
+> **Stato al Blocco 5 (passo 18).** `.github/workflows/ci.yml` esiste e contiene **due** dei quattro job: `backend-fast` e `backend-integration`. `frontend` ed `e2e` arriveranno col frontend, che oggi non esiste. I comandi esatti sono in §13.1, i tempi misurati in §14.
+>
+> **Scostamento deliberato sul trigger:** il workflow reagisce a `push` su ogni branch e a `workflow_dispatch`, **non** a `pull_request`. Con entrambi i trigger attivi ogni commit di una PR verrebbe costruito due volte sullo stesso SHA, e il repository è privato (minuti contati). Ciò che si perde è la verifica del **merge commit**: va riconsiderato all'apertura della prima PR. Un `concurrency` annulla le esecuzioni superate su ogni ref **tranne `main`**, dove la storia deve conservare un esito per commit.
+
 ### 12.2 `nightly.yml`
 
 | Cosa | Perché |
@@ -548,6 +552,29 @@ dotnet ef migrations add <Nome> `
 
 > ⚠️ **Un progetto di test senza test fa fallire il comando — reperto del Blocco 2.** Microsoft.Testing.Platform tratta *"zero test eseguiti"* come **fallimento**, con **exit code 8**, non come successo vacuo. Oggi `dotnet test --solution Roamly.slnx` esce `8` pur con `non riuscito: 0`, perché `Roamly.Domain.Tests` e `Roamly.IntegrationTests` sono ancora vuoti. Si risolve da sé nei Blocchi 3-4, quando quei progetti ricevono i loro test.
 > Va però ricordato in `ci.yml` (Blocco 5): **un filtro `--filter` che non seleziona nulla rende il job rosso**, e il messaggio (`non riuscito: 0`) non lo fa sembrare un errore. È l'opposto del fallimento silenzioso di §8.1 — qui è il *successo* a essere silenzioso — ma la lezione è la stessa: leggere l'exit code, non il riepilogo.
+>
+> ✅ **Conseguenza applicata al Blocco 5:** `ci.yml` **non usa alcun `--filter`**. La selezione dei test avviene per progetto, con `--project`, dove "quali test girano" è verificabile leggendo il nome del progetto invece che simulando un'espressione.
+
+### 13.1 Comandi della pipeline — Blocco 5, passo 18
+
+`.github/workflows/ci.yml` esegue **esattamente** questi comandi, in quest'ordine, su `ubuntu-latest` e in configurazione **`Release`** (la configurazione che andrà in deploy: verificare `Release` in CI e `Debug` in locale significherebbe verificare due cose diverse).
+
+```bash
+# entrambi i job
+dotnet restore Roamly.slnx
+dotnet build   Roamly.slnx --configuration Release --no-restore
+
+# job backend-fast (L0, nessun Docker)
+dotnet test --project tests/Roamly.Domain.Tests      --configuration Release --no-build
+dotnet test --project tests/Roamly.Model.Tests       --configuration Release --no-build
+
+# job backend-integration (L1 + L2, Testcontainers)
+dotnet test --project tests/Roamly.IntegrationTests  --configuration Release --no-build
+```
+
+> **Perché `--project` e mai `--solution` negli step di test.** È il modo in cui **R39** (ADR-0009) resta in vigore da sola: quando `Roamly.Benchmarks` entrerà nella solution, un `dotnet test --solution` lo eseguirebbe in CI senza che nessuno debba dimenticarsene. Con progetti nominati, includerlo richiede una modifica deliberata di `ci.yml`.
+>
+> **Perché `dotnet build` e poi `dotnet test --no-build`, e non un `dotnet test` monolitico.** Per separare il segnale: un errore di compilazione e un test rosso diventano due step distinti nel riepilogo del job. ⚠️ **Non è un aggiramento del reperto qui sotto**: al Blocco 5 quel comportamento **non si riproduce** — `dotnet test --project … --configuration Release` senza `--no-build` esce **0** con 3/3 test eseguiti. La forma resta scelta per il suo merito, non come workaround.
 
 ---
 
@@ -575,9 +602,25 @@ dotnet ef migrations add <Nome> `
 | `CREATE DATABASE` per il database del test C | — | **Blocco 5** | **360-373 ms** |
 | **Suite L1 `Roamly.IntegrationTests`, 14 test** (con il test C), container incluso | — | **Blocco 5** | **16,6-19,4 s** |
 | **Tutta la soluzione, 38 test** (`dotnet build` + `dotnet test --solution --no-build`) | — | **Blocco 5** | **21,2 s** di parete, esecuzione 34,5 s al primo giro a freddo — ✅ Checkpoint 5 (parte backend) |
-| Job `backend-fast` | 90-120 s | — | — |
-| Job `backend-integration` | 3-4 min | — | — |
+| Job `backend-fast` | 90-120 s | — | — (prima esecuzione reale non ancora avvenuta) |
+| Job `backend-integration` | 3-4 min | — | — (prima esecuzione reale non ancora avvenuta) |
+| **Comandi di `ci.yml` eseguiti in locale, configurazione `Release`** — `restore` | — | **Blocco 5** | **1,5 s** (pacchetti già presenti) |
+| Build `Release` dell'intera solution, **a freddo** (7 progetti) | — | **Blocco 5** | **405 s** su Windows con Defender attivo — ⚠️ vedi nota sotto |
+| Build `Release` dell'intera solution, incrementale | — | **Blocco 5** | **3,9 s**, 0 avvisi, 0 errori |
+| `--project tests/Roamly.Domain.Tests --no-build` (3 test) | — | **Blocco 5** | **12,1 s** a freddo · **2,0 s** a caldo |
+| `--project tests/Roamly.Model.Tests --no-build` (21 test) | — | **Blocco 5** | **21,0 s** a freddo |
+| `--project tests/Roamly.IntegrationTests --no-build` (14 test) | — | **Blocco 5** | **53,4 s**, di cui **17,4 s** di avvio container |
+| `--solution Roamly.slnx --no-build` (38 test, `Release`) | — | **Blocco 5** | **38,6 s** — ✅ 38/38, exit 0 |
+
+> ⚠️ **I 405 s della build `Release` a freddo non sono una stima per la CI.** Sono misurati su Windows con antivirus attivo e cache degli analyzer vuota; la stessa build incrementale costa **3,9 s**. Su un runner Linux GitHub-hosted la voce dominante di una build a freddo è il `restore` (mitigato dalla cache NuGet) e la prima esecuzione degli analyzer. Il numero è annotato perché è **l'unico dato in mio possesso** su una build a freddo, non perché sia trasferibile.
+
+> **Stima del tempo di parete della CI, da confermare alla prima esecuzione reale.**
+> `backend-fast` ≈ **2-3 min** (checkout + setup SDK 20-40 s · restore con cache 10-20 s · build a freddo 60-90 s · 24 test L0 ~10 s).
+> `backend-integration` ≈ **4-6 min** (le stesse voci + **pull dell'immagine SQL Server non cachata, 40-70 s stimati e mai misurati** + 14 test L1).
+> I due job girano **in parallelo**, quindi il tempo di parete è quello del più lento: **≈ 4-6 min**, contro i 3-4 min stimati da ADR-0009. Lo scarto è quasi tutto nel pull dell'immagine, che in locale non è mai stato pagato (immagine già presente, 2,34 GB su disco).
 
 Il tempo del job `backend-integration` va **riannotato a ogni revisione di questo documento**: è l'indicatore che fa scattare il passaggio da G1 a G2 (trigger T1).
 
 > ⚠️ **Reperto del Blocco 4 — `dotnet test` senza `--no-build` non esegue nulla.** Su questa macchina `dotnet test --project …` e `dotnet test --solution Roamly.slnx` riportano *"Nessun test eseguito"* con **exit code 5** in ~250 ms, mentre gli stessi test passano lanciando l'eseguibile del progetto, con `--no-build`, con `-v n` o con argomenti MTP espliciti. Il comportamento è **deterministico** e **precede il Blocco 4** (riprodotto anche con `tests/Directory.Build.props` ripristinato alla versione del commit `6f79c5d`). Fino a diagnosi, la forma da usare — e da mettere in `ci.yml` al Blocco 5 — è **`dotnet build` seguito da `dotnet test --solution Roamly.slnx --no-build`**: un exit code 5 silenzioso in CI è indistinguibile da una suite verde per chi guarda solo il colore.
+
+> ✅ **Aggiornamento del Blocco 5, passo 18: il reperto non si riproduce.** `dotnet test --project tests/Roamly.Domain.Tests --configuration Release` **senza** `--no-build` esce **0** eseguendo 3/3 test in 2,0 s. La forma `build` + `test --no-build` è stata **confermata in `ci.yml` per un'altra ragione** — separare l'errore di compilazione dal test rosso in due step distinti — e non come aggiramento di un bug. La causa dell'osservazione del Blocco 4 resta non diagnosticata: se si ripresentasse, va cercata lì, non nel workflow.
