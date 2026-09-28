@@ -9,7 +9,15 @@
     senza di essa il container SQL Server andrebbe condiviso da una
     collection che abbraccia l'intera assembly, perdendo il parallelismo.
   -->
-  <PropertyGroup>
+  <!--
+    🔴 Condizionato su IsTestProject (Blocco 4). Sotto tests/ non vive solo codice di test:
+    Roamly.TestSupport e' una LIBRERIA (builder e registro, R33 di ADR-0009), referenziata da
+    due progetti di test. Se ereditasse OutputType=Exe e il runner, Microsoft.Testing.Platform
+    la tratterebbe come progetto di test senza test e l'intera solution uscirebbe con exit
+    code 8 (TESTING.md §13). Il discriminatore e' gia' definito nel Directory.Build.props
+    della radice: IsTestProject e' true solo per i progetti il cui nome finisce in "Tests".
+  -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
     <OutputType>Exe</OutputType>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -25,12 +33,12 @@
     <NoWarn>$(NoWarn);CA1707;CA1515</NoWarn>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
     <Using Include="Xunit" />
   </ItemGroup>
 

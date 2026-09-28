@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Libreria, non progetto di test: il nome NON finisce in "Tests", quindi IsTestProject resta
+    false e tests/Directory.Build.props non applica ne' OutputType=Exe ne' il runner
+    (TESTING.md §13, exit code 8). E' referenziata sia da Roamly.Model.Tests (verificatore R33,
+    L0) sia da Roamly.IntegrationTests (popolamento L1): due progetti di test non possono
+    referenziarsi a vicenda, ed e' la contraddizione che TESTING.md §3 aveva lasciato aperta.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Roamly.Infrastructure\Roamly.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+</Project>

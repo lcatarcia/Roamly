@@ -62,11 +62,16 @@ tests/
 │   ├── Money/ · Geo/ · Trips/
 │   └── Identifiers/CombGuidTests.cs        # monotonicità del generatore COMB (ADR-0008)
 │
+├── Roamly.TestSupport/             # LIBRERIA, non progetto di test. Riferita da L0 e da L1.
+│   ├── IEntityBuilder.cs · BuilderContext.cs   # ctx.Parent<T>() tipizzato, FakeTimeProvider
+│   └── Builders/                           # 13 builder concreti (le entità owned)
+│
 ├── Roamly.Model.Tests/             # L0 — convenzioni su IModel. NESSUN database, nessun Docker.
 │   ├── ModelFixture.cs                     # IAssemblyFixture: IModel una volta, offline
 │   ├── Ownership/                          # R1, R2, R4-forma, R5-manifesto
 │   ├── Privacy/                            # R8, R10
-│   ├── Keys/                               # R26-R29 — verificatore chiavi di @oracle
+│   ├── Keys/                               # R26-R29, R40 — verificatore chiavi di @oracle
+│   ├── Conventions/                        # R30, R36, forma dei .csproj sotto tests/
 │   ├── Schema/
 │   │   ├── CascadePathAnalyzerTests.cs     # test A — analizzatore 1785
 │   │   └── FullSchemaCompletenessTests.cs  # R32
@@ -95,13 +100,13 @@ frontend/roamly-web/
 └── e2e/                            # Playwright (L4), matrice sui due temi
 ```
 
-> 🔴 **Contraddizione aperta, scoperta al Blocco 3.** Questo albero colloca `IEntityBuilder`, `BuilderRegistry` e i builder concreti in **`Roamly.IntegrationTests/TestData/`**, ma il loro verificatore di copertura (`BuilderRegistryCoverageTests.cs`, R33 di ADR-0009) in **`Roamly.Model.Tests/TestData/`**. **Non è implementabile così com'è scritto**: un progetto di test non referenzia un altro progetto di test, e non deve iniziare a farlo.
+> ✅ **Risolta al Blocco 4.** L'albero qui sopra è aggiornato. La versione originale collocava `IEntityBuilder`, `BuilderRegistry` e i builder concreti in `Roamly.IntegrationTests/TestData/`, ma il loro verificatore di copertura (R33, ADR-0009) in `Roamly.Model.Tests/TestData/`. **Non era implementabile**: un progetto di test non referenzia un altro progetto di test, e non deve iniziare a farlo.
 >
-> Per questa ragione **R33 è stato rinviato al Blocco 4**, dove i builder servono davvero (test R9). Scriverlo al Blocco 3 avrebbe prodotto o un test rosso su 13 entità, o — peggio — un verificatore permissivo e sempre verde, cioè esattamente il difetto di §8.1 e §8.2. **Un verificatore a cui non si può applicare R38 non è consegnabile.**
+> La soluzione è **`tests/Roamly.TestSupport`**, una **libreria** — non un progetto di test — riferita sia da L0 sia da L1. R33 resta L0, e la tabella normativa §6.1 resta invariata. Le alternative scartate e le ragioni sono nell'analisi di @archimedes.
 >
-> La collocazione di `IEntityBuilder`/`BuilderRegistry` è una decisione di **struttura** (@archimedes), da prendere all'apertura del Blocco 4.
+> ⚠️ **`tests/Directory.Build.props` è condizionata su `IsTestProject`**, altrimenti `TestSupport` erediterebbe `OutputType=Exe` e il runner MTP, e la soluzione uscirebbe con **exit code 8** ("zero test") su una libreria che test non ne ha per definizione. Il discriminatore è il suffisso `Tests` nel nome, definito nella props di radice. Un test di convenzione in `Model.Tests/Conventions/` lo presidia.
 
-**Perché quattro progetti e non tre**: L0 deve poter girare **senza Docker, in meno di 5 secondi**, anche in un pre-commit hook. Tenerlo dentro `IntegrationTests` gli farebbe trascinare il container e ne annullerebbe il beneficio principale.
+**Perché cinque progetti sotto `tests/` e non tre**: L0 deve poter girare **senza Docker, in meno di 5 secondi**, anche in un pre-commit hook. Tenerlo dentro `IntegrationTests` gli farebbe trascinare il container e ne annullerebbe il beneficio principale.
 
 **Framework**: **xUnit v3 + Microsoft.Testing.Platform**. Su .NET 10 MTP è il default e VSTest non è più supportato ufficialmente; inoltre le **Assembly Fixtures** di v3 sono esattamente ciò che serve perché **un solo assembly** possieda il container.
 
@@ -358,6 +363,26 @@ Ciò che diventa rosso in quel caso sono R26-R29, perché l'entità scoperta per
 
 > **Conseguenza operativa.** R32 protegge davvero il caso che ADR-0009 §*Modo A vs modo B* descrive — un'entità nuova **non raggiungibile** da nessuna navigazione esistente, cioè una radice di aggregato nuova. Non protegge dalla rimozione di una configuration. Il verificatore resta necessario e resta scritto così; è la sua **motivazione** che va letta con questa precisazione, altrimenti si scambia per copertura ciò che è copertura di R26-R29.
 
+### 8.4 `InvariantGlobalization` rompe `Microsoft.Data.SqlClient`
+
+**Reperto del Blocco 4.** Il `Directory.Build.props` di radice impostava `InvariantGlobalization=true` sull'intera soluzione — una scelta ragionevole e comune, che qui è **incompatibile con il driver di accesso ai dati**. La prima `SqlConnection.OpenAsync` lancia:
+
+```
+System.NotSupportedException : Globalization Invariant Mode is not supported.
+```
+
+Verificato empiricamente rimuovendo il fix e osservando fallire 8 test di integrazione, nello spirito di R38.
+
+> **Perché è un rischio e non un dettaglio.** Il fallimento si manifesta **solo** quando qualcuno apre davvero una connessione. `Roamly.Api` ha ereditato quella riga dal primo commit **senza mai romperne nulla**, perché era il template `dotnet new web`: sarebbe esplosa al Blocco 5 o alla prima slice, con un messaggio che non nomina né il `.csproj` né la proprietà responsabile, mentre si sta debuggando altro. È il terzo caso di configurazione che *sembra* attiva e innocua e non lo è, dopo §8.1 e §8.2 — con la differenza che qui la modalità **era** in vigore: a mancare era la conoscenza della sua conseguenza.
+
+**Risoluzione:** la proprietà è stata **rimossa dalla props di radice** (il default .NET è `false`), con un commento che spiega perché non va reintrodotta. Non è un'eccezione locale a un progetto: `Roamly.Api` e `Roamly.IntegrationTests` aprono entrambi connessioni, e `Money.Currency` rende le regole di globalizzazione parte del dominio.
+
+### 8.5 R43 è verde: EF Core 10 emette `REFERENCES` nell'ordine della PK
+
+**Reperto del Blocco 4, e chiusura dell'ultimo punto aperto di [`ADR-0008`](../adr/0008-primary-key-strategy.md).** Quell'ADR dichiarava un solo punto empirico non verificato: se EF Core 10 emetta `REFERENCES Campers (OwnerId, Id)` nell'ordine della PK, o riordini le colonne secondo l'ordine di dichiarazione della FK. Un ordine invertito produce uno schema **sintatticamente valido e semanticamente sbagliato**, che — a differenza di 1785 — **non fallisce affatto**.
+
+Verificato su SQL Server reale interrogando `sys.foreign_key_columns`: **tutte** le FK composite elencano le colonne nell'ordine della PK. **Il *Piano B* di ADR-0008 non serve**, e il trigger di revisione **T6** non scatta.
+
 ---
 
 ## 9. Test data builder
@@ -496,13 +521,18 @@ npm run e2e
 | **Suite L0 `Roamly.Model.Tests`, 13 test** (analizzatore 1785, R26-R29, R40, R32) | < 5 s | **Blocco 3** | **2,8-3,3 s**, esecuzione 2,55-2,97 s |
 | **Suite L0 `Roamly.Domain.Tests`, 3 test** (COMB) | — | **Blocco 3** | **1,4 s** |
 | **Tutto L0 insieme, 16 test** | < 5 s | **Blocco 3** | **3,5 s** — ✅ Checkpoint 3 |
-| Pull immagine su runner GHA (non cachata) | 40-70 s | — | — |
-| Readiness del container | 20-45 s | — | — |
-| `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | — | — |
-| `EnsureCreated` schema completo | 1-3 s | — | — |
-| `Respawn.ResetAsync()` | 50-200 ms | — | — |
+| **Suite L0 `Roamly.Model.Tests`, 21 test** (con R33, R36, forma dei progetti) | < 5 s | **Blocco 4** | **2,0 s** di esecuzione |
+| **Suite L1 `Roamly.IntegrationTests`, 9 test**, container incluso | — | **Blocco 4** | **17,6 s** (di cui ~10,5 s di avvio container) |
+| **Tutta la soluzione, 33 test** (`dotnet test --solution --no-build`) | — | **Blocco 4** | **32,7 s** — ✅ Checkpoint 4 |
+| Pull immagine su runner GHA (non cachata) | 40-70 s | — | — (immagine gia' locale: **non misurato**; su disco 2,34 GB) |
+| Readiness del container | 20-45 s | **Blocco 4** | **9,6-14,6 s** (x64, Docker Desktop/WSL2, 2 GB, immagine locale) |
+| `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | **Blocco 4** | **554-855 ms** — ⚠️ 2-4× la stima |
+| `EnsureCreated` schema completo | 1-3 s | **Blocco 4** | **2,5-3,4 s** |
+| `Respawn.ResetAsync()` | 50-200 ms | **Blocco 4** | **843 ms** su schema completo vuoto — ⚠️ 4× la stima (include la costruzione del grafo alla prima chiamata) |
 | Migration Phase 1 su DB vuoto | 1-2 s | — | — |
 | Job `backend-fast` | 90-120 s | — | — |
 | Job `backend-integration` | 3-4 min | — | — |
 
 Il tempo del job `backend-integration` va **riannotato a ogni revisione di questo documento**: è l'indicatore che fa scattare il passaggio da G1 a G2 (trigger T1).
+
+> ⚠️ **Reperto del Blocco 4 — `dotnet test` senza `--no-build` non esegue nulla.** Su questa macchina `dotnet test --project …` e `dotnet test --solution Roamly.slnx` riportano *"Nessun test eseguito"* con **exit code 5** in ~250 ms, mentre gli stessi test passano lanciando l'eseguibile del progetto, con `--no-build`, con `-v n` o con argomenti MTP espliciti. Il comportamento è **deterministico** e **precede il Blocco 4** (riprodotto anche con `tests/Directory.Build.props` ripristinato alla versione del commit `6f79c5d`). Fino a diagnosi, la forma da usare — e da mettere in `ci.yml` al Blocco 5 — è **`dotnet build` seguito da `dotnet test --solution Roamly.slnx --no-build`**: un exit code 5 silenzioso in CI è indistinguibile da una suite verde per chi guarda solo il colore.

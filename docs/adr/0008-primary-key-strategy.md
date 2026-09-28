@@ -369,7 +369,11 @@ Senza questi verificatori, la prima entità aggiunta tra sei mesi prenderà `PK(
 
 ## Piano B — se EF Core 10 generasse le colonne di `REFERENCES` in un ordine diverso
 
-Il solo punto empirico non verificato è se EF Core 10 emetta `REFERENCES Camper (OwnerId, Id)` nell'ordine della PK, oppure riordini le colonne secondo l'ordine di dichiarazione della FK. **Non blocca la decisione**, perché la verifica è R43 e vive dentro un test già previsto per l'errore 1785.
+> ✅ **NON SERVE. Verificato empiricamente il 2026-09-28** (Blocco 4 di ADR-0009, test B su SQL Server 2022-CU27 reale). Interrogando `sys.foreign_key_columns`, **tutte** le FK composite emettono `REFERENCES (OwnerId, Id)` nell'ordine della PK. **R43 è verde**, il trigger **T6** non scatta, e questo ADR non ha più punti empirici aperti.
+>
+> Il piano resta scritto qui perché conserva valore: se una versione futura di EF Core cambiasse quel comportamento, R43 diventerebbe rosso e questa è la sequenza da seguire. Vedi `TESTING.md` §8.5.
+
+Il solo punto empirico non verificato era se EF Core 10 emettesse `REFERENCES Camper (OwnerId, Id)` nell'ordine della PK, oppure riordinasse le colonne secondo l'ordine di dichiarazione della FK. **Non bloccava la decisione**, perché la verifica è R43 e vive dentro un test già previsto per l'errore 1785.
 
 **Se R43 fallisce**, nell'ordine:
 

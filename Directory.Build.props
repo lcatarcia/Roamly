@@ -5,8 +5,17 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+
+  <!--
+    InvariantGlobalization NON e' impostata, e la scelta e' deliberata.
+    Microsoft.Data.SqlClient non supporta la modalita' invariante: la prima
+    SqlConnection.OpenAsync lancia NotSupportedException "Globalization
+    Invariant Mode is not supported". Verificato empiricamente al Blocco 4
+    (TESTING.md 8.4). Roamly.Api e Roamly.IntegrationTests aprono entrambi
+    connessioni, e Money.Currency rende le regole di globalizzazione parte
+    del dominio, non un accessorio.
+  -->
 
   <!--
     Un analyzer che produce solo warning non e' un verificatore: le regole

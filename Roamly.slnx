@@ -9,5 +9,6 @@
     <Project Path="tests/Roamly.Domain.Tests/Roamly.Domain.Tests.csproj" />
     <Project Path="tests/Roamly.IntegrationTests/Roamly.IntegrationTests.csproj" />
     <Project Path="tests/Roamly.Model.Tests/Roamly.Model.Tests.csproj" />
+    <Project Path="tests/Roamly.TestSupport/Roamly.TestSupport.csproj" />
   </Folder>
 </Solution>
