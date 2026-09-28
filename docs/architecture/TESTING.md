@@ -421,6 +421,20 @@ Quindi R41 non è un verificatore rotto: **non è mai stato scritto**, e due doc
 
 ---
 
+### 8.8 R5 è dichiarata applicata da `BannedApiAnalyzers` e non lo è — e condivide la causa con §8.7
+
+**Ottavo caso, trovato da @hermes istruendo ADR-0005.** `ARCHITECTURE.md` §4 dichiara che sette famiglie di API — `Find`/`FindAsync`, `Attach`/`AttachRange`, `Update`/`UpdateRange`, `Entry().State = ...`, `ExecuteUpdate`/`ExecuteDelete`, `FromSqlRaw`/`FromSqlInterpolated`, `IgnoreQueryFilters` — sono **errore di compilazione** fuori da `Common/Ownership/`, e che *«il divieto è applicato da `BannedApiAnalyzers` e fa fallire la build, non la code review»* (**R5, ADR-0003**).
+
+Verificato: l'infrastruttura è **correttamente agganciata** — `Directory.Build.props` righe 40 e 46-47 referenziano il pacchetto (5.6.0) e includono `BannedSymbols.txt` come `AdditionalFiles` — ma **il file non contiene nessuna delle sette**. Ha sei voci: quattro temporali e due sui provider EF. E **nessun test di convenzione le presidia**: una ricerca di `IgnoreQueryFilters`, `FindAsync`, `FromSqlRaw` ed `ExecuteUpdate` sotto `tests/` non restituisce nulla. **R5 non è in vigore.**
+
+> **La causa comune con §8.7, che è il vero reperto.** R5 e R41 chiedono entrambe *«vietato **tranne** dentro un percorso»* — R5 tranne in `Common/Ownership/`, R41 tranne in `Roamly.Common.SequentialGuidGenerator`. **`BannedApiAnalyzers` non sa esprimere eccezioni per percorso**: bandisce un simbolo nell'intera compilazione, punto. Quindi non è una dimenticanza capitata due volte: è **lo stesso strumento sbagliato scelto due volte, per due regole che hanno la stessa forma**. ADR-0008 lo aveva già capito per R41, prescrivendo un regex lint; `ARCHITECTURE.md` no.
+>
+> **Conseguenza operativa.** Entrambe vogliono un **lint testuale con eccezione per percorso**, ed è opportuno scriverne **uno solo, parametrico**, anziché due. Il livello naturale è **L0**: `RepositoryRoot.CodeFiles()` esiste già e fa esattamente questa scansione per R30/R36. Va scritto **prima della prima slice** — R5 protegge il query filter di ownership, cioè la garanzia di sicurezza centrale del progetto, e oggi è scoperta nel momento esatto in cui stanno per nascere gli handler che potrebbero violarla.
+>
+> ⚠️ Nota per chi scriverà il lint: **`Entry()` non va bandito**. Vietato è `Entry().State = ...`; `Entry(e).Property(...).OriginalValue` è il pattern che **ADR-0005 R49 prescrive** per la concorrenza ottimistica. Un lint troppo largo qui renderebbe impossibile la regola di un altro ADR.
+
+---
+
 ## 9. Test data builder
 
 Un `Camper` valido ha ~15 campi. Senza una convenzione di builder ogni test diventa 20 righe di setup, e i test smettono di essere scritti.

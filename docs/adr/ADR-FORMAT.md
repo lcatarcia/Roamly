@@ -79,10 +79,16 @@ Documenti in `docs/` impattati e aggiornati.
 
 ## ADR previsti
 
-| File | Copre | Decisione |
-|---|---|---|
-| `0001-use-sql-server.md` | SQL Server + libreria spatial, con rifiuto motivato di PostGIS | #1 |
-| `0002-modular-monolith.md` | Modular monolith + Vertical Slice + CQRS logico | — |
-| `0003-auth-and-ownership.md` | Autenticazione e regola owner-scoped | #2 |
-| `0004-api-conventions.md` | Error model, paginazione, versioning, concorrenza | — |
-| `0005-geo-data-strategy.md` | Provider routing e fonti dati geografiche | #3 |
+> ⚠️ **Questa tabella era ferma al piano del 2026-09-24 e sbagliava due righe.** `0004` è stato assegnato a *privacy ed erasure*, e di conseguenza *api-conventions* è slittato a `0005` e *geo-data-strategy* a `0006` — come `docs/product/ROADMAP.md` §4 registra già. Allineata il 2026-09-28. **La numerazione reale è quella dei file presenti in questa cartella**, non quella di un piano.
+
+| File | Copre | Decisione | Stato |
+|---|---|---|---|
+| `0001-use-sql-server.md` | SQL Server + libreria spatial, con rifiuto motivato di PostGIS | #1 | ✅ |
+| `0002-modular-monolith.md` | Modular monolith + Vertical Slice + CQRS logico | — | ⬜ contenuto già in `architecture/ARCHITECTURE.md` §5, da formalizzare |
+| `0003-auth-and-ownership.md` | Autenticazione e regola owner-scoped | #2 | ✅ |
+| `0004-privacy-and-erasure.md` | Export, cancellazione con periodo di grazia, `ErasureReceipt` | #4 | ✅ |
+| `0005-api-conventions.md` | Error model, validazione, paginazione, versioning, concorrenza, idempotenza | — | ✅ |
+| `0006-geo-data-strategy.md` | Provider routing e fonti dati geografiche | #3 | ⬜ blocca solo la Phase 3 |
+| `0007-design-system.md` | Tailwind v4, token, componenti di dominio | #7 | ✅ |
+| `0008-primary-key-strategy.md` | PK composita `(OwnerId, Id)`, Guid COMB client-side | — | ✅ |
+| `0009-test-strategy.md` | Livelli L0/L1/L2, Testcontainers, sequenza di implementazione | #6 | ✅ |
