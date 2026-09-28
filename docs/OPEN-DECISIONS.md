@@ -53,12 +53,20 @@ Quando una decisione è chiusa: si scrive l'ADR corrispondente in `docs/adr/`, s
 
 | # | Decisione | Severità | Owner | Documento | Stato |
 |---|---|---|---|---|---|
-| 5 | MediatR sì/no in Vertical Slice (tecnico + licenza) | MEDIUM | @archimedes | `architecture/ARCHITECTURE.md` §1 | ⬜ aperta |
+| 5 | MediatR sì/no in Vertical Slice (tecnico + licenza) | MEDIUM | @archimedes | `architecture/ARCHITECTURE.md` §1 e §4 | ✅ **chiusa 2026-09-28** — nessun mediator, handler diretti + endpoint filter, vincolata a **R44** |
 | 6 | Strategia integration test e provisioning DB di test | MEDIUM | @argus | [`adr/0009-test-strategy.md`](adr/0009-test-strategy.md) | ✅ **chiusa 2026-09-25** |
 | 7 | Base del design system: headless + token vs da zero | MEDIUM | @pixel | [`adr/0007-design-system.md`](adr/0007-design-system.md) | ✅ **chiusa 2026-09-24** |
 | 8 | Storage file/foto | MEDIUM | @vulcan | `architecture/SECURITY.md` §5 | ⬜ aperta |
 | 9 | Target di deploy e strategia migration | MEDIUM | @vulcan | `architecture/DEVOPS.md` §2.2 | ⬜ aperta |
 | 10 | Offline/PWA: dentro o fuori scope | MEDIUM | @archimedes | `product/UX.md` §5 | ⬜ aperta |
+
+> **Esito #5:** **nessun mediator.** Le slice espongono **handler diretti** — classi semplici risolte da DI e invocate dall'endpoint — e i concern trasversali vivono negli **endpoint filter**. Il motivo dominante non è la licenza di MediatR (v14.2.0, RPL-1.5 o commerciale) ma il fatto che un comando **senza handler registrato compila verde**; e che mappando le otto voci aperte di `API-CONVENTIONS.md` §2 **sei sono concern HTTP**, irraggiungibili da un mediator senza portarsi un header dentro il command. I pipeline behavior realmente necessari a Roamly sono **uno o due**. La decisione è **vincolata a R44** (`ARCHITECTURE.md` §4), il verificatore L0 che rende bloccante l'handler non registrato: senza R44 questa opzione sarebbe la peggiore fra quelle valutate, non la migliore. È stata presa subito **perché invertirla costa poco** (🟢 verso `martinothamar/Mediator`, ~10 min per slice), non perché rimandarla fosse caro.
+
+### Vincoli derivati dalla #5 su decisioni ancora aperte
+
+| Decisione | Vincolo |
+|---|---|
+| **#9** target di deploy | la #5 **rimuove un ostacolo** anziché aggiungerne uno: senza MediatR, che è ostile ad AOT per via della risoluzione a runtime, la pubblicazione **Native AOT** dell'API resta praticabile. Se la #9 la considerasse, va verificato che EF Core e il resto dello stack la sostengano — ma la forma degli handler non la impedisce |
 
 > **Esito #7:** **Tailwind v4 + shadcn/ui come generatore + token proprietari + componenti di dominio custom.** L'identità dell'MVP non poggia su fotografia e mappe — che non esistono prima della Phase 2-3 — ma su tre elementi realizzabili subito: il **Ribbon** (la route come asse astratto: in Phase 1 è l'asse km/tempo della manutenzione, in Phase 3 diventa la route geografica), il **dato numerico come superficie primaria** al posto della fotografia, e **sand, contour e texture generati in CSS/SVG**. Regole invarianti **R11-R25**, ognuna con un verificatore. **Dark mode in Phase 1** per scelta esplicita dell'utente. Palette corretta per accessibilità: il CTA del documento di input (clay + bianco, 3.20:1) **non passava WCAG AA** ed è stato sostituito da `clay-500` + `ink` (5.03:1); introdotto un token **`danger` separato da `clay`**.
 

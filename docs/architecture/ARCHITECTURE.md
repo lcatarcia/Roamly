@@ -27,11 +27,20 @@ Origine: `docs/archive/Roamly_Planning_2026-09-24.md` §3, §4, §5, §21, §23,
 > Roamly usa **ASP.NET Core 10** e **GitHub Actions**. Questo override è vincolante: gli agenti non devono applicare i default.
 > Resta da verificare che il target di hosting scelto (decisione #9) supporti il runtime .NET 10.
 
-> ⚠️ **Decisione aperta #5 — MediatR (review I3), severità MEDIUM. Owner: @archimedes.**
-> Il planning diceva "MediatR o equivalente, se utile": non è una decisione.
-> **Tecnico:** con handler invocati direttamente dagli endpoint, MediatR è spesso indirezione pura; il suo valore sta nelle pipeline behavior, ottenibili anche con un decorator o con i filtri degli endpoint.
-> **Licenza:** MediatR è dual-license (Lucky Penny Software). Dalla v13 serve una licenza; la Community edition è gratuita sotto i 5M$ di fatturato ma richiede **registrazione chiave e rinnovo annuale**. Costo zero per Roamly, ma vincolo amministrativo ricorrente.
-> Alternative sul tavolo: MediatR community, dispatcher minimale in casa (~50 righe), handler diretti senza mediator, libreria alternativa MIT.
+> ✅ **Decisione #5 — nessun mediator. Chiusa 2026-09-28, severità MEDIUM. Owner: @archimedes.**
+> Le slice espongono **handler diretti**, classi semplici risolte da DI e invocate dall'endpoint. I concern trasversali vivono negli **endpoint filter** e nel middleware, non in una pipeline di behavior.
+>
+> **Perché non un mediator.** Mappando una per una le otto voci aperte di [`API-CONVENTIONS.md`](API-CONVENTIONS.md) §2, **sei sono concern HTTP** (`ProblemDetails`, ETag/`If-Match`, idempotency, versioning, paginazione, status code di dominio): vivono dove un mediator non arriva senza portarsi un header dentro il command. Il conto reale dei pipeline behavior di Roamly è **uno o due**. Un mediator per ospitarne due è indirezione pagata su ogni slice.
+>
+> **Perché non MediatR** (v14.2.0, RPL-1.5 o commerciale). Il motivo dominante **non è la licenza**: è che un comando **senza handler registrato compila verde** e fallisce a runtime. In un progetto che ha già trovato sette verificatori inerti, "verde ma non in vigore" è il rischio da cui ci si difende. Secondariamente, senza chiave MediatR emette a runtime `warn: LuckyPennySoftware.MediatR.License[0]`, che finisce **nello stesso sink degli eventi di sicurezza** di §6 e che `TreatWarningsAsErrors` non può intercettare.
+>
+> **Alternativa più vicina:** `martinothamar/Mediator` (MIT, source-generated), che trasforma quel fallimento in `error MSG0005` a compile time. Scartata perché il costo di indirezione resta e il verificatore si può scrivere. **Il costo di inversione verso di essa è 🟢 BASSO** (~10 min per slice: cambia una dichiarazione di interfaccia, non la forma del codice), ed è la ragione per cui questa decisione è stata presa subito anziché rimandata.
+> `Immediate.Handlers` è stata **scartata per testabilità**: `error IHR0011` impone `HandleAsync` privato, costringendo ogni test L0 a ricostruire a mano la catena di behavior — una regressione contro [`../adr/0009-test-strategy.md`](../adr/0009-test-strategy.md).
+>
+> **Condizione vincolante:** la decisione regge solo con **R44**, il verificatore di registrazione (§4). Senza, A è la peggiore delle opzioni, non la migliore.
+>
+> FluentValidation resta **non condizionata** da questa scelta (dominio @hermes).
+> Istruttoria completa con quattro prototipi compilati ed eseguiti: file di sessione `decisione5-archimedes.md`.
 
 ### Database
 
@@ -138,7 +147,9 @@ Il principio importante: ogni feature verticale contiene **vicini tra loro** req
 
 > **Quattro progetti di test, non tre** ([`ADR-0009`](../adr/0009-test-strategy.md)). La separazione che conta non è per livello architetturale ma per **costo di esecuzione**: `Roamly.Model.Tests` esiste perché **17 dei 25 verificatori non toccano alcun database** — EF Core costruisce `DbContext.Model` offline con `UseSqlServer` senza mai connettersi. Tenerli in un progetto senza Docker li rende eseguibili in meno di 5 secondi a ogni salvataggio, invece che in 60-100 secondi in CI.
 
-> **`BannedSymbols.txt`** è parte dell'impianto, non un accessorio: vieta `DateTime.UtcNow` e `DateTimeOffset.UtcNow` (si usa `TimeProvider`, **R34**), `UseSqlite` e `UseInMemoryDatabase` (un solo motore di persistenza nei test, **R30**), e `Guid.NewGuid()` nel dominio (**R41**, ADR-0008). Sono tutte regole che nessun test funzionale intercetta: violarle non rompe nulla, degrada soltanto.
+> **`BannedSymbols.txt`** è parte dell'impianto, non un accessorio: vieta `DateTime.UtcNow`, `DateTime.Now`, `DateTimeOffset.UtcNow` e `DateTimeOffset.Now` (si usa `TimeProvider`, **R34**), più `UseSqlite` e `UseInMemoryDatabase` (un solo motore di persistenza nei test, **R30**). Sono tutte regole che nessun test funzionale intercetta: violarle non rompe nulla, degrada soltanto.
+>
+> ⚠️ **Questo paragrafo dichiarava anche `Guid.NewGuid()` nel dominio (R41): era falso.** Il file ha **sei voci e nessuna su `Guid`**, e ADR-0008 prescrive per R41 un meccanismo diverso — un **regex lint su `src/**/Domain/**`** — a oggi anch'esso inesistente. **R41 non è in vigore in nessuna forma.** È innocuo finché nessun codice di dominio genera id, e diventa dannoso al passo 7 di [`ROADMAP.md`](../product/ROADMAP.md) §4, quando `CreateCamper` produrrà il primo `Id`. Settimo caso di verificatore inerte: vedi [`TESTING.md`](TESTING.md) §8.
 
 ---
 
@@ -177,6 +188,27 @@ Features/
 **Queries** (sola lettura): `GetCamperDashboard`, `GetCamper`, `GetMaintenanceSchedule`, `GetTrip`, `GetTripSummary`, `GetExpenses`, `GetJournal`.
 
 **CQRS in Roamly è una separazione logica tra write model e read model su un singolo SQL Server.** Niente event sourcing, niente secondo database.
+
+### Forma degli handler — decisione #5
+
+**Nessun mediator.** `Handler.cs` è una **classe semplice**, non statica, registrata in DI e invocata **direttamente** dall'endpoint:
+
+```csharp
+public sealed class CreateCamperHandler(RoamlyDbContext db, IIdGenerator ids, TimeProvider clock)
+{
+    public async Task<CreateCamperResponse> HandleAsync(CreateCamperCommand cmd, CancellationToken ct) { /* ... */ }
+}
+```
+
+I concern trasversali vivono negli **endpoint filter** e nel middleware, dove hanno accesso alla richiesta HTTP. Non esiste una pipeline di behavior: se un giorno servissero più di due comportamenti realmente trasversali *al dominio* (non all'HTTP), la decisione #5 va riaperta — il costo di inversione verso `martinothamar/Mediator` è basso per costruzione.
+
+Gli handler sono classi **non statiche** deliberatamente: una classe statica non è sostituibile né intercettabile, e chiuderebbe quella via d'uscita.
+
+| Regola | Enunciato | Verificatore |
+|---|---|---|
+| **R44** | **Ogni handler è registrato.** Ogni tipo il cui nome termina in `Handler` sotto `Features/` è risolvibile dal container. Il fallimento che un mediator con source generator intercetterebbe a compile time, qui è intercettato dal test | test di convenzione L0 (**bloccante**) in `Roamly.Model.Tests/Conventions/`: confronta i tipi `*Handler` scoperti per riflessione con quelli registrati nella `IServiceCollection` dell'API. Un handler nuovo e non registrato **rompe la build** |
+
+> **R44 non è un contorno: è la condizione della decisione #5.** Senza, gli handler diretti sono la peggiore delle opzioni valutate, perché pagano lo stesso fallimento a runtime di MediatR senza averne l'ecosistema.
 
 ### Principi di slice
 

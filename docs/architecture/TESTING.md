@@ -405,6 +405,22 @@ Che l'asserzione sia comunque **in vigore** è stato dimostrato nella direzione 
 
 ---
 
+### 8.7 R41 è dichiarata in due documenti e non esiste in nessuno dei due — reperto della decisione #5
+
+**Settimo caso della serie, e il primo trovato leggendo la documentazione anziché eseguendo un test.** Istruendo la decisione #5, @archimedes ha citato `ARCHITECTURE.md` §3, che dichiarava: *`BannedSymbols.txt` vieta `Guid.NewGuid()` nel dominio (R41)*. La verifica diretta del file lo smentisce.
+
+`BannedSymbols.txt` contiene **sei voci** — quattro temporali (`P:System.DateTime.UtcNow`, `.Now`, e le due `DateTimeOffset`) e due sui provider EF (`UseSqlite`, `UseInMemoryDatabase`) — e **nessuna su `Guid`**. Non esiste alcun altro `BannedSymbols` nella soluzione.
+
+Il punto meno ovvio è che **la fonte normativa prescriveva un meccanismo diverso**: ADR-0008 R41 chiede un *«regex su `src/**/Domain/**` che vieta quelle chiamate fuori da `Roamly.Common.SequentialGuidGenerator`»*, e vieta `Guid.CreateVersion7()` **ovunque nella persistenza**. BannedSymbols non sarebbe comunque stato lo strumento giusto: deve consentire la chiamata **dentro** il generatore, e `BannedApiAnalyzers` non conosce le eccezioni per percorso.
+
+Quindi R41 non è un verificatore rotto: **non è mai stato scritto**, e due documenti indipendenti affermavano il contrario — uno sbagliando lo strumento, l'altro descrivendo quello giusto al futuro.
+
+> **Conseguenza operativa.** Innocuo oggi: nessun tipo di dominio genera id, perché non esiste ancora una slice. Diventa dannoso **esattamente al passo 7** di `ROADMAP.md` §4, dove `CreateCamper` produce il primo `Id` ed è il momento in cui un `Guid.NewGuid()` distratto entrerebbe senza opposizione, degradando la clustering key `(OwnerId, Id)` di ADR-0008 in inserimenti casuali. **Il lint va scritto prima di quella slice, non dopo**, e va visto fallire (R38).
+>
+> ⚠️ Generalizzazione dei sette casi: **la differenza fra i primi sei e questo è che gli altri erano verificatori che esistevano e non mordevano, questo è un verificatore che non esiste e che due documenti davano per esistente.** Il secondo tipo è più difficile da trovare, perché nessun esperimento lo rivela: solo la lettura incrociata di ciò che il repo contiene e di ciò che dichiara di contenere.
+
+---
+
 ## 9. Test data builder
 
 Un `Camper` valido ha ~15 campi. Senza una convenzione di builder ogni test diventa 20 righe di setup, e i test smettono di essere scritti.
