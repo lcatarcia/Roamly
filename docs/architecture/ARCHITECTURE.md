@@ -151,7 +151,9 @@ Il principio importante: ogni feature verticale contiene **vicini tra loro** req
 
 > **`BannedSymbols.txt`** è parte dell'impianto, non un accessorio: vieta `DateTime.UtcNow`, `DateTime.Now`, `DateTimeOffset.UtcNow` e `DateTimeOffset.Now` (si usa `TimeProvider`, **R34**), più `UseSqlite` e `UseInMemoryDatabase` (un solo motore di persistenza nei test, **R30**). Sono tutte regole che nessun test funzionale intercetta: violarle non rompe nulla, degrada soltanto.
 >
-> ⚠️ **Questo paragrafo dichiarava anche `Guid.NewGuid()` nel dominio (R41): era falso.** Il file ha **sei voci e nessuna su `Guid`**, e ADR-0008 prescrive per R41 un meccanismo diverso — un **regex lint su `src/**/Domain/**`** — a oggi anch'esso inesistente. **R41 non è in vigore in nessuna forma.** È innocuo finché nessun codice di dominio genera id, e diventa dannoso al passo 7 di [`ROADMAP.md`](../product/ROADMAP.md) §4, quando `CreateCamper` produrrà il primo `Id`. Settimo caso di verificatore inerte: vedi [`TESTING.md`](TESTING.md) §8.
+> ⚠️ **Questo paragrafo dichiarava anche `Guid.NewGuid()` nel dominio (R41): era falso.** Il file ha **sei voci e nessuna su `Guid`**, e `BannedApiAnalyzers` non sarebbe comunque lo strumento giusto, perché non conosce le eccezioni per percorso e R41 deve restare lecita **dentro** il generatore COMB.
+>
+> ✅ **Sanato il 2026-09-28.** R41 è ora in vigore come **lint testuale L0**: `tests/Roamly.Model.Tests/Conventions/R41_IdGenerationTests.cs`, istanza del lint parametrico `PathScopedBan`. Vieta `Guid.NewGuid()`, `Guid.CreateVersion7()` e `new Guid(...)` sotto `src/**/Domain/**`, più `Guid.CreateVersion7()` in tutto `src/`, con **unica esenzione `src/Roamly.Common/SequentialGuidGenerator.cs`**. Visto fallire su una violazione deliberata (R38); dettagli e testo del rosso in [`TESTING.md`](TESTING.md) §8.7.
 
 ---
 
@@ -212,6 +214,8 @@ Gli handler sono classi **non statiche** deliberatamente: una classe statica non
 
 > **R44 non è un contorno: è la condizione della decisione #5.** Senza, gli handler diretti sono la peggiore delle opzioni valutate, perché pagano lo stesso fallimento a runtime di MediatR senza averne l'ecosistema.
 
+> 🔴 **R44 non è oggi in vigore, e non va scritta prima del primo handler.** Non esiste alcun `*Handler` (`Program.cs` è ancora il template `dotnet new web`, senza composition root) e `Roamly.Model.Tests` non referenzia `Roamly.Api`: un verificatore scritto oggi confronterebbe `∅ ⊆ ∅` e sarebbe **verde a vuoto**. Va scritta al **passo 6** di [`ROADMAP.md`](../product/ROADMAP.md) §4, nello stesso commit che crea il composition root. Analisi completa, alternative valutate e la decisione di struttura aperta (il `ProjectReference` verso `Roamly.Api`) in [`TESTING.md`](TESTING.md) §8.9.
+
 ### Principi di slice
 
 Ogni feature deve:
@@ -228,7 +232,13 @@ Ogni feature deve:
 
 `Find` / `FindAsync` · `Attach` / `AttachRange` · `Update` / `UpdateRange` · `Entry().State = ...` · `ExecuteUpdate` / `ExecuteDelete` · `FromSqlRaw` / `FromSqlInterpolated` · `IgnoreQueryFilters`.
 
-Sono tutte vie che **non passano dal query filter**. Il divieto è applicato da `BannedApiAnalyzers` e fa fallire la build, non la code review.
+Sono tutte vie che **non passano dal query filter**. Il divieto **non è applicato da `BannedApiAnalyzers`** — quell'analyzer bandisce un simbolo nell'intera compilazione e **non sa esprimere eccezioni per percorso**, mentre queste API devono restare lecite dentro `Common/Ownership/`. Il meccanismo reale è un **lint testuale L0 bloccante**: `tests/Roamly.Model.Tests/Conventions/R5_OwnershipBypassApiTests.cs`, istanza del lint parametrico `PathScopedBan` condiviso con R41. Fa fallire la suite L0, non la code review. Il reperto che ha corretto questa affermazione — e il resoconto R38 del rosso osservato — è in [`TESTING.md`](TESTING.md) §8.8.
+
+> ⚠️ **`Entry()` non è bandito**: vietata è solo l'assegnazione `Entry(...).State = ...`. `Entry(e).Property(...).OriginalValue` è il pattern che **ADR-0005 R49** prescrive per la concorrenza ottimistica, ed è verificato come caso negativo del lint.
+>
+> ⚠️ **`Update`/`Find` sono riconosciuti sulla chiamata a un `DbSet`/`DbContext`, non come sottostringa** — `UpdateCamper` e `UpdatedAtUtc` non scattano. Il falso negativo accettato (`var set = db.Campers; set.Update(x);`) è dichiarato in `TESTING.md` §8.8.
+>
+> ⚠️ **L'esenzione `Common/Ownership/` è dichiarata ma non ancora esercitata**: la cartella non esiste finché non c'è la prima slice.
 
 `IgnoreQueryFilters` è bandito in **entrambe** le forme. Esistono solo `IgnoreQueryFilters()` — che disattiva *tutti* i filtri — e `IgnoreQueryFilters(IEnumerable<string>)`. La forma `IgnoreQueryFilters("OwnerScope")` con stringa singola, citata in ADR-0003, **non compila**: la forma corretta è `IgnoreQueryFilters(["OwnerScope"])`.
 

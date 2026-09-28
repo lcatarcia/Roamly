@@ -71,7 +71,8 @@ tests/
 │   ├── Ownership/                          # R1, R2, R4-forma, R5-manifesto
 │   ├── Privacy/                            # R8, R10
 │   ├── Keys/                               # R26-R29, R40 — verificatore chiavi di @oracle
-│   ├── Conventions/                        # R30, R36, forma dei .csproj sotto tests/
+│   ├── Conventions/                        # R30, R36, R5, R41, forma dei .csproj sotto tests/
+│   │   └── PathScopedBan.cs                # lint parametrico «vietato tranne in...» (R5 e R41)
 │   ├── Schema/
 │   │   ├── CascadePathAnalyzerTests.cs     # test A — analizzatore 1785
 │   │   └── FullSchemaCompletenessTests.cs  # R32
@@ -419,6 +420,21 @@ Quindi R41 non è un verificatore rotto: **non è mai stato scritto**, e due doc
 >
 > ⚠️ Generalizzazione dei sette casi: **la differenza fra i primi sei e questo è che gli altri erano verificatori che esistevano e non mordevano, questo è un verificatore che non esiste e che due documenti davano per esistente.** Il secondo tipo è più difficile da trovare, perché nessun esperimento lo rivela: solo la lettura incrociata di ciò che il repo contiene e di ciò che dichiara di contenere.
 
+> ✅ **Sanato il 2026-09-28** da `tests/Roamly.Model.Tests/Conventions/R41_IdGenerationTests.cs`, seconda istanza del lint parametrico `PathScopedBan` (vedi §8.8). Perimetro `src/**/Domain/**` per `Guid.NewGuid()`, `Guid.CreateVersion7()` e `new Guid(...)`; perimetro `src/` per la sola `CreateVersion7`; **unica esenzione `src/Roamly.Common/SequentialGuidGenerator.cs`** — il file, non il progetto, perché un'esenzione a livello di progetto autorizzerebbe la generazione di id in qualunque futuro tipo di `Common/`.
+>
+> **Visto fallire (R38)** con un `Guid.NewGuid()` deliberato in `src/Roamly.Domain/Entities/R38Probe.cs`. Messaggio osservato:
+>
+> ```text
+> R41 (ADR-0008): 1 violazione/i nel perimetro 'src/**/Domain/** (oggi src/Roamly.Domain/)'
+> (24 file ispezionati, 0 esentati):
+>   - src/Roamly.Domain/Entities/R38Probe.cs:6 usa il simbolo vietato 'Guid.NewGuid()'
+>     -> public static Guid Make() => Guid.NewGuid();
+>     | Guid v4 e' casuale: come clustering key produce page split su ogni insert (ADR-0008).
+> Percorsi in cui questi simboli sono leciti: src/Roamly.Common/SequentialGuidGenerator.cs.
+> ```
+>
+> Violazione rimossa, suite di nuovo verde. L'esenzione **è esercitata**: `SequentialGuidGenerator.cs` compare fra i file esentati e non fra quelli ispezionati, e un test lo asserisce — se il generatore venisse rinominato, l'esenzione punterebbe nel vuoto e il lint diventerebbe rosso nell'unico luogo in cui il simbolo è lecito.
+
 ---
 
 ### 8.8 R5 è dichiarata applicata da `BannedApiAnalyzers` e non lo è — e condivide la causa con §8.7
@@ -432,6 +448,59 @@ Verificato: l'infrastruttura è **correttamente agganciata** — `Directory.Buil
 > **Conseguenza operativa.** Entrambe vogliono un **lint testuale con eccezione per percorso**, ed è opportuno scriverne **uno solo, parametrico**, anziché due. Il livello naturale è **L0**: `RepositoryRoot.CodeFiles()` esiste già e fa esattamente questa scansione per R30/R36. Va scritto **prima della prima slice** — R5 protegge il query filter di ownership, cioè la garanzia di sicurezza centrale del progetto, e oggi è scoperta nel momento esatto in cui stanno per nascere gli handler che potrebbero violarla.
 >
 > ⚠️ Nota per chi scriverà il lint: **`Entry()` non va bandito**. Vietato è `Entry().State = ...`; `Entry(e).Property(...).OriginalValue` è il pattern che **ADR-0005 R49 prescrive** per la concorrenza ottimistica. Un lint troppo largo qui renderebbe impossibile la regola di un altro ADR.
+
+> ✅ **Sanato il 2026-09-28.** Il lint esiste ed è **uno solo, parametrico**, come questo reperto chiedeva: `tests/Roamly.Model.Tests/Conventions/PathScopedBan.cs` esprime *«questo simbolo è vietato in questo perimetro, tranne in questi percorsi»* ed è istanziato due volte — `R5_OwnershipBypassApiTests.cs` e `R41_IdGenerationTests.cs` (§8.7). Livello **L0**, riusa `RepositoryRoot.CodeFiles()`.
+>
+> **Auto-riferimento.** `R36` lo risolve spezzando il letterale in due. Qui il meccanismo è diverso e più forte, ed è dichiarato: **il perimetro di entrambe le istanze è `src/`, mentre il lint e le sue istanze vivono sotto `tests/`**. Nessun file del verificatore può finire nell'insieme ispezionato, quindi non esiste auto-accusa da neutralizzare — e non serve un'esclusione per percorso che, se sbagliata, spegnerebbe il lint in silenzio.
+>
+> **Non può essere verde a vuoto.** Ogni istanza asserisce che l'insieme ispezionato sia **non vuoto**, con un messaggio che dice esplicitamente che zero file significa lint inerte e non codice pulito. Oggi: 61 file per R5, 24 per R41.
+>
+> **Visto fallire (R38)**, due giri. Primo, `IgnoreQueryFilters()` deliberato:
+>
+> ```text
+> R5 (ADR-0003): 1 violazione/i nel perimetro 'src/ (tutto il codice di produzione)'
+> (62 file ispezionati, 0 esentati):
+>   - src/Roamly.Infrastructure/Persistence/R38Probe.cs:10 usa il simbolo vietato 'IgnoreQueryFilters'
+>     -> => source.IgnoreQueryFilters();
+>     | Disattiva esplicitamente la garanzia di sicurezza centrale del progetto.
+> Percorsi in cui questi simboli sono leciti: src/Roamly.Api/Common/Ownership.
+> ```
+>
+> Secondo giro sulle due forme **difficili** — `Update` su `DbSet` e `Entry().State` — nello stesso file che conteneva anche la forma lecita di R49:
+>
+> ```text
+>   - .../R38Probe2.cs:10 usa il simbolo vietato 'Update'
+>     -> db.Set<Domain.Entities.Camper>().Update(camper);
+>   - .../R38Probe2.cs:11 usa il simbolo vietato 'Entry().State = ...'
+>     -> db.Entry(camper).State = EntityState.Modified;
+> ```
+>
+> La riga 14 dello stesso file, `db.Entry(camper).Property(c => c.Name).OriginalValue`, **non** è stata segnalata: la distinzione prescritta da **ADR-0005 R49** regge su codice vero, non solo su stringhe di test. Violazioni rimosse, suite di nuovo verde.
+>
+> ⚠️ **`Update`/`Find` sono riconosciuti sulla chiamata a un `DbSet`/`DbContext`, non come sottostringa.** Il pattern richiede un destinatario che contenga `db`/`context` oppure un `Set<T>()`. `UpdateCamper`, `UpdatedAtUtc`, `LastUpdated`, `List<T>.Find` non scattano — verificato da un test dedicato. **Falso negativo accettato consapevolmente:** `var set = db.Campers; set.Update(x);` sfugge. È una scelta deliberata: un lint più largo verrebbe silenziato con soppressioni, e una soppressione su `Update` spegnerebbe anche i casi veri.
+>
+> ⚠️ **L'esenzione di R5 non è esercitata oggi.** `src/Roamly.Api/Common/Ownership/` **non esiste** (non c'è ancora composition root): l'esenzione è dichiarata e il lint la rispetterà senza modifiche quando la cartella nascerà, ma **oggi non è messa alla prova da nessun file**. È l'unico punto di questo verificatore che resta non dimostrato, ed è dichiarato al posto di essere asserito.
+
+---
+
+### 8.9 R44 non è ancora in vigore, e scriverla oggi sarebbe il nono caso
+
+**Non è un reperto, è una decisione presa per non produrne uno.** `ARCHITECTURE.md` §4 assegna a R44 un verificatore L0 bloccante: *ogni tipo il cui nome termina in `Handler` sotto `Features/` è risolvibile dal container*. Stato di fatto al 2026-09-28:
+
+- **nessun handler esiste**: `src/Roamly.Api/Program.cs` è ancora il template `dotnet new web`, senza composition root e senza registrazioni;
+- `tests/Roamly.Model.Tests` **non referenzia `Roamly.Api`** (referenzia `Roamly.Infrastructure` e `Roamly.TestSupport`).
+
+Quindi R44 nella sua forma normativa — «confronta i `*Handler` scoperti con quelli registrati» — sarebbe **verde a vuoto**: `∅ ⊆ ∅`. È esattamente il fallimento catalogato in questo §8, e scriverla oggi significherebbe aggiungere debito mentre lo si sta pagando.
+
+**L'ipotesi della metà (a) è stata valutata e scartata.** Si potrebbe scrivere subito solo la parte *«la scoperta degli handler è affidabile»*, incrociando la riflessione con un conteggio testuale dei file `Features/**/*Handler.cs`, così che «zero per davvero» si distingua da «zero perché la riflessione si è rotta». Non regge, per tre ragioni:
+
+1. **Oggi verificherebbe `0 == 0`.** L'incrocio riflessione/testo ha valore quando i due numeri possono divergere; con zero handler e zero file è una tautologia con più righe di codice.
+2. **Non c'è riflessione da fare.** Senza `ProjectReference` verso `Roamly.Api` l'assembly non è caricabile da L0, quindi la metà (a) scritta oggi sarebbe *interamente testuale* — cioè non verificherebbe la scoperta per riflessione, che è la cosa che si voleva proteggere.
+3. **Il rischio che descrive non esiste ancora.** «La riflessione si è rotta» è un fallimento che può nascere solo dopo che la riflessione c'è.
+
+> **Raccomandazione: R44 va scritta insieme al primo handler**, cioè al passo 6 di [`ROADMAP.md`](../product/ROADMAP.md) §4 (`GET /api/v1/me`), nello stesso commit che crea il composition root. In quel momento e non prima esistono contemporaneamente il soggetto (un handler), il meccanismo (una `IServiceCollection` reale) e il fallimento da intercettare (un handler non registrato). **R44 non è oggi in vigore.** È una condizione dichiarata della decisione #5, non un contorno: finché non esiste, gli handler diretti sono la peggiore delle opzioni valutate, e va saputo.
+>
+> ⚠️ **Decisione di struttura aperta, non presa qui.** Scrivere R44 a L0 richiede un `ProjectReference` da `Roamly.Model.Tests` a `Roamly.Api`. È una scelta **MEDIUM** (tocca struttura di progetto e accoppiamento): aggiunge il web host e le sue dipendenze al progetto che deve restare sotto i 5 secondi senza Docker. L'alternativa è collocare R44 in `Roamly.Architecture.Tests` (previsto in §3, non ancora creato) o in `Roamly.IntegrationTests`, dove il container c'è già ma il costo sale da L0 a L1. **Va decisa dall'utente al passo 6**, non di iniziativa del verificatore.
 
 ---
 
