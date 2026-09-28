@@ -1,0 +1,14 @@
+# Codice generato da `dotnet ef migrations add`, non scritto a mano.
+#
+# ⚠️ Perche' questo file esiste. Con TreatWarningsAsErrors=true e
+# AnalysisLevel=latest-recommended, lo scaffolding di EF Core 10 NON compila: emette
+# `new[] { "OwnerId", "Id" }` come argomento costante in 12 punti e fa scattare CA1861
+# (12 errori, non avvisi). La migration e' un artefatto rigenerabile: correggerla a mano
+# la farebbe divergere dal modello al primo `migrations add` successivo, che e'
+# esattamente la deriva che il test C esiste per intercettare.
+#
+# `generated_code = true` dichiara a Roslyn cio' che questi file sono. La scelta e'
+# deliberatamente **per cartella** e non globale: la disciplina "zero warning" resta
+# integralmente in vigore su tutto il codice scritto da persone.
+[*.cs]
+generated_code = true

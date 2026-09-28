@@ -24,6 +24,7 @@ public class SqlServerFixture : IAsyncLifetime
     private readonly MsSqlContainer _container;
     private readonly List<(string Label, double Milliseconds)> _timings = [];
     private readonly Lazy<Task<FullSchemaDatabase>> _fullSchema;
+    private readonly Lazy<Task<Phase1Database>> _phase1;
 
     /// <summary>Costruisce la fixture con il profilo di risorse dei test.</summary>
     public SqlServerFixture()
@@ -46,6 +47,7 @@ public class SqlServerFixture : IAsyncLifetime
 
         Resources = resources;
         _fullSchema = new Lazy<Task<FullSchemaDatabase>>(CreateFullSchemaAsync);
+        _phase1 = new Lazy<Task<Phase1Database>>(MigratePhase1Async);
 
         _container = new MsSqlBuilder(new DockerImage(SqlServerImage.Tag))
             .WithEnvironment(
@@ -96,6 +98,15 @@ public class SqlServerFixture : IAsyncLifetime
     /// <returns>Lo stato della creazione, riuscita o fallita.</returns>
     public Task<FullSchemaDatabase> FullSchemaAsync() => _fullSchema.Value;
 
+    /// <summary>
+    /// Database su cui sono state applicate le <b>migration della Phase 1</b>, una volta per run.
+    /// E' il soggetto del <b>test C</b> (TESTING.md §5): schema prodotto dalle migration, non da
+    /// <c>EnsureCreated</c>. Sono due percorsi diversi e devono restare due database diversi,
+    /// altrimenti il confronto fra i due non significherebbe piu' nulla.
+    /// </summary>
+    /// <returns>Lo stato dell'applicazione, riuscita o fallita.</returns>
+    public Task<Phase1Database> Phase1MigratedAsync() => _phase1.Value;
+
     /// <summary>Annota una misura di tempo, riversata su file a fine run (Passo 15 di ADR-0009 §9).</summary>
     /// <param name="label">Che cosa e' stato misurato.</param>
     /// <param name="elapsed">Durata osservata.</param>
@@ -114,6 +125,12 @@ public class SqlServerFixture : IAsyncLifetime
         {
             var schema = await _fullSchema.Value.ConfigureAwait(false);
             await schema.Lease.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (_phase1.IsValueCreated)
+        {
+            var migrated = await _phase1.Value.ConfigureAwait(false);
+            await migrated.Lease.DisposeAsync().ConfigureAwait(false);
         }
 
         await _container.DisposeAsync().ConfigureAwait(false);
@@ -148,6 +165,29 @@ public class SqlServerFixture : IAsyncLifetime
         }
 
         return directory?.FullName ?? AppContext.BaseDirectory;
+    }
+
+    private async Task<Phase1Database> MigratePhase1Async()
+    {
+        var lease = await CreateEmptyDatabaseAsync("CREATE DATABASE per le migration della Phase 1").ConfigureAwait(false);
+
+        var options = new DbContextOptionsBuilder<RoamlyDbContext>()
+            .UseSqlServer(lease.ConnectionString)
+            .Options;
+
+        await using var context = new RoamlyDbContext(options, NoCurrentUser.Instance);
+
+        var stopwatch = Stopwatch.StartNew();
+        var failure = await Record.ExceptionAsync(() => context.Database.MigrateAsync()).ConfigureAwait(false);
+        stopwatch.Stop();
+
+        Measure(
+            failure is null
+                ? "Migration InitialPhase1 su database vuoto"
+                : "Migration InitialPhase1 su database vuoto, FALLITA",
+            stopwatch.Elapsed);
+
+        return new Phase1Database(lease, failure);
     }
 
     private async Task<FullSchemaDatabase> CreateFullSchemaAsync()

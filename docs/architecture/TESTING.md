@@ -81,6 +81,8 @@ tests/
 │   ├── Infrastructure/
 │   │   ├── SqlServerFixture.cs             # IAssemblyFixture: Testcontainers, tag pinnato (R36)
 │   │   ├── DatabaseLease.cs                # CREATE DATABASE / Respawn / DROP
+│   │   ├── FullSchemaDatabase.cs           # esito di EnsureCreated (test B)
+│   │   ├── Phase1Database.cs               # esito di MigrateAsync (test C)
 │   │   ├── RoamlyApiFactory.cs             # WebApplicationFactory + CookieContainer
 │   │   ├── RoamlyClient.cs                 # login vero + antiforgery nascosto (R35)
 │   │   └── DatabaseCollection.cs           # [CollectionDefinition] — punto di sblocco G1→G2
@@ -217,7 +219,11 @@ Assert.True(offenders.Count == 0, "Errore 1785 in arrivo. Percorsi multipli:\n" 
 | 4 | ogni FK figlia è **composita** e punta alla PK del padre (il "morso" di R4, **una volta sola**) | ADR-0003 |
 | 5 | le colonne `Money` sono `decimal(19,4)`, `Coordinates` `decimal(8,6)`/`decimal(9,6)` | `CONTEXT.md` §2.1 |
 
-**Test C — le migration Phase 1 si applicano davvero** (L1, ~2 s, ogni push): `MigrateAsync()` su DB vuoto e `GetPendingMigrationsAsync()` vuoto. Chiude `DATA.md` §5 e impedisce la deriva modello ↔ migration.
+**Test C — le migration Phase 1 si applicano davvero** (L1, ~0,5 s, ogni push): `MigrateAsync()` su DB vuoto e `GetPendingMigrationsAsync()` vuoto. Chiude `DATA.md` §5 e impedisce la deriva modello ↔ migration.
+
+> ✅ **Implementato al Blocco 5** in `Schema/Phase1MigrationTests.cs`, con **cinque** fatti e non uno. La forma letterale qui sopra — «`MigrateAsync` e poi `GetPendingMigrations` vuoto» — **non intercetta la deriva che il test C esiste per intercettare**: `GetPendingMigrations` confronta l'assembly delle migration con `__EFMigrationsHistory`, e **non sa nulla del modello**. Aggiunta l'asserzione che porta il peso, `Database.HasPendingModelChanges()`, che confronta lo *snapshot* della migration con il modello corrente. Più due asserzioni strutturali (**PK `(OwnerId, Id)` CLUSTERED** e **ordine delle colonne in `REFERENCES`**) lette da `sys.*` sul database **migrato**, che è un database diverso da quello del test B.
+>
+> ⚠️ **Reperto: `MigrateAsync()` di EF Core 10 rifiuta di applicare le migration se il modello ha modifiche in sospeso** (`PendingModelChangesWarning` promosso a eccezione). La deriva viene quindi intercettata **due volte**, e la prima è così rumorosa da far fallire tutti e cinque i fatti della classe. È una buona notizia, ma non rende superflua `HasPendingModelChanges()`: è quella a nominare la causa in modo leggibile, ed è l'unica che resterebbe in vigore se un giorno quel warning venisse configurato diversamente.
 
 > ⚠️ **Divergenza dichiarata.** Il test B verifica il **modello** via `EnsureCreated`; il test C verifica le **migration**. Sono cose diverse, e servono entrambe: il modello completo **non ha migration e non deve averne** (`CONTEXT.md` §2.6, niente tabelle vuote in produzione). Quando Phase 2 arriverà, la sua migration andrà confrontata **a mano** con ciò che il test B creava.
 
@@ -385,6 +391,20 @@ Verificato su SQL Server reale interrogando `sys.foreign_key_columns`: **tutte**
 
 ---
 
+### 8.6 «La PK è CLUSTERED» è vero anche quando nessuno lo ha chiesto — reperto del Blocco 5
+
+**Sesto caso della serie, e il primo che riguarda un verificatore già in produzione.** Applicando R38 al test C si è rimossa deliberatamente l'annotazione `.Annotation("SqlServer:Clustered", true)` dalla `PK_Equipment` del file di migration, aspettandosi il rosso. **La suite è rimasta verde.**
+
+La ragione è che SQL Server crea una `PRIMARY KEY` come **CLUSTERED per default** quando la tabella non ha già un indice clusterizzato. Su una tabella creata da zero, «annotazione assente» e «annotazione presente e `true`» producono **lo stesso schema fisico**, e nessuna interrogazione di `sys.indexes` può distinguerli.
+
+Che l'asserzione sia comunque **in vigore** è stato dimostrato nella direzione opposta: con `.Annotation("SqlServer:Clustered", false)` il test diventa rosso e nomina la tabella (`Equipment: la PK creata dalla migration non e' CLUSTERED`).
+
+> **Conseguenza operativa.** L'asserzione *PK CLUSTERED* letta da `sys.*` — sia quella del test B sia quella nuova del test C — protegge da un **`IsClustered(false)` esplicito**, non dalla **perdita silenziosa della dichiarazione**. La copertura di quel secondo caso sta altrove, ed è già attiva: **R26 a L0** legge `IsClustered()` su `IDesignTimeModel`, dove la differenza fra `null`, `false` e `true` esiste davvero (§8.2). Le due verifiche non sono ridondanti, come poteva sembrare: coprono due metà diverse della stessa regola.
+>
+> ⚠️ Il caso in cui il default smetterebbe di salvare è una tabella che acquisisse un **altro** indice clusterizzato prima della PK — cioè un `ALTER`, non un `CREATE`. Non accade oggi; accadrà alla prima migration correttiva su tabella esistente.
+
+---
+
 ## 9. Test data builder
 
 Un `Camper` valido ha ~15 campi. Senza una convenzione di builder ogni test diventa 20 righe di setup, e i test smettono di essere scritti.
@@ -504,6 +524,28 @@ npm run lint && npm run design:guard && npm run contrast:check && npm run test
 npm run e2e
 ```
 
+### Migration
+
+Il tool `dotnet-ef` è pinnato a **10.0.12** in `.config/dotnet-tools.json`, allineato ai pacchetti EF Core. Su una macchina nuova serve `dotnet tool restore` **prima** di qualunque comando `ef`; un tool globale più vecchio del runtime è un disallineamento, non un dettaglio.
+
+```powershell
+dotnet tool restore
+
+# Nuova migration. --context è obbligatorio: la solution ha DUE DbContext, e
+# FullSchemaDbContext non ha migration e NON deve averne (§5).
+dotnet ef migrations add <Nome> `
+  --project src/Roamly.Infrastructure `
+  --startup-project src/Roamly.Infrastructure `
+  --context RoamlyDbContext `
+  --output-dir Persistence/Migrations
+```
+
+> Il contesto è costruito da **`RoamlyDbContextFactory`** (`IDesignTimeDbContextFactory`, in `Roamly.Infrastructure`), che inietta `NoCurrentUser.Instance` e una connection string **mai aperta**. `--startup-project` punta a Infrastructure e non a `Roamly.Api` di proposito: legare la generazione delle migration al bootstrap dell'API è un accoppiamento che si paga ogni volta che l'avvio dell'API cambia.
+>
+> ⚠️ **Ispezionare sempre il file generato prima di accettarlo** (PK composita e clustered, nessuna `AlternateKey`, `principalColumns` nell'ordine della PK, nessun `SetNull`, precisione dei `decimal`). E **non correggerlo a mano**: una migration ritoccata diverge dal modello al `migrations add` successivo, che è esattamente la deriva che il test C intercetta.
+>
+> ⚠️ Lo scaffolding di EF Core 10 **non compila** con `TreatWarningsAsErrors=true` (emette `new[] { … }` costanti → CA1861, 12 errori). `Persistence/Migrations/.editorconfig` dichiara quella cartella `generated_code = true`. La disciplina zero-warning resta integralmente in vigore su tutto il resto.
+
 > ⚠️ **Un progetto di test senza test fa fallire il comando — reperto del Blocco 2.** Microsoft.Testing.Platform tratta *"zero test eseguiti"* come **fallimento**, con **exit code 8**, non come successo vacuo. Oggi `dotnet test --solution Roamly.slnx` esce `8` pur con `non riuscito: 0`, perché `Roamly.Domain.Tests` e `Roamly.IntegrationTests` sono ancora vuoti. Si risolve da sé nei Blocchi 3-4, quando quei progetti ricevono i loro test.
 > Va però ricordato in `ci.yml` (Blocco 5): **un filtro `--filter` che non seleziona nulla rende il job rosso**, e il messaggio (`non riuscito: 0`) non lo fa sembrare un errore. È l'opposto del fallimento silenzioso di §8.1 — qui è il *successo* a essere silenzioso — ma la lezione è la stessa: leggere l'exit code, non il riepilogo.
 
@@ -529,7 +571,10 @@ npm run e2e
 | `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | **Blocco 4** | **554-855 ms** — ⚠️ 2-4× la stima |
 | `EnsureCreated` schema completo | 1-3 s | **Blocco 4** | **2,5-3,4 s** |
 | `Respawn.ResetAsync()` | 50-200 ms | **Blocco 4** | **843 ms** su schema completo vuoto — ⚠️ 4× la stima (include la costruzione del grafo alla prima chiamata) |
-| Migration Phase 1 su DB vuoto | 1-2 s | — | — |
+| Migration Phase 1 su DB vuoto | 1-2 s | **Blocco 5** | **374-467 ms** — ✅ meglio della stima (5 tabelle di dominio + Identity, `CREATE DATABASE` escluso) |
+| `CREATE DATABASE` per il database del test C | — | **Blocco 5** | **360-373 ms** |
+| **Suite L1 `Roamly.IntegrationTests`, 14 test** (con il test C), container incluso | — | **Blocco 5** | **16,6-19,4 s** |
+| **Tutta la soluzione, 38 test** (`dotnet build` + `dotnet test --solution --no-build`) | — | **Blocco 5** | **21,2 s** di parete, esecuzione 34,5 s al primo giro a freddo — ✅ Checkpoint 5 (parte backend) |
 | Job `backend-fast` | 90-120 s | — | — |
 | Job `backend-integration` | 3-4 min | — | — |
 

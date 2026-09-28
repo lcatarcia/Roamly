@@ -7,6 +7,15 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <!--
+      Serve a RoamlyDbContextFactory (IDesignTimeDbContextFactory), che vive qui e non in un
+      progetto separato. Il pacchetto e' developmentDependency nel suo nuspec: NuGet gli assegna
+      gia' PrivateAssets=all, quindi non fluisce ai consumatori ne' finisce in un pacchetto.
+      ⚠️ NON aggiungere l'IncludeAssets del template ("runtime; build; native; contentfiles;
+      analyzers; buildtransitive"): esclude "compile" e IDesignTimeDbContextFactory<T> smette di
+      essere visibile al compilatore. Qui la factory e' codice compilato, non solo tooling.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
   </ItemGroup>
 
   <PropertyGroup>
