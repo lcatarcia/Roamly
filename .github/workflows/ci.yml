@@ -1,1 +1,179 @@
-# CI di Roamly - Blocco 5, passo 18 di docs/adr/0009-test-strategy.md #9.## Due job, deliberatamente senza "needs:" fra loro: ADR-0009 #12.1 e TESTING.md #12.1# dicono che backend-fast NON e' un gate di backend-integration, perche' un fallimento# L0 e uno L1 sono informazioni diverse e vederne una sola raddoppia i giri di correzione.## I job frontend ed e2e previsti dall'ADR arriveranno col frontend, che oggi non esiste.## ⚠️ Il tag dell'immagine SQL Server non compare qui, e non deve comparirci mai (R36,# ADR-0009): la sua unica occorrenza nella soluzione vive in# tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs, e Testcontainers# avvia e distrugge il container da dentro il processo di test. Nessun blocco "services:",# nessun "docker pull": duplicherebbero la costante e i due valori divergerebbero in# silenzio. Il verificatore R36_PinnedSqlServerImageTests legge anche questo file .yml.## ⚠️ Nessun retry (R37, ADR-0009): niente "continue-on-error", niente azioni di# ritentativo, niente loop. Un test instabile si diagnostica, non si riprova.## ⚠️ Nessun benchmark (R39, ADR-0009): gli step di test usano "--project" su progetti# nominati, mai "--solution". Quando Roamly.Benchmarks esistera' entrera' nella solution# ma NON in questo file: un "dotnet test --solution" lo avrebbe incluso da solo.name: CI# Solo "push", senza "pull_request", e la scelta e' motivata:# - il repository e' privato e i minuti di Actions sono contati; con entrambi i trigger#   attivi ogni commit di una PR verrebbe costruito due volte sullo stesso SHA;# - i controlli obbligatori di branch protection si agganciano al commit, non all'evento:#   una CI verde su "push" e' comunque visibile e richiedibile su una PR;# - cio' che si perde e' la verifica del merge commit (il "merge result"), che oggi non#   serve perche' non esistono ancora PR. Va riconsiderato quando si apre la prima.# "workflow_dispatch" resta per poter rieseguire la pipeline a mano senza commit finti.on:  push:    branches:      - '**'    # Un commit di sola documentazione non puo' rompere build ne' test: i verificatori    # testuali (R30, R36) escludono docs/ per costruzione. In un repository che scrive    # molta documentazione e' la voce di spesa piu' facile da evitare.    # ⚠️ Da rivedere se un giorno questi job diventano controlli obbligatori su PR: un    # controllo "skipped" per paths-ignore blocca la PR a tempo indeterminato.    paths-ignore:      - 'docs/**'      - '**/*.md'      - '.github/agents/**'      - '.github/skills/**'  workflow_dispatch:# Un push che ne supera un altro sullo stesso ref rende obsoleta l'esecuzione precedente.# Su main non si annulla: la storia di main deve conservare un esito per ogni commit.concurrency:  group: ci-${{ github.ref }}  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}permissions:  contents: readenv:  DOTNET_NOLOGO: 'true'  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'  # Percorso esplicito del global packages folder: la cache deve sapere che cosa salvare.  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages  # Release e' la configurazione che va in deploy; verificarla in CI e Debug in locale  # significherebbe verificare due cose diverse. TreatWarningsAsErrors vale in entrambe.  CONFIGURATION: Releasejobs:  # ---------------------------------------------------------------------------  # L0 - il segnale rapido. Nessun Docker, nessun database.  # 17 dei 25 verificatori di ADR-0009 non toccano alcun database (R31): tenerli  # dietro l'avvio di un container significherebbe pagare un minuto per sapere  # qualcosa che si sa in tre secondi.  # ---------------------------------------------------------------------------  backend-fast:    name: Backend L0 - convenzioni e dominio, senza database    runs-on: ubuntu-latest    timeout-minutes: 15    steps:      - name: Checkout del repository        uses: actions/checkout@v4      # global-json-file, non una versione scritta a mano: global.json pinna 10.0.204      # e una versione duplicata qui divergerebbe al primo aggiornamento del pin.      - name: Installazione dell'SDK .NET dal pin di global.json        uses: actions/setup-dotnet@v4        with:          global-json-file: global.json      # Cache NuGet a mano e non "cache: true" di setup-dotnet: quell'opzione cerca      # **/packages.lock.json e la soluzione non usa lock file, quindi fallirebbe.      # La chiave include Directory.Packages.props perche' il progetto usa Central      # Package Management: e' li' che vivono le versioni, non nei .csproj.      - name: Ripristino della cache dei pacchetti NuGet        uses: actions/cache@v4        with:          path: ${{ env.NUGET_PACKAGES }}          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}          restore-keys: |            nuget-${{ runner.os }}-      - name: Restore dei pacchetti        run: dotnet restore Roamly.slnx      # Build separata dal test, e non un "dotnet test" monolitico: cosi' un errore di      # compilazione e un test rosso sono due step distinti nel riepilogo del job.      # La build copre l'intera solution di proposito: TreatWarningsAsErrors e      # BannedApiAnalyzers (R5, R34) sono verificatori di compilazione, e devono      # diventare rossi nel job rapido anche quando la violazione sta in src/.      - name: Build della solution con TreatWarningsAsErrors        run: dotnet build Roamly.slnx --configuration $CONFIGURATION --no-restore      # ⚠️ Col runner Microsoft.Testing.Platform di .NET 10 RTM il percorso del progetto      # non e' piu' posizionale: serve --project (TESTING.md #13).      # ⚠️ Nessun --filter: un filtro che non seleziona nulla fa uscire il comando con      # exit code 8 e un riepilogo che dice "non riuscito: 0". Un rosso incomprensibile.      - name: Test L0 - Roamly.Domain.Tests        run: dotnet test --project tests/Roamly.Domain.Tests --configuration $CONFIGURATION --no-build      - name: Test L0 - Roamly.Model.Tests        run: dotnet test --project tests/Roamly.Model.Tests --configuration $CONFIGURATION --no-build  # ---------------------------------------------------------------------------  # L1 + L2 - SQL Server vero, provisionato da Testcontainers dal processo di test.  # I runner ubuntu-latest di GitHub hanno un daemon Docker gia' attivo e utilizzabile:  # non serve alcuna azione di setup, e aggiungerne una sarebbe l'occasione per  # riscrivere il tag dell'immagine da qualche parte (R36).  # ---------------------------------------------------------------------------  backend-integration:    name: Backend L1 - Testcontainers e SQL Server reale    runs-on: ubuntu-latest    timeout-minutes: 30    steps:      - name: Checkout del repository        uses: actions/checkout@v4      - name: Installazione dell'SDK .NET dal pin di global.json        uses: actions/setup-dotnet@v4        with:          global-json-file: global.json      - name: Ripristino della cache dei pacchetti NuGet        uses: actions/cache@v4        with:          path: ${{ env.NUGET_PACKAGES }}          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}          restore-keys: |            nuget-${{ runner.os }}-      - name: Restore dei pacchetti        run: dotnet restore Roamly.slnx      - name: Build della solution con TreatWarningsAsErrors        run: dotnet build Roamly.slnx --configuration $CONFIGURATION --no-restore      # Un solo step di test: il container e' posseduto dall'assembly fixture di questo      # progetto (ADR-0009, decisione 2). Spezzare i test in piu' step ne avvierebbe uno      # per step, moltiplicando i SQL Server da 2 GB.      # ⚠️ L'immagine non e' cachata con actions/cache: ADR-0009 (#Accorgimenti di      # velocita', punto 2) lo vieta finche' non e' misurato, perche' ripristinare ~2,3 GB      # dalla cache GHA puo' costare quanto il pull da registro.      - name: Test L1 e L2 - Roamly.IntegrationTests        run: dotnet test --project tests/Roamly.IntegrationTests --configuration $CONFIGURATION --no-build      # La fixture riversa le misure in TestResults/blocco4-tempi.txt perche' con      # Microsoft.Testing.Platform la Console non e' visibile. Senza questo artefatto il      # tempo del container in CI - l'indicatore del trigger T1, G1 -> G2 - non e'      # leggibile da nessuna parte. "always()" non e' un retry: pubblica le misure anche      # quando i test sono rossi, che e' esattamente quando servono.      - name: Pubblicazione delle misure di tempo della fixture        if: always()        uses: actions/upload-artifact@v4        with:          name: tempi-backend-integration          path: TestResults/          if-no-files-found: warn          retention-days: 14
+# CI di Roamly - Blocco 5, passo 18 di docs/adr/0009-test-strategy.md #9.
+#
+# Due job, deliberatamente senza "needs:" fra loro: ADR-0009 #12.1 e TESTING.md #12.1
+# dicono che backend-fast NON e' un gate di backend-integration, perche' un fallimento
+# L0 e uno L1 sono informazioni diverse e vederne una sola raddoppia i giri di correzione.
+#
+# I job frontend ed e2e previsti dall'ADR arriveranno col frontend, che oggi non esiste.
+#
+# ⚠️ Il tag dell'immagine SQL Server non compare qui, e non deve comparirci mai (R36,
+# ADR-0009): la sua unica occorrenza nella soluzione vive in
+# tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs, e Testcontainers
+# avvia e distrugge il container da dentro il processo di test. Nessun blocco "services:",
+# nessun "docker pull": duplicherebbero la costante e i due valori divergerebbero in
+# silenzio. Il verificatore R36_PinnedSqlServerImageTests legge anche questo file .yml.
+#
+# ⚠️ Nessun retry (R37, ADR-0009): niente "continue-on-error", niente azioni di
+# ritentativo, niente loop. Un test instabile si diagnostica, non si riprova.
+#
+# ⚠️ Nessun benchmark (R39, ADR-0009): gli step di test usano "--project" su progetti
+# nominati, mai "--solution". Quando Roamly.Benchmarks esistera' entrera' nella solution
+# ma NON in questo file: un "dotnet test --solution" lo avrebbe incluso da solo.
+
+name: CI
+
+# Solo "push", senza "pull_request", e la scelta e' motivata:
+# - il repository e' privato e i minuti di Actions sono contati; con entrambi i trigger
+#   attivi ogni commit di una PR verrebbe costruito due volte sullo stesso SHA;
+# - i controlli obbligatori di branch protection si agganciano al commit, non all'evento:
+#   una CI verde su "push" e' comunque visibile e richiedibile su una PR;
+# - cio' che si perde e' la verifica del merge commit (il "merge result"), che oggi non
+#   serve perche' non esistono ancora PR. Va riconsiderato quando si apre la prima.
+# "workflow_dispatch" resta per poter rieseguire la pipeline a mano senza commit finti.
+on:
+  push:
+    branches:
+      - '**'
+    # Un commit di sola documentazione non puo' rompere build ne' test: i verificatori
+    # testuali (R30, R36) escludono docs/ per costruzione. In un repository che scrive
+    # molta documentazione e' la voce di spesa piu' facile da evitare.
+    # ⚠️ Da rivedere se un giorno questi job diventano controlli obbligatori su PR: un
+    # controllo "skipped" per paths-ignore blocca la PR a tempo indeterminato.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/agents/**'
+      - '.github/skills/**'
+  workflow_dispatch:
+
+# Un push che ne supera un altro sullo stesso ref rende obsoleta l'esecuzione precedente.
+# Su main non si annulla: la storia di main deve conservare un esito per ogni commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  # Percorso esplicito del global packages folder: la cache deve sapere che cosa salvare.
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  # Release e' la configurazione che va in deploy; verificarla in CI e Debug in locale
+  # significherebbe verificare due cose diverse. TreatWarningsAsErrors vale in entrambe.
+  CONFIGURATION: Release
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # L0 - il segnale rapido. Nessun Docker, nessun database.
+  # 17 dei 25 verificatori di ADR-0009 non toccano alcun database (R31): tenerli
+  # dietro l'avvio di un container significherebbe pagare un minuto per sapere
+  # qualcosa che si sa in tre secondi.
+  # ---------------------------------------------------------------------------
+  backend-fast:
+    name: Backend L0 - convenzioni e dominio, senza database
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      # global-json-file, non una versione scritta a mano: global.json pinna 10.0.204
+      # e una versione duplicata qui divergerebbe al primo aggiornamento del pin.
+      - name: Installazione dell'SDK .NET dal pin di global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Cache NuGet a mano e non "cache: true" di setup-dotnet: quell'opzione cerca
+      # **/packages.lock.json e la soluzione non usa lock file, quindi fallirebbe.
+      # La chiave include Directory.Packages.props perche' il progetto usa Central
+      # Package Management: e' li' che vivono le versioni, non nei .csproj.
+      - name: Ripristino della cache dei pacchetti NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dei pacchetti
+        run: dotnet restore Roamly.slnx
+
+      # Build separata dal test, e non un "dotnet test" monolitico: cosi' un errore di
+      # compilazione e un test rosso sono due step distinti nel riepilogo del job.
+      # La build copre l'intera solution di proposito: TreatWarningsAsErrors e
+      # BannedApiAnalyzers (R5, R34) sono verificatori di compilazione, e devono
+      # diventare rossi nel job rapido anche quando la violazione sta in src/.
+      - name: Build della solution con TreatWarningsAsErrors
+        run: dotnet build Roamly.slnx --configuration $CONFIGURATION --no-restore
+
+      # ⚠️ Col runner Microsoft.Testing.Platform di .NET 10 RTM il percorso del progetto
+      # non e' piu' posizionale: serve --project (TESTING.md #13).
+      # ⚠️ Nessun --filter: un filtro che non seleziona nulla fa uscire il comando con
+      # exit code 8 e un riepilogo che dice "non riuscito: 0". Un rosso incomprensibile.
+      - name: Test L0 - Roamly.Domain.Tests
+        run: dotnet test --project tests/Roamly.Domain.Tests --configuration $CONFIGURATION --no-build
+
+      - name: Test L0 - Roamly.Model.Tests
+        run: dotnet test --project tests/Roamly.Model.Tests --configuration $CONFIGURATION --no-build
+
+  # ---------------------------------------------------------------------------
+  # L1 + L2 - SQL Server vero, provisionato da Testcontainers dal processo di test.
+  # I runner ubuntu-latest di GitHub hanno un daemon Docker gia' attivo e utilizzabile:
+  # non serve alcuna azione di setup, e aggiungerne una sarebbe l'occasione per
+  # riscrivere il tag dell'immagine da qualche parte (R36).
+  # ---------------------------------------------------------------------------
+  backend-integration:
+    name: Backend L1 - Testcontainers e SQL Server reale
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione dell'SDK .NET dal pin di global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Ripristino della cache dei pacchetti NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dei pacchetti
+        run: dotnet restore Roamly.slnx
+
+      - name: Build della solution con TreatWarningsAsErrors
+        run: dotnet build Roamly.slnx --configuration $CONFIGURATION --no-restore
+
+      # Un solo step di test: il container e' posseduto dall'assembly fixture di questo
+      # progetto (ADR-0009, decisione 2). Spezzare i test in piu' step ne avvierebbe uno
+      # per step, moltiplicando i SQL Server da 2 GB.
+      # ⚠️ L'immagine non e' cachata con actions/cache: ADR-0009 (#Accorgimenti di
+      # velocita', punto 2) lo vieta finche' non e' misurato, perche' ripristinare ~2,3 GB
+      # dalla cache GHA puo' costare quanto il pull da registro.
+      - name: Test L1 e L2 - Roamly.IntegrationTests
+        run: dotnet test --project tests/Roamly.IntegrationTests --configuration $CONFIGURATION --no-build
+
+      # La fixture riversa le misure in TestResults/blocco4-tempi.txt perche' con
+      # Microsoft.Testing.Platform la Console non e' visibile. Senza questo artefatto il
+      # tempo del container in CI - l'indicatore del trigger T1, G1 -> G2 - non e'
+      # leggibile da nessuna parte. "always()" non e' un retry: pubblica le misure anche
+      # quando i test sono rossi, che e' esattamente quando servono.
+      - name: Pubblicazione delle misure di tempo della fixture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tempi-backend-integration
+          path: TestResults/
+          if-no-files-found: warn
+          retention-days: 14
