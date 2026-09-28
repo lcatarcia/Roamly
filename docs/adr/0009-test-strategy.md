@@ -616,6 +616,12 @@ dotnet sln add (Get-ChildItem -Recurse -Filter *.csproj)
 >
 > ⚠️ **Il Checkpoint 5 non è chiuso:** manca la prima esecuzione reale su GitHub Actions, e con essa il **tempo di parete misurato**. In `TESTING.md` §14 c'è oggi una **stima** (≈ 4-6 min, contro i 3-4 min di questo ADR) e le righe dei due job restano da compilare. Va chiuso dopo il primo push, non prima.
 
+> ✅ **Checkpoint 5 chiuso il 2026-09-28.** Prima esecuzione reale: run `36410434236` sul commit `b3199c1`, **entrambi i job verdi**. Tempo di parete **68 s** — `backend-fast` 41 s, `backend-integration` 68 s, in parallelo. Le stime erano larghe di un fattore 3-5: quella di questo ADR (3-4 min) e quella del passo 18 (4-6 min).
+>
+> La voce che le gonfiava entrambe era il **pull dell'immagine SQL Server**, stimato 40-70 s e mai misurato. Alla prova dei fatti l'intero step L1 — pull, avvio del container e 14 test — è costato **26 s**, meno della metà del solo pull stimato, e meno dei 53 s che lo stesso comando costa in locale: la rete del runner verso `mcr.microsoft.com` è più veloce del collegamento di sviluppo. **Conseguenza normativa: la cache dell'immagine resta esclusa** (*Accorgimenti di velocità*, punto 2), non per prudenza ma perché non c'è nulla da ottimizzare.
+>
+> Il primo push del workflow è però fallito in **0 secondi, senza job e senza log**: il file era stato riscritto collassando tutte le righe in una, e GitHub lo ha rifiutato come workflow non valido. È il sintomo caratteristico di un errore di sintassi YAML, e non produce un messaggio leggibile via API. Da qui la regola operativa: **validare il YAML prima del push**, non dopo (`TESTING.md` §13.1).
+
 | Blocco | Tempo | Risultato |
 |---|---|---|
 | 1 | ~1 h | build verde |

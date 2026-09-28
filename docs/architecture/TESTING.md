@@ -576,6 +576,19 @@ dotnet test --project tests/Roamly.IntegrationTests  --configuration Release --n
 >
 > **Perché `dotnet build` e poi `dotnet test --no-build`, e non un `dotnet test` monolitico.** Per separare il segnale: un errore di compilazione e un test rosso diventano due step distinti nel riepilogo del job. ⚠️ **Non è un aggiramento del reperto qui sotto**: al Blocco 5 quel comportamento **non si riproduce** — `dotnet test --project … --configuration Release` senza `--no-build` esce **0** con 3/3 test eseguiti. La forma resta scelta per il suo merito, non come workaround.
 
+> 🔴 **Validare il YAML prima del push, non dopo.** Il primo push di `ci.yml` è fallito in **0 secondi, senza alcun job e senza log**: il file era stato riscritto collassando tutte le righe in una sola, e l'intero workflow era diventato un unico commento. GitHub lo ha rifiutato come *workflow file issue*, e quell'errore **non è leggibile via API**: `gh run view --log-failed` risponde `log not found`, l'endpoint `jobs` restituisce `total_count: 0`, e le annotazioni del check run sono vuote. L'unico indizio è la durata di **0 s**.
+>
+> Da qui la regola: `ci.yml` si valida localmente prima di committarlo. Su questa macchina `python` non è disponibile, `node` sì:
+>
+> ```powershell
+> cd $env:TEMP; npm install js-yaml --silent
+> node -e "const y=require('js-yaml'),fs=require('fs');const d=y.load(fs.readFileSync('C:/dev/Roamly/.github/workflows/ci.yml','utf8'));console.log(Object.keys(d.jobs))"
+> ```
+>
+> ⚠️ La causa prossima è una trappola di PowerShell che vale la pena conoscere: **`Set-Content -NoNewline` applicato a un array di stringhe le concatena senza separatore**, invece di limitarsi a omettere il newline finale. Per riscrivere un file riga per riga si usa `$righe -join [Environment]::NewLine`, oppure si riscrive il file per intero.
+
+> ℹ️ **Annotazione della prima esecuzione, non bloccante.** `actions/checkout@v4`, `actions/setup-dotnet@v4` e `actions/cache@v4` puntano a Node.js 20, deprecato: i runner le forzano già su Node 24 e i job restano verdi. Il passaggio ai tag `@v5` va fatto insieme al pin per SHA, cioè **prima del primo workflow che tocca credenziali di deploy**.
+
 ---
 
 ## 14. Tempi misurati
@@ -593,7 +606,7 @@ dotnet test --project tests/Roamly.IntegrationTests  --configuration Release --n
 | **Suite L0 `Roamly.Model.Tests`, 21 test** (con R33, R36, forma dei progetti) | < 5 s | **Blocco 4** | **2,0 s** di esecuzione |
 | **Suite L1 `Roamly.IntegrationTests`, 9 test**, container incluso | — | **Blocco 4** | **17,6 s** (di cui ~10,5 s di avvio container) |
 | **Tutta la soluzione, 33 test** (`dotnet test --solution --no-build`) | — | **Blocco 4** | **32,7 s** — ✅ Checkpoint 4 |
-| Pull immagine su runner GHA (non cachata) | 40-70 s | — | — (immagine gia' locale: **non misurato**; su disco 2,34 GB) |
+| Pull immagine su runner GHA (non cachata) | 40-70 s | **Blocco 5** | **≤ 26 s** — l'intero step `Test L1 e L2` (pull + avvio container + 14 test) è durato **26 s**, quindi il solo pull vale meno di così |
 | Readiness del container | 20-45 s | **Blocco 4** | **9,6-14,6 s** (x64, Docker Desktop/WSL2, 2 GB, immagine locale) |
 | `CREATE DATABASE` vuoto (container caldo) | 150-400 ms | **Blocco 4** | **554-855 ms** — ⚠️ 2-4× la stima |
 | `EnsureCreated` schema completo | 1-3 s | **Blocco 4** | **2,5-3,4 s** |
@@ -602,8 +615,9 @@ dotnet test --project tests/Roamly.IntegrationTests  --configuration Release --n
 | `CREATE DATABASE` per il database del test C | — | **Blocco 5** | **360-373 ms** |
 | **Suite L1 `Roamly.IntegrationTests`, 14 test** (con il test C), container incluso | — | **Blocco 5** | **16,6-19,4 s** |
 | **Tutta la soluzione, 38 test** (`dotnet build` + `dotnet test --solution --no-build`) | — | **Blocco 5** | **21,2 s** di parete, esecuzione 34,5 s al primo giro a freddo — ✅ Checkpoint 5 (parte backend) |
-| Job `backend-fast` | 90-120 s | — | — (prima esecuzione reale non ancora avvenuta) |
-| Job `backend-integration` | 3-4 min | — | — (prima esecuzione reale non ancora avvenuta) |
+| Job `backend-fast` | 90-120 s | **Blocco 5** | **41 s** — ✅ prima esecuzione reale, run `36410434236` |
+| Job `backend-integration` | 3-4 min | **Blocco 5** | **68 s** — ✅ prima esecuzione reale, pull dell'immagine incluso |
+| **Tempo di parete della CI** (i due job in parallelo) | 3-4 min (ADR) · 4-6 min (stima del passo 18) | **Blocco 5** | **68 s** — ✅ **Checkpoint 5 chiuso** |
 | **Comandi di `ci.yml` eseguiti in locale, configurazione `Release`** — `restore` | — | **Blocco 5** | **1,5 s** (pacchetti già presenti) |
 | Build `Release` dell'intera solution, **a freddo** (7 progetti) | — | **Blocco 5** | **405 s** su Windows con Defender attivo — ⚠️ vedi nota sotto |
 | Build `Release` dell'intera solution, incrementale | — | **Blocco 5** | **3,9 s**, 0 avvisi, 0 errori |
@@ -614,10 +628,16 @@ dotnet test --project tests/Roamly.IntegrationTests  --configuration Release --n
 
 > ⚠️ **I 405 s della build `Release` a freddo non sono una stima per la CI.** Sono misurati su Windows con antivirus attivo e cache degli analyzer vuota; la stessa build incrementale costa **3,9 s**. Su un runner Linux GitHub-hosted la voce dominante di una build a freddo è il `restore` (mitigato dalla cache NuGet) e la prima esecuzione degli analyzer. Il numero è annotato perché è **l'unico dato in mio possesso** su una build a freddo, non perché sia trasferibile.
 
-> **Stima del tempo di parete della CI, da confermare alla prima esecuzione reale.**
-> `backend-fast` ≈ **2-3 min** (checkout + setup SDK 20-40 s · restore con cache 10-20 s · build a freddo 60-90 s · 24 test L0 ~10 s).
-> `backend-integration` ≈ **4-6 min** (le stesse voci + **pull dell'immagine SQL Server non cachata, 40-70 s stimati e mai misurati** + 14 test L1).
-> I due job girano **in parallelo**, quindi il tempo di parete è quello del più lento: **≈ 4-6 min**, contro i 3-4 min stimati da ADR-0009. Lo scarto è quasi tutto nel pull dell'immagine, che in locale non è mai stato pagato (immagine già presente, 2,34 GB su disco).
+> ✅ **Tempo di parete della CI, misurato alla prima esecuzione reale** (run `36410434236`, commit `b3199c1`, `ubuntu-latest`, cache NuGet **fredda**).
+> `backend-fast` **41 s**: checkout 1 s · setup SDK 1 s · cache 0 s · restore **11 s** · build **15 s** · 3 test Domain 1 s · 21 test Model **3 s**.
+> `backend-integration` **68 s**: le stesse voci fino alla build (restore 14 s, build 17 s) · step `Test L1 e L2` **26 s**, che comprende **pull dell'immagine, avvio del container e 14 test**.
+> I due job girano in parallelo, quindi il tempo di parete è **68 s** — contro i 3-4 min di ADR-0009 e i 4-6 min stimati al passo 18. **Entrambe le stime erano larghe di un fattore 3-5.**
+>
+> Le due sorprese, in direzioni opposte:
+> 1. **Il pull dell'immagine non è il costo dominante che si temeva.** Era la voce che giustificava lo scarto fra le due stime, ed è la più piccola: l'intero step L1 costa 26 s contro i 53 s misurati in locale sullo stesso comando. La rete del runner GHA verso `mcr.microsoft.com` è molto più veloce del collegamento locale. **La cache dell'immagine resta quindi non necessaria** (ADR-0009, *Accorgimenti di velocità* punto 2): non c'è nulla da ottimizzare.
+> 2. **`restore` + `build` valgono 26 s dei 41 s di `backend-fast`, cioè il 63%.** Il job "rapido" è dominato dalla compilazione, non dai test, che costano 4 s in tutto. Ne segue che la separazione fra i due job **non vale un ordine di grandezza ma 27 secondi**. Resta utile — si vede il rosso L0 senza attendere Docker — ma chi in futuro valutasse di fonderli deve sapere che il risparmio in gioco è quello, non un minuto.
+>
+> ⚠️ Questi numeri sono di una esecuzione con **cache NuGet vuota**: le successive avranno un `restore` più breve, quindi 41 s e 68 s sono il **caso peggiore**, non il caso medio.
 
 Il tempo del job `backend-integration` va **riannotato a ogni revisione di questo documento**: è l'indicatore che fa scattare il passaggio da G1 a G2 (trigger T1).
 
