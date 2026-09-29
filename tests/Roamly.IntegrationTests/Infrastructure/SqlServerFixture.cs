@@ -175,7 +175,7 @@ public class SqlServerFixture : IAsyncLifetime
             .UseSqlServer(lease.ConnectionString)
             .Options;
 
-        await using var context = new RoamlyDbContext(options, NoCurrentUser.Instance);
+        await using var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
 
         var stopwatch = Stopwatch.StartNew();
         var failure = await Record.ExceptionAsync(() => context.Database.MigrateAsync()).ConfigureAwait(false);
@@ -198,7 +198,7 @@ public class SqlServerFixture : IAsyncLifetime
             .UseSqlServer(lease.ConnectionString)
             .Options;
 
-        await using var context = new FullSchemaDbContext(options, NoCurrentUser.Instance);
+        await using var context = new FullSchemaDbContext(options, ThrowingCurrentUser.Instance);
 
         var stopwatch = Stopwatch.StartNew();
         var failure = await Record.ExceptionAsync(() => context.Database.EnsureCreatedAsync()).ConfigureAwait(false);

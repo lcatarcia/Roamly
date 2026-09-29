@@ -66,7 +66,7 @@ public sealed class ModelFixture
             .UseSqlServer(NeverOpenedConnectionString)
             .Options;
 
-        using var context = new FullSchemaDbContext(options, NoCurrentUser.Instance);
+        using var context = new FullSchemaDbContext(options, ThrowingCurrentUser.Instance);
         return DesignTimeModelOf(context);
     }
 
@@ -76,7 +76,7 @@ public sealed class ModelFixture
             .UseSqlServer(NeverOpenedConnectionString)
             .Options;
 
-        using var context = new RoamlyDbContext(options, NoCurrentUser.Instance);
+        using var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
         return DesignTimeModelOf(context);
     }
 

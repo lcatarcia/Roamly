@@ -14,8 +14,8 @@ namespace Roamly.Infrastructure.Persistence;
 /// paga ogni volta che l'avvio dell'API cambia, per un'operazione che l'API non riguarda.
 /// </para>
 /// <para>
-/// L'utente e' <see cref="NoCurrentUser"/>, lo stesso che usa <c>ModelFixture</c> dei test per la
-/// stessa ragione. Non altera l'output: le migration <b>non aprono connessioni</b> e i query
+/// L'utente e' <see cref="ThrowingCurrentUser"/>, lo stesso che usa <c>ModelFixture</c> dei test per
+/// la stessa ragione. Non altera l'output: le migration <b>non aprono connessioni</b> e i query
 /// filter non producono schema — il filtro "OwnerScope" e' una clausola di query, non un oggetto
 /// del database.
 /// </para>
@@ -43,6 +43,6 @@ public sealed class RoamlyDbContextFactory : IDesignTimeDbContextFactory<RoamlyD
             .UseSqlServer(NeverOpenedConnectionString)
             .Options;
 
-        return new RoamlyDbContext(options, NoCurrentUser.Instance);
+        return new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
     }
 }

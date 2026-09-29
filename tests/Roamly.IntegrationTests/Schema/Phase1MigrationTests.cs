@@ -184,7 +184,7 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
     }
 
     /// <summary>
-    /// Contesto sul database migrato. Serve <see cref="NoCurrentUser"/> per la stessa ragione della
+    /// Contesto sul database migrato. Serve <see cref="ThrowingCurrentUser"/> per la stessa ragione della
     /// factory di design-time: fuori da una richiesta HTTP non esiste un utente corrente, e qui si
     /// interroga il catalogo delle migration, non i dati.
     /// </summary>
@@ -194,7 +194,7 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
             .UseSqlServer(database.ConnectionString)
             .Options;
 
-        return new RoamlyDbContext(options, NoCurrentUser.Instance);
+        return new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
     }
 
     private static async Task<IReadOnlyList<string>> AppliedMigrationsAsync(Phase1Database database)
