@@ -8,6 +8,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>roamly-api-dev-c9f2e1a4</UserSecretsId>
   </PropertyGroup>
 
 </Project>

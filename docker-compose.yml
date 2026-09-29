@@ -1,0 +1,23 @@
+services:
+  sqlserver:
+    image: "${ROAMLY_SQLSERVER_IMAGE:?Copia il tag da tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs in .env (vedi .env.example): R36 vieta di duplicarlo qui}"
+    container_name: roamly-sqlserver-dev
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${ROAMLY_DEV_SA_PASSWORD:?Imposta ROAMLY_DEV_SA_PASSWORD in un file .env o nell'ambiente}"
+    ports:
+      - "14330:1433"
+    volumes:
+      - roamly-sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  roamly-sqlserver-data:
