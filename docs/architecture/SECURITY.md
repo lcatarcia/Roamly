@@ -11,13 +11,13 @@ Owner: **@sentinel**, con **@archimedes** per l'ownership
 - HTTPS;
 - **autenticazione: ASP.NET Core Identity con cookie `httpOnly` + `Secure` + `SameSite=Lax`** (`Strict` romperebbe il ritorno dai link di conferma email);
 - endpoint di auth scritti come slice in `Features/Authentication/`, conformi a `API-CONVENTIONS.md` — **non** `MapIdentityApi`;
-- **antiforgery** obbligatorio sulle richieste non-GET, più requisito di header custom (`X-Roamly-Request`) come seconda barriera;
+- **antiforgery** obbligatorio sulle richieste non-GET, più requisito di header custom (`X-Roamly-Request`) come seconda barriera — **implementato al passo 6** (`Common/Security/CsrfProtectionMiddleware.cs`); reperto: i token sono legati all'identità della richiesta, il client deve rifetchare `GET /api/v1/csrf-token` dopo ogni login/logout (dettagli in `TESTING.md` §8.10);
 - **CORS con allowlist esplicita** e `AllowCredentials`. Una configurazione CORS sbagliata riapre il CSRF **silenziosamente**: è il punto da presidiare;
 - `SecurityStampValidationInterval` a **5 minuti** (revoca globale quasi immediata);
 - password hashing gestito da ASP.NET Identity;
 - secrets fuori dal repository, environment variables per la configurazione sensibile;
 - validation dell'input;
-- rate limiting dove necessario, con priorità su login e password reset;
+- rate limiting dove necessario, con priorità su login e password reset — **login implementato al passo 6**: servizio custom per-account (`Common/Security/PerAccountRateLimiter.cs`, in-memory + `TimeProvider`), non il middleware nativo `AddRateLimiter`, per evitare di leggere il body prima del binding nel partitioning; soglie sovrascrivibili via `RateLimiting:Login` per non essere flaky nei test;
 - protezione degli upload (tipo, dimensione, scansione);
 - aggiungere che export e cancellazione sono **azioni sensibili**: re-autenticazione con password e rate limit dedicato;
 - logging senza dati sensibili, ma **con** eventi di sicurezza dedicati (`OwnershipViolationException`, `ownership_miss`), che vivono sulla **pipeline di logging strutturato** con retention configurata nel sink — nessuna tabella su database.

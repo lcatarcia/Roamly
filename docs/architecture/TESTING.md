@@ -483,24 +483,36 @@ Verificato: l'infrastruttura è **correttamente agganciata** — `Directory.Buil
 
 ---
 
-### 8.9 R44 non è ancora in vigore, e scriverla oggi sarebbe il nono caso
+### 8.9 R44: chiusa al passo 6, con due dettagli emersi solo in implementazione
 
-**Non è un reperto, è una decisione presa per non produrne uno.** `ARCHITECTURE.md` §4 assegna a R44 un verificatore L0 bloccante: *ogni tipo il cui nome termina in `Handler` sotto `Features/` è risolvibile dal container*. Stato di fatto al 2026-09-28:
+**Stato: R44 e' in vigore.** `tests/Roamly.Model.Tests` referenzia `Roamly.Api` (la decisione di struttura MEDIUM lasciata aperta sopra è stata chiusa a favore del `ProjectReference` diretto, non di un progetto `Architecture.Tests` separato: il costo addizionale sul budget L0 — vedi sotto — è stato giudicato accettabile rispetto a un quarto progetto di test). `Conventions/R44_HandlerRegistrationTests.cs` implementa i tre insiemi:
 
-- **nessun handler esiste**: `src/Roamly.Api/Program.cs` è ancora il template `dotnet new web`, senza composition root e senza registrazioni;
-- `tests/Roamly.Model.Tests` **non referenzia `Roamly.Api`** (referenzia `Roamly.Infrastructure` e `Roamly.TestSupport`).
+- **T** (testuale): nomi dei file `*Handler.cs` sotto `src/Roamly.Api/Features/`;
+- **R** (riflessivo): `Assembly.GetTypes()` su `Roamly.Api` — mai `GetExportedTypes()`, perché ogni handler è `internal sealed` (R55);
+- **C** (container): `FeatureRegistration.AddFeatures()` dentro `RoamlyServiceCollectionExtensions.AddRoamly` completo, su un `ServiceCollection` nudo con connection string finta, costruito con `ValidateScopes:true`/`ValidateOnBuild:true`.
 
-Quindi R44 nella sua forma normativa — «confronta i `*Handler` scoperti con quelli registrati» — sarebbe **verde a vuoto**: `∅ ⊆ ∅`. È esattamente il fallimento catalogato in questo §8, e scriverla oggi significherebbe aggiungere debito mentre lo si sta pagando.
+**Due dettagli non anticipati dall'analisi, entrambi emersi al primo run rosso genuino (non un rischio ipotetico: la suite falliva davvero prima della correzione):**
 
-**L'ipotesi della metà (a) è stata valutata e scartata.** Si potrebbe scrivere subito solo la parte *«la scoperta degli handler è affidabile»*, incrociando la riflessione con un conteggio testuale dei file `Features/**/*Handler.cs`, così che «zero per davvero» si distingua da «zero perché la riflessione si è rotta». Non regge, per tre ragioni:
+1. `AddAuthorization()` (dentro `AddSecurity`) registra `AuthorizationPolicyCache`, che dipende da `EndpointDataSource` — normalmente fornito da `UseRouting()` sull'host reale, che qui non esiste di proposito (R44 vieta `WebApplicationFactory`/`builder.Build()`). Soluzione: un `DefaultEndpointDataSource` vuoto registrato a mano nel test. Non è un host: non fa girare nessuna pipeline HTTP, soddisfa solo la validazione del grafo DI.
+2. Gli handler sono `Scoped` (coerente con `DbContext`): risolverli da `provider.GetService` (il provider radice) lancia sotto `ValidateScopes:true`. Il test deve aprire uno `scope` esplicito (`provider.CreateScope()`) e risolvere da lì — esattamente come farebbe una richiesta HTTP reale.
 
-1. **Oggi verificherebbe `0 == 0`.** L'incrocio riflessione/testo ha valore quando i due numeri possono divergere; con zero handler e zero file è una tautologia con più righe di codice.
-2. **Non c'è riflessione da fare.** Senza `ProjectReference` verso `Roamly.Api` l'assembly non è caricabile da L0, quindi la metà (a) scritta oggi sarebbe *interamente testuale* — cioè non verificherebbe la scoperta per riflessione, che è la cosa che si voleva proteggere.
-3. **Il rischio che descrive non esiste ancora.** «La riflessione si è rotta» è un fallimento che può nascere solo dopo che la riflessione c'è.
+**Costo sul budget L0.** Prima di R44: 35 test, ~4-5s. Dopo: 37 test, **~7-8s** (misurato ripetutamente). Il superamento del tetto dei 5s dichiarato altrove in questo documento è **reale e non nascosto**: il test container carica l'assembly `Roamly.Api` e i provider EF Core SqlServer/Identity, un costo che non esisteva quando L0 era solo modello-senza-database. Non è stato eliminato perché farlo (spostare R44 in un progetto separato) avrebbe introdotto un quinto progetto di test per un solo file — la stessa soglia di duplicazione discussa in `ARCHITECTURE.md`. **Registrato come debito consapevole, non come regressione silenziosa.**
 
-> **Raccomandazione: R44 va scritta insieme al primo handler**, cioè al passo 6 di [`ROADMAP.md`](../product/ROADMAP.md) §4 (`GET /api/v1/me`), nello stesso commit che crea il composition root. In quel momento e non prima esistono contemporaneamente il soggetto (un handler), il meccanismo (una `IServiceCollection` reale) e il fallimento da intercettare (un handler non registrato). **R44 non è oggi in vigore.** È una condizione dichiarata della decisione #5, non un contorno: finché non esiste, gli handler diretti sono la peggiore delle opzioni valutate, e va saputo.
->
-> ⚠️ **Decisione di struttura aperta, non presa qui.** Scrivere R44 a L0 richiede un `ProjectReference` da `Roamly.Model.Tests` a `Roamly.Api`. È una scelta **MEDIUM** (tocca struttura di progetto e accoppiamento): aggiunge il web host e le sue dipendenze al progetto che deve restare sotto i 5 secondi senza Docker. L'alternativa è collocare R44 in `Roamly.Architecture.Tests` (previsto in §3, non ancora creato) o in `Roamly.IntegrationTests`, dove il container c'è già ma il costo sale da L0 a L1. **Va decisa dall'utente al passo 6**, non di iniziativa del verificatore.
+> ⚠️ **Nota `dotnet test --project` vs esecuzione diretta.** Durante la verifica è emerso che `dotnet test --project tests/Roamly.Model.Tests` a volte risponde "Nessun test eseguito" (codice di uscita 5) quando il progetto risulta già aggiornato e il runner salta la ricompilazione — mentre l'esecuzione diretta della DLL (`dotnet exec bin/Debug/net10.0/Roamly.Model.Tests.dll`) e `dotnet test --project ... -v n` restano affidabili. Non è stata determinata la causa esatta (sospetto: una cache di scoperta test non invalidata sul percorso "already up to date" del nuovo runner Microsoft.Testing.Platform). Se la CI dovesse mostrare lo stesso sintomo, la mitigazione è forzare una ricompilazione (`dotnet build` prima di `dotnet test`, o `-v n`), non ignorare un'uscita rossa.
+
+---
+
+### 8.10 Antiforgery: i token sono legati all'identità, non solo al cookie
+
+**Reperto dallo smoke test end-to-end del passo 6** (`docker compose up` + `dotnet run`, come nei blocchi precedenti, qui esercitando gli endpoint invece della sola connessione). Sequenza osservata:
+
+1. `GET /api/v1/csrf-token` da anonimo → coppia cookie/token T1.
+2. `POST /api/v1/auth/login` con T1 → `200`, cookie di sessione emesso.
+3. `POST /api/v1/auth/logout` **con lo stesso T1** → `400 csrf-protection`, non `204`.
+
+Non è un bug: ASP.NET Core lega il token antiforgery all'identità della richiesta al momento della generazione. T1 è stato emesso da anonimo; al passo 3 la richiesta è autenticata (il cookie di sessione del passo 2 è già presente), quindi la coppia non corrisponde più. Rifetchando il token **dopo** il login (T2) il logout risponde `204`.
+
+**Implicazione per il client (FE, fuori scope qui ma da documentare per @pixel/@hermes quando arriva):** un token antiforgery va rifatturato dopo ogni cambio di stato di autenticazione (login, logout), non solo all'avvio della sessione SPA. Verificato manualmente nello smoke test; non ancora coperto da un test automatico (candidato per L1/L2, §8.9.3 della roadmap dei verificatori mancanti).
 
 ---
 

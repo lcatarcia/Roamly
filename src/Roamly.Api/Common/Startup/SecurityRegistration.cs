@@ -65,7 +65,18 @@ public static class SecurityRegistration
         });
 
         services.AddAuthorization();
-        services.AddAntiforgery();
+
+        // Header custom letto dallo stesso nome sul client (X-XSRF-TOKEN e' la convenzione delle
+        // SPA che leggono il cookie non-httpOnly e lo rimandano come header) — seconda barriera,
+        // indipendente dall'header X-Roamly-Request applicato da CsrfProtectionMiddleware.
+        services.AddAntiforgery(antiforgeryOptions =>
+        {
+            antiforgeryOptions.HeaderName = "X-XSRF-TOKEN";
+        });
+
+        services.AddMemoryCache();
+        services.AddSingleton<IPerAccountRateLimiter, PerAccountRateLimiter>();
+        services.Configure<PerAccountRateLimiterOptions>(configuration.GetSection("RateLimiting:Login"));
 
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 

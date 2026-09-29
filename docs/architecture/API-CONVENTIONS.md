@@ -17,6 +17,7 @@ POST   /api/v1/auth/logout
 POST   /api/v1/auth/password/forgot
 POST   /api/v1/auth/password/reset
 POST   /api/v1/auth/email/confirm
+GET    /api/v1/csrf-token
 
 GET    /api/v1/me
 GET    /api/v1/me/export

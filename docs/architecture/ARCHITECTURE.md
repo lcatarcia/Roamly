@@ -214,7 +214,7 @@ Gli handler sono classi **non statiche** deliberatamente: una classe statica non
 
 > **R44 non è un contorno: è la condizione della decisione #5.** Senza, gli handler diretti sono la peggiore delle opzioni valutate, perché pagano lo stesso fallimento a runtime di MediatR senza averne l'ecosistema.
 
-> 🔴 **R44 non è oggi in vigore, e non va scritta prima del primo handler.** Non esiste alcun `*Handler` (`Program.cs` è ancora il template `dotnet new web`, senza composition root) e `Roamly.Model.Tests` non referenzia `Roamly.Api`: un verificatore scritto oggi confronterebbe `∅ ⊆ ∅` e sarebbe **verde a vuoto**. Va scritta al **passo 6** di [`ROADMAP.md`](../product/ROADMAP.md) §4, nello stesso commit che crea il composition root. Analisi completa, alternative valutate e la decisione di struttura aperta (il `ProjectReference` verso `Roamly.Api`) in [`TESTING.md`](TESTING.md) §8.9.
+> ✅ **R44 e' in vigore dal passo 6.** `Roamly.Model.Tests` referenzia `Roamly.Api` (`ProjectReference`), e `Conventions/R44_HandlerRegistrationTests.cs` confronta i tre insiemi T/R/C: i cinque handler di `Features/Authentication/` e `Features/Identity/GetMe/` sono scoperti per riflessione e risolti da un container costruito con `AddRoamly` + `ValidateOnBuild:true`/`ValidateScopes:true`, su una connection string finta. Analisi completa, alternative valutate e i due dettagli emersi in implementazione (`EndpointDataSource` fittizio per `AuthorizationPolicyCache`, risoluzione da uno scope e non dal provider radice) in [`TESTING.md`](TESTING.md) §8.9.
 
 ### Principi di slice
 
