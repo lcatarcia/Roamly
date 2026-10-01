@@ -84,16 +84,69 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      # Il tag resta definito in SqlServerImage.cs; il checkout effimero del nightly
-      # sostituisce solo il CU per provare il medesimo test B sul CU immediatamente dopo.
-      - name: Derivazione effimera del tag SQL Server successivo
+      # Il tag resta definito in SqlServerImage.cs. Verifica prima il manifest sul registry:
+      # un CU successivo assente salta solo il drift, mentre errori di rete/status restano rossi.
+      - name: Verifica disponibilita del CU SQL Server successivo
+        id: next-cu
         shell: bash
         run: |
+          set -euo pipefail
+          image_file=tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs
+          pinned_image="$(sed -nE 's/.*Tag = "([^"]+)".*/\1/p' "$image_file")"
+          if [[ ! "$pinned_image" =~ ^([^/]+)/(.+):([^/:]+)$ ]]; then
+            echo "::error::Formato dell'immagine SQL Server pinnata non riconosciuto: $pinned_image"
+            exit 1
+          fi
+          registry="${BASH_REMATCH[1]}"
+          repository="${BASH_REMATCH[2]}"
+          pinned_tag="${BASH_REMATCH[3]}"
+          if [[ ! "$pinned_tag" =~ ^([0-9]{4}-CU)([0-9]+)(-ubuntu-[0-9.]+)$ ]]; then
+            echo "::error::Formato del tag SQL Server non riconosciuto: $pinned_tag"
+            exit 1
+          fi
+          next_tag="${BASH_REMATCH[1]}$((10#${BASH_REMATCH[2]} + 1))${BASH_REMATCH[3]}"
+          manifest_url="https://${registry}/v2/${repository}/manifests/${next_tag}"
+          accept='application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json'
+
+          set +e
+          http_status="$(curl --request GET \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --silent --show-error \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --header "Accept: ${accept}" \
+            "$manifest_url")"
+          curl_status=$?
+          set -e
+
+          if [[ "$curl_status" -ne 0 ]]; then
+            echo "::error::Errore di rete verificando il manifest Docker Registry v2 ${registry}/${repository}:${next_tag} (curl exit ${curl_status}, HTTP ${http_status:-unknown})."
+            exit 1
+          fi
+
+          if [[ "$http_status" == "404" ]]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Drift SQL Server saltato: il tag CU successivo ${registry}/${repository}:${next_tag} non esiste (HTTP 404)."
+          elif [[ "$http_status" == "200" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Manifest disponibile per ${registry}/${repository}:${next_tag}; eseguo il test B."
+          else
+            echo "::error::Risposta HTTP inattesa verificando il manifest Docker Registry v2 ${registry}/${repository}:${next_tag}: HTTP ${http_status} (attesi 200 o 404)."
+            exit 1
+          fi
+
+      # Si modifica solo il checkout effimero e soltanto dopo aver confermato il manifest.
+      - name: Derivazione effimera del tag SQL Server successivo
+        if: steps.next-cu.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
           image_file=tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs
           pinned_image="$(sed -nE 's/.*Tag = "([^"]+)".*/\1/p' "$image_file")"
           pinned_tag="${pinned_image##*:}"
           if [[ ! "$pinned_tag" =~ ^([0-9]{4}-CU)([0-9]+)(-ubuntu-[0-9.]+)$ ]]; then
-            echo "Formato del tag SQL Server non riconosciuto: $pinned_tag" >&2
+            echo "::error::Formato del tag SQL Server non riconosciuto: $pinned_tag"
             exit 1
           fi
           next_tag="${BASH_REMATCH[1]}$((10#${BASH_REMATCH[2]} + 1))${BASH_REMATCH[3]}"
@@ -102,6 +155,7 @@ jobs:
           grep -F "$next_tag" "$image_file"
 
       - name: Test B - schema completo sul CU successivo
+        if: steps.next-cu.outputs.available == 'true'
         run: dotnet test --project tests/Roamly.IntegrationTests --configuration Release
 
   frontend-e2e:

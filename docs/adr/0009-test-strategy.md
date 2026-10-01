@@ -537,9 +537,11 @@ Il verificatore di completezza (R33) è L0, ~10 ms, bloccante, e il suo messaggi
 | Cosa | Perché |
 |---|---|
 | Suite completa incluso E2E su entrambi i temi | copertura piena senza pesare sul loop di sviluppo |
-| Test B eseguito **anche** contro il tag SQL Server **successivo** a quello pinnato | rilevamento di drift: si scopre che un CU cambia comportamento **prima** di doverci aggiornare |
+| Test B eseguito contro il tag SQL Server **successivo**, se il relativo manifest e' disponibile nel registry | rilevamento di drift: si scopre che un CU cambia comportamento **prima** di doverci aggiornare; se il manifest risponde HTTP 404, solo il test di drift e' esplicitamente saltato con `::notice::` |
 | `dotnet ef migrations bundle` generato ed eseguito su DB vuoto | `DEVOPS.md` §2.1: il bundle è lo strumento di deploy, va verificato che si generi |
 | `dotnet list package --vulnerable --include-transitive` | sicurezza a costo zero |
+
+Il job ricava registry, repository e tag pinnato da `SqlServerImage.cs` e interroga il manifest Docker Registry v2 del CU successivo con timeout limitato. **Solo HTTP 404** significa che il tag non esiste e consente di saltare il test B; errori di rete e ogni altro stato HTTP falliscono il job con un errore esplicito. Quando il manifest esiste, il solo checkout effimero del runner viene aggiornato al CU successivo: il pin versionato e il job della suite sul baseline restano invariati.
 
 ### Pre-commit locale (facoltativo, raccomandato)
 

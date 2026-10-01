@@ -35,7 +35,7 @@ Il planning originale proponeva 5 workflow (`ci.yml`, `backend.yml`, `frontend.y
 
 - **`ci.yml`** — trigger `push` + `workflow_dispatch`, con tre job paralleli: `backend-fast` (L0: build + test senza database, **nessun Docker**), `backend-integration` (L1: Testcontainers + test dello schema completo) e `frontend` (lint, verificatori di design non-browser, i18n e build);
 - **`frontend-e2e.yml`** — trigger `pull_request`; installa Chromium ed esegue lo script axe sui temi chiaro e scuro. Il trigger PR resta separato da `ci.yml`;
-- **`nightly.yml`** — pianificato ogni giorno alle 02:00 UTC; suite backend, axe, prova di drift col CU SQL Server successivo, bundle migration su database vuoto e audit vulnerabilita;
+- **`nightly.yml`** — pianificato ogni giorno alle 02:00 UTC; suite backend, axe, prova di drift col CU SQL Server successivo quando il manifest esiste (altrimenti il solo drift e' esplicitamente saltato su HTTP 404), bundle migration su database vuoto e audit vulnerabilita;
 - **`deploy.yml`** — separato, con approvazione.
 
 Si splitta solo quando la CI diventa effettivamente lenta o eterogenea.

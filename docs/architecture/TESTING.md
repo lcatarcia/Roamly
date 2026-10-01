@@ -611,11 +611,11 @@ Pianificazione: ogni giorno alle **02:00 UTC** (`0 2 * * *`), con `workflow_disp
 |---|---|
 | Suite completa dei tre progetti backend nominati: Domain, Model e IntegrationTests | L0, L1 e L2 senza includere per sbaglio benchmark |
 | Script `design:axe` con Chromium sui due temi | accessibilita browser senza gravare sul job non-browser |
-| `FullSchemaCreationTests` (test B) anche col tag CU successivo derivato dal pin | rilevare drift prima dell'aggiornamento del pin |
+| `FullSchemaCreationTests` (test B) col tag CU successivo derivato dal pin, se il manifest e' disponibile | rilevare drift prima dell'aggiornamento del pin; HTTP 404 salta esplicitamente solo il test di drift |
 | `dotnet ef migrations bundle`, poi esecuzione su SQL Server vuoto | `DEVOPS.md` §2.1 |
 | `dotnet list Roamly.slnx package --vulnerable --include-transitive` | audit delle dipendenze dirette e transitive |
 
-Il tag SQL Server resta definito una sola volta in `SqlServerImage.cs`: il job di drift deriva il CU successivo nel checkout effimero del runner. Il job migration legge il tag pinnato dalla stessa costante e avvia il container temporaneo. Nessun tag immagine e' duplicato nei workflow.
+Il tag SQL Server resta definito una sola volta in `SqlServerImage.cs`: il job di drift deriva registry e repository dal tag, poi controlla il manifest Docker Registry v2 del CU successivo con timeout limitato. Se il registry restituisce HTTP 404, il workflow emette un `::notice::` e salta solo il test di drift; errori di rete e altri status HTTP falliscono chiaramente. Solo se l'immagine esiste, il checkout effimero del runner viene modificato per il test B. Il pin versionato e il job della suite sul baseline non cambiano. Il job migration legge il tag pinnato dalla stessa costante e avvia il container temporaneo. Nessun tag immagine e' duplicato nei workflow.
 
 ### 12.3 Pre-commit locale (facoltativo, raccomandato)
 
