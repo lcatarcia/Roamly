@@ -4,7 +4,9 @@
 # dicono che backend-fast NON e' un gate di backend-integration, perche' un fallimento
 # L0 e uno L1 sono informazioni diverse e vederne una sola raddoppia i giri di correzione.
 #
-# I job frontend ed e2e previsti dall'ADR arriveranno col frontend, che oggi non esiste.
+# Il job frontend esegue i controlli locali Node non-browser. axe/E2E gira nel workflow
+# frontend-e2e.yml sulle PR e nel nightly.yml; non viene aggiunto il trigger pull_request
+# a questo workflow.
 #
 # ⚠️ Il tag dell'immagine SQL Server non compare qui, e non deve comparirci mai (R36,
 # ADR-0009): la sua unica occorrenza nella soluzione vive in
@@ -27,8 +29,9 @@ name: CI
 #   attivi ogni commit di una PR verrebbe costruito due volte sullo stesso SHA;
 # - i controlli obbligatori di branch protection si agganciano al commit, non all'evento:
 #   una CI verde su "push" e' comunque visibile e richiedibile su una PR;
-# - cio' che si perde e' la verifica del merge commit (il "merge result"), che oggi non
-#   serve perche' non esistono ancora PR. Va riconsiderato quando si apre la prima.
+# - la verifica del frontend sulle PR vive in frontend-e2e.yml; qui backend e frontend
+#   continuano a girare sul push, senza costruire due volte lo stesso SHA.
+# - il merge commit non e' verificato da questo workflow e resta un limite noto.
 # "workflow_dispatch" resta per poter rieseguire la pipeline a mano senza commit finti.
 on:
   push:
@@ -177,3 +180,54 @@ jobs:
           path: TestResults/
           if-no-files-found: warn
           retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Frontend L3 - controlli locali Node e build. Nessun browser: axe e' separato.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend L3 - lint, design e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend/roamly-web
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione di Node.js compatibile con Vite 8
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: frontend/roamly-web/package-lock.json
+
+      - name: Installazione riproducibile delle dipendenze
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Contrasto sui due temi
+        run: npm run design:contrast
+
+      - name: Copertura del manifesto dei token
+        run: npm run design:coverage
+
+      - name: Divieto di colori letterali
+        run: npm run design:lint-colors
+
+      - name: Verifica design system R11
+        run: npm run design:guard-r11
+
+      - name: Verifica i18n R21
+        run: npm run design:r21
+
+      - name: Build di produzione
+        run: npm run build
+
+      # R18/R22 controllano anche i CSS emessi; R19 scansiona HTML/CSS/JS di dist.
+      - name: Verifica font e asset R18, R19 e R22
+        run: npm run design:guard-font-assets

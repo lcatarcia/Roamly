@@ -1,0 +1,77 @@
+/*
+ * fonts.css — consegna dei font self-hosted (R19), sottoinsiemizzati (R18).
+ *
+ * Fraunces (display, OFL) + Inter (testo, OFL). Entrambi variabili sul solo
+ * asse `wght` (opsz/SOFT/WONK congelati in fase di subsetting, script
+ * documentato in `.copilot-pixel-log.md`). Subset: latin + accentate
+ * italiane + punteggiatura tipografica + simbolo euro.
+ *
+ * Budget reale misurato (R18): fraunces-subset.woff2 30.6 KB
+ * + inter-subset.woff2 41.0 KB = 71.6 KB totali, sotto la soglia di 120 KB.
+ *
+ * R22 — Fraunces per eccezione: NON esiste --font-display applicato a
+ * h1..h6. Esistono solo due classi, .numeral-display e .page-title.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-subset.woff2') format('woff2-variations'), url('/fonts/inter-subset.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  /* size-adjust calcolato per allineare l'altezza-x del fallback di sistema a Inter */
+  size-adjust: 100%;
+  ascent-override: 90%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/fraunces-subset.woff2') format('woff2-variations'), url('/fonts/fraunces-subset.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  size-adjust: 105%;
+  ascent-override: 95%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+
+:root {
+  --font-body: 'Inter', system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+}
+
+/* Le uniche due superfici ammesse per Fraunces (R22). Mai su titoli di card
+ * in lista, label, form, bottoni, nav, o numeri in tabella. */
+.numeral-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1.05;
+  font-variation-settings: 'wght' 600;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.15;
+  font-variation-settings: 'wght' 500;
+}
+
+@media (min-width: 768px) {
+  .numeral-display {
+    font-size: 56px;
+  }
+  .page-title {
+    font-size: 34px;
+  }
+}
+
+/* I numeri in tabella usano Inter con tabular-nums (requisito funzionale:
+ * le cifre devono incolonnarsi), mai Fraunces. */
+.tabular-figures {
+  font-variant-numeric: tabular-nums;
+}

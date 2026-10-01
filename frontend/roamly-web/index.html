@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Preload solo su Inter (R19 self-hosted, R18 subset misurato): Fraunces
+         serve sopra la piega ma su pochi glifi, precaricarlo competerebbe
+         con i dati (vedi ADR-0007 "Consegna dei font", punto 3). -->
+    <link
+      rel="preload"
+      href="/fonts/inter-subset.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <title>Roamly</title>
+    <script>
+      // Applica il tema PRIMA del render React, per evitare un flash del
+      // tema sbagliato (FOUC). Stessa logica di src/lib/theme.ts,
+      // duplicata qui di proposito: deve girare sincrona e prima del bundle.
+      (function () {
+        try {
+          var stored = window.localStorage.getItem('roamly.theme');
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

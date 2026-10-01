@@ -1,0 +1,226 @@
+/*
+ * theme.css — unica fonte di colori letterali del progetto (R12, R13).
+ *
+ * Regola invariante: fuori da questo file non esistono hex, rgb(), hsl(),
+ * ne' classi Tailwind di colore arbitrarie (bg-[#...], text-[rgb(...)]).
+ * I componenti usano ESCLUSIVAMENTE i token semantici (livello 2), mai i
+ * letterali (livello 1) direttamente. Vedi ADR-0007 "Design token".
+ *
+ * Correttivi anti-look (R11) applicati qui, prima di qualunque `shadcn add`:
+ *   (1) palette forest/sand al posto di neutral/zinc          -> letterali sotto
+ *   (2) scala di radius differenziata, mai un raggio uniforme -> --radius-*
+ *   (3) bordo caldo + ombra ampia e morbida, meno bordi        -> --color-border-*, --shadow-*
+ *   (4) densita' non uniforme (un soggetto dominante)          -> applicato nei componenti
+ *   (5) accento tipografico display sui numeri                 -> vedi fonts.css, .numeral-display
+ */
+
+@theme {
+  /* ============================================================
+   * LIVELLO 1 — token letterali. Nessun componente li nomina.
+   * ============================================================ */
+
+  /* ---------- superfici chiare ---------- */
+  --color-white:      #FCFBF7;
+  --color-sand-100:   #F3EBDD;
+  --color-sand-200:   #E7DDCB;
+
+  /* ---------- superfici scure (rampa "Night Camp", adattata) ---------- */
+  --color-night-950:  #0C1411; /* fondo app dark */
+  --color-night-900:  #14231C; /* superficie sollevata */
+  --color-night-800:  #203A2D; /* superficie sollevata 2 / hairline caldo */
+
+  /* ---------- verdi ---------- */
+  --color-forest-950: #10231C;
+  --color-forest-900: #173329;
+  --color-forest-700: #28513F;
+  --color-moss-700:   #536B49;
+  --color-moss-500:   #6F8F62;
+  --color-sage-400:   #8FA67F;
+  --color-sage-300:   #AFC19F;
+
+  /* ---------- caldi ---------- */
+  --color-clay-700:   #975B3D;
+  --color-clay-600:   #A16142;
+  --color-clay-500:   #C97952;
+  --color-clay-400:   #E08A5C; /* dark only */
+  --color-sun-700:    #7E6533;
+  --color-sun-400:    #E6B85C; /* solo su fondi scuri */
+  --color-dune-300:   #D9C6A5; /* dark only: numerali e testo caldo */
+
+  /* ---------- terre / bordi ---------- */
+  --color-bark-500:   #8A7A5E; /* bordo di controllo, tema chiaro */
+  --color-bark-400:   #A4906E; /* bordo di controllo + testo muted, dark */
+
+  /* ---------- pericolo ---------- */
+  --color-danger-700: #7F2A1B;
+  --color-danger-600: #9B2C1E;
+  --color-danger-500: #C0402C; /* dark only: superficie distruttiva */
+  --color-danger-400: #E8705A; /* dark only: testo/icona distruttiva */
+
+  /* ---------- inchiostro ---------- */
+  --color-ink:        #17201C;
+
+  /* ============================================================
+   * LIVELLO 2 — token semantici. Valori di default = TEMA CHIARO.
+   * Il blocco [data-theme="dark"] in fondo al file li ridefinisce.
+   * I componenti usano SOLO questi nomi (mai i letterali sopra).
+   * ============================================================ */
+  --color-surface:              var(--color-sand-100); /* fondo dell'app */
+  --color-surface-raised:       var(--color-sand-200); /* pannelli, blocchi, righe selezionate */
+  --color-surface-raised-2:     var(--color-white);    /* superficie massima (dialog, popover) */
+
+  --color-text:                 var(--color-ink);       /* testo primario */
+  --color-text-muted:           var(--color-forest-700);/* testo secondario, label */
+  --color-numeral:              var(--color-ink);       /* il numero dominante */
+
+  --color-accent-surface:       var(--color-clay-500);  /* CTA primario (fondo) */
+  --color-accent-on-surface:    var(--color-ink);       /* testo del CTA primario */
+  --color-accent-text:          var(--color-clay-700);  /* link, icone di accento */
+
+  --color-highlight-text:       var(--color-sun-700);   /* scadenze imminenti, evidenziazioni */
+  --color-highlight-surface:    var(--color-sun-400);   /* badge "in scadenza" — fondo */
+  --color-highlight-on-surface: var(--color-ink);        /* badge "in scadenza" — testo */
+
+  --color-danger-text:          var(--color-danger-700);/* testo/icona distruttiva */
+  --color-danger-surface:       var(--color-danger-600);/* fondo del bottone distruttivo */
+  --color-danger-on-surface:    var(--color-white);      /* testo sul bottone distruttivo */
+
+  --color-border-soft:          var(--color-sand-200);  /* decorativo, nessun requisito */
+  --color-border-strong:        var(--color-bark-500);  /* input, checkbox, toggle, asse del Ribbon */
+
+  --color-focus:                var(--color-forest-700);/* anello di focus */
+  --color-focus-contrast:       var(--color-sand-100);  /* secondo anello del focus */
+
+  /* ============================================================
+   * Radius — correttivo (2): scala differenziata, MAI uniforme.
+   * ============================================================ */
+  --radius-pill: 999px; /* bottoni */
+  --radius-sm:   10px;  /* input, badge */
+  --radius-md:   16px;  /* blocchi piccoli */
+  --radius-lg:   24px;  /* blocchi grandi */
+  --radius-xl:   32px;  /* blocco del dato dominante */
+
+  /* ============================================================
+   * Ombre — correttivo (3): calde e ampie in chiaro, assenti in dark.
+   * ============================================================ */
+  --shadow-soft:     0 12px 40px rgb(16 35 28 / .08);
+  --shadow-floating: 0 24px 70px rgb(16 35 28 / .16);
+
+  /* ============================================================
+   * Motion — solo CSS in Phase 0/1, nessuna libreria (vedi ADR §Spacing/motion).
+   * ============================================================ */
+  --ease-out:     cubic-bezier(.22, 1, .36, 1);
+  --ease-in-out:  cubic-bezier(.65, 0, .35, 1);
+  --dur-micro:    140ms;
+  --dur-standard: 260ms;
+  --dur-slow:     420ms;
+
+  /* ============================================================
+   * Ponte shadcn/ui — SOLO var(), MAI letterali (R12/R13).
+   * I componenti generati da shadcn (Base UI) usano questi nomi
+   * (bg-primary, text-foreground, border-input, ecc.). Qui li
+   * facciamo puntare ai NOSTRI token semantici, cosi' il "look
+   * neutral/zinc" di default (R11, correttivo 1) non esiste mai:
+   * non c'e' nessun valore proprio da ridefinire in dark, perche'
+   * risolvono dinamicamente sui token sopra, gia' gestiti da
+   * [data-theme='dark'].
+   * ============================================================ */
+  --color-background:           var(--color-surface);
+  --color-foreground:           var(--color-text);
+  --color-card:                 var(--color-surface-raised-2);
+  --color-card-foreground:      var(--color-text);
+  --color-popover:              var(--color-surface-raised-2);
+  --color-popover-foreground:   var(--color-text);
+  --color-primary:              var(--color-accent-surface);
+  --color-primary-foreground:   var(--color-accent-on-surface);
+  --color-secondary:            var(--color-surface-raised);
+  --color-secondary-foreground: var(--color-text);
+  --color-muted:                var(--color-surface-raised);
+  --color-muted-foreground:     var(--color-text-muted);
+  --color-accent:               var(--color-surface-raised);
+  --color-accent-foreground:    var(--color-text);
+  --color-destructive:          var(--color-danger-surface);
+  --color-destructive-foreground: var(--color-danger-on-surface);
+  --color-border:                var(--color-border-soft);
+  --color-input:                 var(--color-border-strong);
+  --color-ring:                  var(--color-focus);
+}
+
+/* ============================================================
+ * Tema scuro — riassegna SOLO i token semantici (livello 2).
+ * I letterali (livello 1) sono definiti una sola volta sopra.
+ * ============================================================ */
+[data-theme='dark'] {
+  --color-surface:              var(--color-night-950);
+  --color-surface-raised:       var(--color-night-900);
+  --color-surface-raised-2:     var(--color-night-800);
+
+  --color-text:                 var(--color-sand-100);
+  --color-text-muted:           var(--color-bark-400);
+  --color-numeral:              var(--color-dune-300);
+
+  --color-accent-surface:       var(--color-clay-500); /* invariato: 5.03:1 in entrambi i temi */
+  --color-accent-on-surface:    var(--color-ink);
+  --color-accent-text:          var(--color-clay-400);
+
+  --color-highlight-text:       var(--color-sun-400);
+  --color-highlight-surface:    var(--color-night-800);
+  --color-highlight-on-surface: var(--color-sun-400);
+
+  --color-danger-text:          var(--color-danger-400);
+  --color-danger-surface:       var(--color-danger-500);
+  --color-danger-on-surface:    var(--color-white);
+
+  --color-border-soft:          var(--color-night-800);
+  --color-border-strong:        var(--color-bark-400);
+
+  --color-focus:                var(--color-sun-400);
+  --color-focus-contrast:       var(--color-night-950);
+
+  /* Dark: l'elevazione non e' un'ombra (night-900/night-950 = 1.15:1, non percepibile).
+   * Le ombre si disattivano; il confine, dove porta informazione, e' un bordo bark-400. */
+  --shadow-soft:     none;
+  --shadow-floating: none;
+}
+
+/* ============================================================
+ * Focus — anello a doppio cerchio (necessario perche' un solo
+ * anello non puo' passare su superfici chiare e scure insieme).
+ * ADR-0004 richiede un percorso da tastiera affidabile su una
+ * conferma irreversibile: non e' un dettaglio estetico.
+ * ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--color-focus-contrast);
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================================
+ * Reduced motion — R20: lo stato base e' sempre lo stato finale.
+ * L'azzeramento delle durate non deve mai lasciare elementi
+ * invisibili o con opacita' residua < 1.
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+ * Reset minimo legato ai token — nessun colore letterale qui:
+ * solo riferimenti ai semantici sopra.
+ * ============================================================ */
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}

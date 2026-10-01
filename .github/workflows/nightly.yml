@@ -1,0 +1,228 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  CONFIGURATION: Release
+
+jobs:
+  backend-suite:
+    name: Backend - suite completa su immagine SQL Server pinnata
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione dell'SDK .NET dal pin di global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Ripristino della cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore Roamly.slnx
+
+      - name: Build della solution
+        run: dotnet build Roamly.slnx --configuration $CONFIGURATION --no-restore
+
+      - name: Test L0 - Roamly.Domain.Tests
+        run: dotnet test --project tests/Roamly.Domain.Tests --configuration $CONFIGURATION --no-build
+
+      - name: Test L0 - Roamly.Model.Tests
+        run: dotnet test --project tests/Roamly.Model.Tests --configuration $CONFIGURATION --no-build
+
+      - name: Test L1 e L2 - Roamly.IntegrationTests
+        run: dotnet test --project tests/Roamly.IntegrationTests --configuration $CONFIGURATION --no-build
+
+      - name: Pubblicazione delle misure di tempo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tempi-backend-nightly
+          path: TestResults/
+          if-no-files-found: warn
+          retention-days: 14
+
+  sqlserver-next-cu:
+    name: Drift - test B sul CU successivo
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione dell'SDK .NET dal pin di global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Ripristino della cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Il tag resta definito in SqlServerImage.cs; il checkout effimero del nightly
+      # sostituisce solo il CU per provare il medesimo test B sul CU immediatamente dopo.
+      - name: Derivazione effimera del tag SQL Server successivo
+        shell: bash
+        run: |
+          image_file=tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs
+          pinned_image="$(sed -nE 's/.*Tag = "([^"]+)".*/\1/p' "$image_file")"
+          pinned_tag="${pinned_image##*:}"
+          if [[ ! "$pinned_tag" =~ ^([0-9]{4}-CU)([0-9]+)(-ubuntu-[0-9.]+)$ ]]; then
+            echo "Formato del tag SQL Server non riconosciuto: $pinned_tag" >&2
+            exit 1
+          fi
+          next_tag="${BASH_REMATCH[1]}$((10#${BASH_REMATCH[2]} + 1))${BASH_REMATCH[3]}"
+          sed -i "s|${pinned_tag}|${next_tag}|" "$image_file"
+          echo "Test B con il CU successivo: ${next_tag}"
+          grep -F "$next_tag" "$image_file"
+
+      - name: Test B - schema completo sul CU successivo
+        run: dotnet test --project tests/Roamly.IntegrationTests --configuration Release
+
+  frontend-e2e:
+    name: Frontend - axe sui due temi
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: frontend/roamly-web
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione di Node.js compatibile con Vite 8
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: frontend/roamly-web/package-lock.json
+
+      - name: Installazione riproducibile delle dipendenze
+        run: npm ci
+
+      - name: Installazione di Chromium e delle dipendenze di sistema
+        run: npx playwright install --with-deps chromium
+
+      - name: axe sui temi chiaro e scuro
+        run: npm run design:axe
+
+  migration-bundle:
+    name: Migration - bundle ed esecuzione su database vuoto
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione dell'SDK .NET dal pin di global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Ripristino della cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore src/Roamly.Infrastructure/Roamly.Infrastructure.csproj
+
+      - name: Ripristino del tool dotnet-ef pinnato
+        run: dotnet tool restore
+
+      - name: Generazione del bundle di migration
+        run: dotnet ef migrations bundle --project src/Roamly.Infrastructure --startup-project src/Roamly.Infrastructure --context RoamlyDbContext --configuration Release --output "$RUNNER_TEMP/efbundle" --force
+
+      # L'immagine viene letta dal punto di pin versionato: nessun tag duplicato nel workflow.
+      - name: Avvio di SQL Server per il bundle
+        shell: bash
+        run: |
+          image_file=tests/Roamly.IntegrationTests/Infrastructure/SqlServerImage.cs
+          sql_image="$(sed -nE 's/.*Tag = "([^"]+)".*/\1/p' "$image_file")"
+          if [[ -z "$sql_image" ]]; then
+            echo "Impossibile leggere il tag SQL Server pinnato da $image_file" >&2
+            exit 1
+          fi
+          sa_password="RoamlyNightly_$(openssl rand -hex 24)!"
+          echo "::add-mask::$sa_password"
+          echo "SA_PASSWORD=$sa_password" >> "$GITHUB_ENV"
+          docker run --detach --name roamly-migration-sql \
+            --publish 1433:1433 \
+            --env ACCEPT_EULA=Y \
+            --env MSSQL_SA_PASSWORD="$sa_password" \
+            "$sql_image"
+          # Questa e' una verifica di readiness del servizio, non un retry dei test.
+          for attempt in $(seq 1 60); do
+            if docker logs roamly-migration-sql 2>&1 | grep -q "ready for client connections"; then
+              exit 0
+            fi
+            if [[ "$(docker inspect --format='{{.State.Running}}' roamly-migration-sql)" != "true" ]]; then
+              docker logs roamly-migration-sql
+              exit 1
+            fi
+            sleep 5
+          done
+          docker logs roamly-migration-sql
+          echo "SQL Server non e' diventato pronto entro cinque minuti." >&2
+          exit 1
+
+      - name: Esecuzione del bundle su un database vuoto
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/efbundle" \
+            --connection "Server=localhost,1433;Database=RoamlyNightly;User Id=sa;Password=${SA_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+
+      - name: Arresto di SQL Server
+        if: always()
+        run: docker rm --force roamly-migration-sql || true
+
+  vulnerability-audit:
+    name: Audit vulnerabilita NuGet transitivo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione dell'SDK .NET dal pin di global.json
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore della solution per l'audit
+        run: dotnet restore Roamly.slnx
+
+      - name: Audit vulnerabilita
+        run: dotnet list Roamly.slnx package --vulnerable --include-transitive

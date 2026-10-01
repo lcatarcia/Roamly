@@ -1,0 +1,41 @@
+name: Frontend E2E
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-e2e-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  axe:
+    name: Frontend E2E - axe sui due temi
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: frontend/roamly-web
+
+    steps:
+      - name: Checkout del repository
+        uses: actions/checkout@v4
+
+      - name: Installazione di Node.js compatibile con Vite 8
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: frontend/roamly-web/package-lock.json
+
+      - name: Installazione riproducibile delle dipendenze
+        run: npm ci
+
+      - name: Installazione di Chromium e delle dipendenze di sistema
+        run: npx playwright install --with-deps chromium
+
+      - name: axe sui temi chiaro e scuro
+        run: npm run design:axe

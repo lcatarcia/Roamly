@@ -1,0 +1,24 @@
+/*
+ * index.css — punto di ingresso Tailwind. Nessun colore letterale qui (R12):
+ * tutto viene da styles/theme.css (livello 1 + livello 2 + ponte shadcn).
+ */
+@import 'tailwindcss';
+@import './styles/theme.css';
+@import './styles/fonts.css';
+@import 'tw-animate-css';
+
+/* Il tema scuro e' pilotato dall'attributo [data-theme="dark"] su <html>
+ * (toggle con persistenza in localStorage, vedi src/lib/theme.ts), non da
+ * una classe .dark: coerente con [data-theme='dark'] usato in theme.css. */
+@custom-variant dark (&:is([data-theme='dark'] *));
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+}

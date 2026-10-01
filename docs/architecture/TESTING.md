@@ -581,31 +581,41 @@ Derivano da R14, R17, R20, R23, R25 ([`ADR-0007`](../adr/0007-design-system.md))
 
 ## 12. Pipeline
 
-### 12.1 `ci.yml` — quattro job paralleli
+### 12.1 `ci.yml` — tre job paralleli
 
 | Job | Trigger | Contenuto | Tempo atteso |
 |---|---|---|---|
-| **`backend-fast`** | ogni push + PR | restore → build con `TreatWarningsAsErrors` + `BannedApiAnalyzers` (R5, R30, R34) → `Domain.Tests` + `Model.Tests` (**tutto L0**, incluso l'analizzatore 1785, R26-R29, R32, R33) | **90-120 s** |
-| **`backend-integration`** | ogni push + PR | Testcontainers → **test B** → **test C** → R3, R7, R9, privacy, ownership per slice | **3-4 min** |
-| **`frontend`** | ogni push + PR | `npm ci` → ESLint + stylelint → `design:guard` → `contrast:check` → Vitest → `vite build` → `fonts:budget` + `no-external-assets` **sul bundle** | **2-3 min** |
-| **`e2e`** | solo PR + nightly | Playwright: `axe` × 2 temi, reduced-motion, cancellazione da tastiera | **4-6 min** |
+| **`backend-fast`** | push + workflow_dispatch | restore → build con `TreatWarningsAsErrors` + `BannedApiAnalyzers` (R5, R30, R34) → `Domain.Tests` + `Model.Tests` (**tutto L0**, incluso l'analizzatore 1785, R26-R29, R32, R33) | **90-120 s** |
+| **`backend-integration`** | push + workflow_dispatch | Testcontainers → **test B** → **test C** → R3, R7, R9, privacy, ownership per slice | **3-4 min** |
+| **`frontend`** | push + workflow_dispatch | `npm ci` → `lint` (oxlint) → `design:contrast`, `design:coverage`, `design:lint-colors`, `design:guard-r11`, `design:r21` → `build` → `design:guard-font-assets` (R18/R19/R22) | **stima non misurata** |
 
-**Tempo di parete:** push ≈ **3-4 min** · PR ≈ **5-7 min**. Entrambi sotto la soglia del "si smette di guardare".
+Il frontend esegue verificatori Node senza browser; non usa `design:check` perche' quel comando include `design:axe`. I tempi riportati per il backend sono stime dell'ADR; il tempo frontend va misurato dopo la prima esecuzione GitHub Actions.
+
+Quelli sopra sono i controlli automatici dei workflow. In locale si possono eseguire gli stessi script `npm run` senza installare dipendenze; `npm ci` e' il ripristino riproducibile usato dai runner. Per `design:axe` occorre anche installare Chromium, come fanno i workflow PR e nightly.
 
 ⚠️ `backend-fast` **non** è un gate di `backend-integration` (niente `needs:`): devono poter fallire entrambi.
 
-> **Stato al Blocco 5 (passo 18).** `.github/workflows/ci.yml` esiste e contiene **due** dei quattro job: `backend-fast` e `backend-integration`. `frontend` ed `e2e` arriveranno col frontend, che oggi non esiste. I comandi esatti sono in §13.1, i tempi misurati in §14.
->
-> **Scostamento deliberato sul trigger:** il workflow reagisce a `push` su ogni branch e a `workflow_dispatch`, **non** a `pull_request`. Con entrambi i trigger attivi ogni commit di una PR verrebbe costruito due volte sullo stesso SHA, e il repository è privato (minuti contati). Ciò che si perde è la verifica del **merge commit**: va riconsiderato all'apertura della prima PR. Un `concurrency` annulla le esecuzioni superate su ogni ref **tranne `main`**, dove la storia deve conservare un esito per commit.
+> **Trigger CI:** `push` su ogni branch e `workflow_dispatch`, non `pull_request`. Il workflow separato `.github/workflows/frontend-e2e.yml` esegue axe sulle PR; non modifica i trigger di `ci.yml`.
+
+### 12.1.1 `frontend-e2e.yml` — PR
+
+Il job installa Node.js 22.18.0, esegue `npm ci`, installa Chromium con `npx playwright install --with-deps chromium` e invoca `npm run design:axe`. Lo script costruisce l'app, avvia `vite preview` e verifica axe sui temi chiaro e scuro.
+
+Il package non definisce uno script E2E distinto per reduced-motion o per la cancellazione da tastiera. Questi controlli restano prescritti ma non sono eseguiti dal workflow finche' non esistono i relativi script/test; non vengono sostituiti con verifiche inventate.
 
 ### 12.2 `nightly.yml`
 
+Pianificazione: ogni giorno alle **02:00 UTC** (`0 2 * * *`), con `workflow_dispatch` per esecuzione manuale.
+
 | Cosa | Perché |
 |---|---|
-| Suite completa incluso E2E su entrambi i temi | copertura piena senza pesare sul loop di sviluppo |
-| Test B **anche** contro il tag SQL Server successivo a quello pinnato | si scopre che un CU cambia comportamento **prima** di doverci aggiornare |
-| `dotnet ef migrations bundle` generato ed eseguito su DB vuoto | `DEVOPS.md` §2.1 |
-| `dotnet list package --vulnerable --include-transitive` | sicurezza a costo zero |
+| Suite completa dei tre progetti backend nominati: Domain, Model e IntegrationTests | L0, L1 e L2 senza includere per sbaglio benchmark |
+| Script `design:axe` con Chromium sui due temi | accessibilita browser senza gravare sul job non-browser |
+| `FullSchemaCreationTests` (test B) anche col tag CU successivo derivato dal pin | rilevare drift prima dell'aggiornamento del pin |
+| `dotnet ef migrations bundle`, poi esecuzione su SQL Server vuoto | `DEVOPS.md` §2.1 |
+| `dotnet list Roamly.slnx package --vulnerable --include-transitive` | audit delle dipendenze dirette e transitive |
+
+Il tag SQL Server resta definito una sola volta in `SqlServerImage.cs`: il job di drift deriva il CU successivo nel checkout effimero del runner. Il job migration legge il tag pinnato dalla stessa costante e avvia il container temporaneo. Nessun tag immagine e' duplicato nei workflow.
 
 ### 12.3 Pre-commit locale (facoltativo, raccomandato)
 
@@ -666,9 +676,9 @@ dotnet ef migrations add <Nome> `
 >
 > ✅ **Conseguenza applicata al Blocco 5:** `ci.yml` **non usa alcun `--filter`**. La selezione dei test avviene per progetto, con `--project`, dove "quali test girano" è verificabile leggendo il nome del progetto invece che simulando un'espressione.
 
-### 13.1 Comandi della pipeline — Blocco 5, passo 18
+### 13.1 Comandi della pipeline
 
-`.github/workflows/ci.yml` esegue **esattamente** questi comandi, in quest'ordine, su `ubuntu-latest` e in configurazione **`Release`** (la configurazione che andrà in deploy: verificare `Release` in CI e `Debug` in locale significherebbe verificare due cose diverse).
+`.github/workflows/ci.yml` esegue i comandi backend qui sotto su `ubuntu-latest` in configurazione **`Release`**.
 
 ```bash
 # entrambi i job
@@ -682,6 +692,22 @@ dotnet test --project tests/Roamly.Model.Tests       --configuration Release --n
 # job backend-integration (L1 + L2, Testcontainers)
 dotnet test --project tests/Roamly.IntegrationTests  --configuration Release --no-build
 ```
+
+Il job `frontend` usa `working-directory: frontend/roamly-web`:
+
+```bash
+npm ci
+npm run lint
+npm run design:contrast
+npm run design:coverage
+npm run design:lint-colors
+npm run design:guard-r11
+npm run design:r21
+npm run build
+npm run design:guard-font-assets
+```
+
+Questi script esistono nel `package.json` attuale e non avviano un browser. La guardia R18/R19/R22 va eseguita dopo `npm run build`: verifica budget e origini locali dei font, riferimenti esterni riconoscibili negli asset HTML/CSS/JS emessi e applicazione CSS/usi statici delle classi display. Non rileva metadati interni WOFF2, URL costruiti dinamicamente o occorrenze runtime composte da componenti figli. `design:axe` e' eseguito solo dai workflow PR e nightly dopo l'installazione di Chromium. `npm run test`, `npm run e2e`, `fonts:budget` e `no-external-assets` non sono script presenti nel package, quindi non sono dichiarati come controlli eseguiti.
 
 > **Perché `--project` e mai `--solution` negli step di test.** È il modo in cui **R39** (ADR-0009) resta in vigore da sola: quando `Roamly.Benchmarks` entrerà nella solution, un `dotnet test --solution` lo eseguirebbe in CI senza che nessuno debba dimenticarsene. Con progetti nominati, includerlo richiede una modifica deliberata di `ci.yml`.
 >
