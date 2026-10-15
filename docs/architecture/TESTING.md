@@ -651,7 +651,7 @@ npm run e2e
 
 ### Migration
 
-Il tool `dotnet-ef` è pinnato a **10.0.12** in `.config/dotnet-tools.json`, allineato ai pacchetti EF Core. Su una macchina nuova serve `dotnet tool restore` **prima** di qualunque comando `ef`; un tool globale più vecchio del runtime è un disallineamento, non un dettaglio.
+Il tool `dotnet-ef` è pinnato a **10.0.13** in `.config/dotnet-tools.json`, allineato ai pacchetti EF Core. Su una macchina nuova serve `dotnet tool restore` **prima** di qualunque comando `ef`; un tool globale più vecchio del runtime è un disallineamento, non un dettaglio.
 
 ```powershell
 dotnet tool restore

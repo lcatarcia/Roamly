@@ -6,21 +6,25 @@
   </PropertyGroup>
 
   <ItemGroup Label="Data">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
     <!--
       Identity fornisce ApplicationUser/AspNetUsers, il principal di tutte le FK OwnerId.
-      Versione allineata a EF Core 10.0.12: le due famiglie di pacchetti condividono la
+      Versione allineata a EF Core 10.0.13: le due famiglie di pacchetti condividono la
       stessa cadenza di patch, disallinearle rompe il restore.
     -->
-    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup Label="Analyzers">
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Security fixes">
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
+  </ItemGroup>
   <ItemGroup Label="Test">
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
@@ -31,10 +35,10 @@
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Respawn" Version="7.0.0" />
     <!--
-      Pin transitivo: EF Core 10.0.12 richiede >= 6.1.6. Il valore e' allineato
+      Pin transitivo: EF Core 10.0.13 richiede >= 6.1.7. Il valore e' allineato
       a quella soglia, non scelto: abbassarlo rompe il restore dell'intera solution.
     -->
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.6" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.7" />
   </ItemGroup>
 
 </Project>
