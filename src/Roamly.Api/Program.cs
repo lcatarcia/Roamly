@@ -5,6 +5,12 @@ using Roamly.Api.Features.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddOpenApi("v1", options =>
+    options.ShouldInclude = description =>
+        description.RelativePath is { } path
+        && (path.StartsWith("api/v1/", StringComparison.Ordinal)
+            || string.Equals(path, "api/v1", StringComparison.Ordinal)));
+
 builder.Services.AddRoamly(builder.Configuration);
 
 var app = builder.Build();
@@ -16,6 +22,7 @@ app.UseHttpsRedirection();
 app.UseCors(SecurityRegistration.CorsPolicyName);
 
 app.UseAuthentication();
+app.UseMiddleware<AccountSessionAuthorizationMiddleware>();
 app.UseAuthorization();
 
 app.UseMiddleware<CsrfProtectionMiddleware>();
@@ -29,6 +36,16 @@ app.MapHealthChecks("/health/ready", new()
 
 app.MapAuthenticationEndpoints();
 app.MapIdentityEndpoints();
+
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
+{
+    app.MapOpenApi("/openapi/{documentName}.json").AllowAnonymous();
+}
+
+if (await OneShotJobDispatcher.RunIfRequestedAsync(args, app.Services, CancellationToken.None))
+{
+    return;
+}
 
 app.Run();
 

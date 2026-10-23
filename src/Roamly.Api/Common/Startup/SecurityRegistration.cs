@@ -1,8 +1,15 @@
+using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Roamly.Api.Common.Http;
+using Roamly.Api.Common.Ownership;
 using Roamly.Api.Common.Security;
+using Roamly.Api.Features.Authentication.Login;
 using Roamly.Common;
+using Roamly.Common.Security;
+using Roamly.Infrastructure.Persistence;
 
 namespace Roamly.Api.Common.Startup;
 
@@ -27,6 +34,7 @@ public static class SecurityRegistration
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserScope, CurrentUserScope>();
         services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 
         // AddIdentityCore non registra da solo uno schema di autenticazione (a differenza di
@@ -47,21 +55,34 @@ public static class SecurityRegistration
             // Il default di Identity risponderebbe 302 su ogni 401/403, un comportamento pensato
             // per Razor Pages che qui romperebbe ogni client HTTP.
             cookieOptions.Events.OnRedirectToLogin = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return Task.CompletedTask;
-            };
+                WriteProblemAsync(
+                    context.HttpContext,
+                    StatusCodes.Status401Unauthorized,
+                    "Autenticazione richiesta.",
+                    "https://roamly.dev/problems/unauthorized");
 
             cookieOptions.Events.OnRedirectToAccessDenied = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return Task.CompletedTask;
-            };
+                WriteProblemAsync(
+                    context.HttpContext,
+                    StatusCodes.Status403Forbidden,
+                    "Accesso non consentito.",
+                    "https://roamly.dev/problems/forbidden");
         });
 
         services.Configure<SecurityStampValidatorOptions>(stampOptions =>
         {
             stampOptions.ValidationInterval = TimeSpan.FromMinutes(5);
+            stampOptions.OnRefreshingPrincipal = refresh =>
+            {
+                if (refresh.CurrentPrincipal is { } currentPrincipal
+                    && refresh.NewPrincipal?.Identity is ClaimsIdentity newIdentity)
+                {
+                    CopySessionClaims(currentPrincipal, newIdentity, AccountSessionClaims.ModeClaimType);
+                    CopySessionClaims(currentPrincipal, newIdentity, PasswordAuthenticationClaims.AuthenticatedAtUtc);
+                }
+
+                return Task.CompletedTask;
+            };
         });
 
         services.AddAuthorization();
@@ -77,6 +98,18 @@ public static class SecurityRegistration
         services.AddMemoryCache();
         services.AddSingleton<IPerAccountRateLimiter, PerAccountRateLimiter>();
         services.Configure<PerAccountRateLimiterOptions>(configuration.GetSection("RateLimiting:Login"));
+        services.AddSingleton<DummyLoginPasswordHash>();
+        services.AddScoped<LoginAttemptRateLimiter>();
+        services.AddScoped<ILoginAttemptRateLimiter>(
+            provider => provider.GetRequiredService<LoginAttemptRateLimiter>());
+        services.AddScoped<ILoginAttemptCounterMaintenance>(
+            provider => provider.GetRequiredService<LoginAttemptRateLimiter>());
+        services.AddScoped<ILoginClientIpAddressProvider, LoginClientIpAddressProvider>();
+        services.AddOptions<LoginAttemptRateLimiterOptions>()
+            .Bind(configuration.GetSection("RateLimiting:Login"))
+            .Validate(LoginAttemptRateLimiterOptions.IsValid,
+                "RateLimiting:Login requires a Base64 HMAC key of at least 32 bytes and positive limits/windows.")
+            .ValidateOnStart();
 
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 
@@ -90,5 +123,33 @@ public static class SecurityRegistration
         }));
 
         return services;
+    }
+
+    private static Task WriteProblemAsync(HttpContext context, int statusCode, string title, string type)
+    {
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/problem+json";
+
+        return JsonSerializer.SerializeAsync(
+            context.Response.Body,
+            ProblemFactory.Create(context, statusCode, title, type),
+            JsonSerializerOptions.Web,
+            context.RequestAborted);
+    }
+
+    private static void CopySessionClaims(
+        ClaimsPrincipal currentPrincipal,
+        ClaimsIdentity refreshedIdentity,
+        string claimType)
+    {
+        foreach (var claim in refreshedIdentity.FindAll(claimType).ToArray())
+        {
+            refreshedIdentity.RemoveClaim(claim);
+        }
+
+        foreach (var claim in currentPrincipal.FindAll(claimType))
+        {
+            refreshedIdentity.AddClaim(claim);
+        }
     }
 }

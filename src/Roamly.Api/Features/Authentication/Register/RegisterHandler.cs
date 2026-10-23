@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Roamly.Api.Common.Http;
 using Roamly.Common.Email;
 using Roamly.Infrastructure.Identity;
 
@@ -8,6 +9,7 @@ namespace Roamly.Api.Features.Authentication.Register;
 /// Registrazione: crea l'utente Identity e invia il token di conferma via <see cref="IEmailSender"/>.
 /// Non owned (R3 non si applica: <see cref="ApplicationUser"/> non implementa <c>IOwnedResource</c>).
 /// </summary>
+[ProtocolOutcomeHandler("La registrazione restituisce accepted o errori di validazione secondo il contratto di autenticazione.")]
 internal sealed class RegisterHandler
 {
     private readonly UserManager<ApplicationUser> _userManager;

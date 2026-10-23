@@ -18,10 +18,29 @@ namespace Roamly.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys");
+                });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
                 {
@@ -594,6 +613,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(3)")
                         .HasDefaultValue("EUR");
 
+                    b.Property<bool>("RequiresPasswordChange")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
@@ -621,6 +645,35 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_AspNetUsers_ReportingCurrency", "[ReportingCurrency] = UPPER([ReportingCurrency]) AND LEN([ReportingCurrency]) = 3");
                         });
+                });
+
+            modelBuilder.Entity("Roamly.Infrastructure.Persistence.LoginAttemptCounter", b =>
+                {
+                    b.Property<string>("BucketKey")
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTime>("WindowStartUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CounterKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(24)")
+                        .HasDefaultValue("legacy");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("BucketKey", "WindowStartUtc");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("CounterKind", "ExpiresAtUtc");
+
+                    b.ToTable("LoginAttemptCounters", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

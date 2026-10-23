@@ -1,3 +1,6 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Roamly.Common;
+
 namespace Roamly.Api.Common.Startup;
 
 /// <summary>
@@ -16,6 +19,8 @@ public static class RoamlyServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+
+        services.TryAddSingleton(TimeProvider.System);
 
         return services
             .AddPersistence(configuration)

@@ -25,6 +25,7 @@ public static class ModelConfigurationRegistry
         modelBuilder.ApplyConfiguration(new MaintenanceLogConfiguration(context));
         modelBuilder.ApplyConfiguration(new OdometerReadingConfiguration(context));
         modelBuilder.ApplyConfiguration(new ErasureReceiptConfiguration());
+        modelBuilder.ApplyConfiguration(new LoginAttemptCounterConfiguration());
     }
 
     /// <summary>Applica le configurazioni di tutte e 14 le entita'.</summary>

@@ -1,17 +1,15 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Roamly.Common.Security;
 
 namespace Roamly.Api.Common.Security;
 
 /// <summary>
-/// Rate limiting **per-account**, non per IP (SECURITY.md §6): la chiave e' l'identificativo
-/// tentato (email normalizzata), non l'indirizzo del chiamante. Il rate limiting per IP dipende
-/// dalla topologia di deploy (decisione #9, ancora aperta — <c>ForwardedHeaders</c> configurato sui
-/// proxy fidati) e resta deliberatamente fuori scope.
+/// Rate limiting **in-memory per-account** per le azioni sensibili di export e cancellazione
+/// account. Il login usa il distinto <see cref="ILoginAttemptRateLimiter"/> condiviso su SQL.
 /// <para>
-/// Implementazione in-memory: adatta a un singolo processo. Se Roamly scalasse a piu' istanze
-/// servirebbe uno store condiviso (Redis) — non necessario finche' il deploy resta a istanza
-/// singola (decisione #9 ancora aperta).
+/// Questa implementazione resta invariata per preservare soglie e semantica dei flussi esistenti;
+/// non va riutilizzata per introdurre limiti al login.
 /// </para>
 /// </summary>
 public interface IPerAccountRateLimiter
@@ -21,7 +19,7 @@ public interface IPerAccountRateLimiter
     bool TryAcquire(string accountKey);
 }
 
-/// <summary>Soglie del limiter, sovrascrivibili da configurazione (obbligatorio per non rendere flaky i test — vedi <c>SECURITY.md</c> §6.3).</summary>
+/// <summary>Soglie delle azioni sensibili, sovrascrivibili da configurazione.</summary>
 public sealed class PerAccountRateLimiterOptions
 {
     /// <summary>Numero massimo di tentativi ammessi nella finestra.</summary>

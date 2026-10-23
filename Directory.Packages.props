@@ -9,6 +9,8 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.13" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
     <!--
       Identity fornisce ApplicationUser/AspNetUsers, il principal di tutte le FK OwnerId.
       Versione allineata a EF Core 10.0.13: le due famiglie di pacchetti condividono la
@@ -32,6 +34,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Integration test">
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Respawn" Version="7.0.0" />
     <!--

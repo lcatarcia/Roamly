@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Roamly.Infrastructure\Roamly.Infrastructure.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
   </ItemGroup>
 
   <PropertyGroup>

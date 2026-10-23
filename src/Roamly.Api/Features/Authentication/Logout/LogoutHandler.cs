@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Identity;
+using Roamly.Api.Common.Http;
 using Roamly.Infrastructure.Identity;
 
 namespace Roamly.Api.Features.Authentication.Logout;
 
 /// <summary>Logout: invalida il cookie di sessione. Idempotente — funziona anche se gia' disconnesso.</summary>
+[ProtocolOutcomeHandler("Il logout idempotente completa il protocollo senza rifiuti di dominio.")]
 internal sealed class LogoutHandler
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
