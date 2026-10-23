@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Roamly.Api.Common.Http;
 
 namespace Roamly.Api.Common.Startup;
@@ -24,6 +25,8 @@ public static class HttpRegistration
         // Validazione nativa .NET 10 (R48), non FluentValidation: produce HttpValidationProblemDetails
         // con "errors" chiavizzato sui nomi JSON dei campi.
         services.AddValidation();
+        services.ConfigureHttpJsonOptions(options =>
+            options.SerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase);
 
         return services;
     }

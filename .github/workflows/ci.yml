@@ -165,6 +165,8 @@ jobs:
       # velocita', punto 2) lo vieta finche' non e' misurato, perche' ripristinare ~2,3 GB
       # dalla cache GHA puo' costare quanto il pull da registro.
       - name: Test L1 e L2 - Roamly.IntegrationTests
+        # Include R51: confronto HTTP di /openapi/v1.json con lo snapshot, nel test host
+        # containerizzato previsto dal fallback L2 di ADR-0005 §6.
         run: dotnet test --project tests/Roamly.IntegrationTests --configuration $CONFIGURATION --no-build
 
       # La fixture riversa le misure in TestResults/blocco4-tempi.txt perche' con

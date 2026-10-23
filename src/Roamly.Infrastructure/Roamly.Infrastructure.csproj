@@ -7,6 +7,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Azure.Storage.Blobs" />
     <!--
       Serve a RoamlyDbContextFactory (IDesignTimeDbContextFactory), che vive qui e non in un
       progetto separato. Il pacchetto e' developmentDependency nel suo nuspec: NuGet gli assegna

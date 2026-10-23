@@ -1,6 +1,6 @@
 # Roamly — Domain Context e ubiquitous language
 
-Stato: **modello deciso** · Ultimo aggiornamento: 2026-09-24 · Owner: @archimedes
+Stato: **modello deciso; estensione del Manuale tecnico del Camper in progettazione** · Ultimo aggiornamento: 2026-10-21 · Owner: @archimedes
 Origine: `docs/archive/Roamly_Planning_2026-09-24.md` §6 Core Domain
 
 > ✅ Il modello di dominio è **chiuso e approvato** (sessione di domain modeling del 2026-09-24).
@@ -26,6 +26,7 @@ User
  │         ├── TripStop  (→ SavedPlace, opzionale)
  │         ├── Checklist ── ChecklistItem
  │         └── JournalEntry (→ TripStop, opzionale)
+ │              └── JournalEntryAttachment
  │
  └── SavedPlace                                ← Phase 3 (figlio diretto di User)
 
@@ -41,8 +42,8 @@ Questo non è più un'osservazione ma un **vincolo implementato**: ogni entità 
 
 ## 2. Entità
 
-> **Legenda di fase.** 🟢 **Phase 1** = nella prima migration. 🟡 **Phase 2+** = topologia decisa ora, tabella creata dopo. ⚪ **Phase 6** = condizionata all'arrivo della community.
-> La distinzione tra *decidere la topologia* e *creare la tabella* è deliberata: vedi §2.6.
+> **Legenda di fase.** 🟢 **Phase 1** = nella migration iniziale. 🟡 **Phase 2** = schema applicativo introdotto dalla migration `AddTripsAndTripStops`; 🟡 **Phase 3/4** = topologia decisa, tabelle da introdurre con la rispettiva fase (salvo `SavedPlace`, presente solo come supporto strutturale alla FK di `TripStop`). ⚪ **Phase 6** = condizionata all'arrivo della community.
+> La distinzione tra *schema applicativo runtime* e *schema completo di verifica* è deliberata: vedi §2.6.
 
 ### 2.0 Convenzioni valide per **ogni** entità owned
 
@@ -139,8 +140,9 @@ PK: `(OwnerId, Id)` CLUSTERED — è padre di 6 entità e la sua PK basta a tutt
 
 Oggetti e accessori presenti sul camper: pannelli solari, batteria, inverter, bombole, portabici, tendalino, livellatori.
 
-`Id`, `OwnerId`, `CamperId`, `Name nvarchar(60)` NOT NULL, `Category tinyint`, `Notes nvarchar(500)?`, `InstalledOnUtc date?`, `CreatedAtUtc`.
+`Id`, `OwnerId`, `CamperId`, `Name nvarchar(60)` NOT NULL, `Category tinyint`, `Notes nvarchar(500)?`, `InstalledOnUtc date?`, `CreatedAtUtc`, `UpdatedAtUtc?`, `RowVersion rowversion`.
 FK: `(OwnerId, CamperId) → Camper(OwnerId, Id)` **CASCADE**. Indice `(OwnerId, CamperId)`.
+`RowVersion` protegge modifica e rimozione tramite `ETag`/`If-Match` (ADR-0005, R49); ogni modifica valorizza `UpdatedAtUtc`.
 
 #### `MaintenanceItem` — owned, figlio di `Camper`, **CASCADE**
 
@@ -181,7 +183,25 @@ NextDueOdometerKm     = LastServiceOdometerKm + IntervalKm      se IntervalKm !=
 
 Un item **senza storico** ha `LastService*` a `NULL`, non produce reminder e mostra lo stato "mai eseguito". **Non si inventa una data di partenza.**
 
-**`bindingAxis` e `severity` (`Ok | DueSoon | Overdue`) sono calcolati dal server**, mai dal client: due implementazioni della stessa regola divergono sempre, e il reminder job risponderebbe diversamente dalla UI.
+**Ricalcolo con log retrodatati (decisione approvata 2026-10-05).** `LastService*` e `NextDue*` derivano dal log con `PerformedOnUtc` più recente; a parità di giorno prevale quello registrato più tardi (`CreatedAtUtc`, poi `Id` come spareggio stabile). Un log inserito in ritardo resta nello storico ma non fa retrocedere la scadenza corrente. Se il log prevalente non ha chilometraggio, `LastServiceOdometerKm` e `NextDueOdometerKm` restano `NULL`.
+
+**Collisione tra letture giornaliere e log (decisione approvata 2026-10-05).** Rimane una sola `OdometerReading` per camper e giorno. Se il log contiene km e quel giorno esiste già una lettura con lo stesso valore, la lettura viene riutilizzata senza cambiarne `Source`; se non esiste, viene creata con `Source = Service`. Se il valore differisce, l'intera registrazione è rifiutata: nessun `MaintenanceLog`, `OdometerReading` o ricalcolo parziale viene salvato; l'API risponde `409 Conflict`.
+
+**Limiti della scadenza derivata (decisione approvata).** Se la scadenza temporale supera `DateOnly.MaxValue` o quella chilometrica supera `int.MaxValue`, l'intera registrazione è rifiutata con `400`; non si salva il log né l'eventuale lettura odometrica. Le scritture concorrenti sullo stesso `MaintenanceItem` sono serializzate da un applock SQL Server esclusivo e transaction-owned, identificato da `(OwnerId, MaintenanceItemId)`, prima di inserire il log. Poiché l'entità può essere stata letta prima di acquisire il lock, un conflitto `RowVersion` resta possibile: l'operazione viene ricaricata e riprovata una sola volta; se persiste, l'API restituisce `409` e il client può ripetere il POST con lo stesso ID.
+
+Gli stati di scadenza sono calcolati dal server, mai dal client. La dashboard MVP espone **stati indipendenti per asse temporale e chilometrico**: non sceglie un `bindingAxis`, non produce previsioni e non sintetizza uno stato complessivo.
+
+##### Stati mostrati dalla dashboard camper (decisione approvata 2026-10-05)
+
+`GET /api/v1/campers/{camperId}/dashboard` restituisce il camper, la lettura datata più recente e le manutenzioni attive. Ogni manutenzione ha due stati separati, uno per tempo e uno per chilometri; non esiste un asse vincolante o un `Ok` complessivo.
+
+- `DueSoon`: soglia entro **30 giorni di calendario** sull'asse tempo oppure entro **1.000 km** sull'asse chilometri.
+- `Overdue`: soglia temporale o chilometrica raggiunta o superata.
+- Se la lettura contachilometri manca o ha più di **90 giorni**, lo stato dell'asse km è `Unknown`; il dato è mostrato solo come lettura datata, marcata come non attuale. Non si stima il chilometraggio.
+- Una manutenzione senza storico resta **«mai eseguito»** e non genera uno stato di scadenza né un reminder.
+- Uno stato `Ok` è ammesso solo sul singolo asse verificabile; non si deduce una condizione complessiva dal solo asse temporale quando quello km è ignoto.
+
+La dashboard MVP non mostra spese, viaggi o altri widget di Phase 2+. Nessun dato dimostrativo o seed viene aggiunto da questa slice.
 
 > ⚠️ **Costo del denormalizzato**: `NextDue*` possono divergere se qualcuno scrive fuori dal metodo di dominio. Il database non protegge da questo: lo protegge un test di ricalcolo (@argus).
 > ⚠️ **Il reminder per km non scatta da solo.** Un camper che percorre 20.000 km senza che l'utente registri una lettura non produce alcun avviso km — conseguenza inevitabile del non voler stimare (R25).
@@ -199,7 +219,7 @@ FK: `(OwnerId, MaintenanceItemId) → MaintenanceItem(OwnerId, Id)` **CASCADE**.
 
 > **Il costo dell'intervento vive qui, non in `Expense`.** Di conseguenza **la categoria `Maintenance` non esiste** tra le categorie di `Expense`: evita il doppio inserimento e il doppio conteggio. Il Cost Management legge da **entrambe** le fonti e le somma per valuta.
 
-Ogni `MaintenanceLog` con `OdometerKm` valorizzato **genera automaticamente** un `OdometerReading` con `Source = Service`.
+Un `MaintenanceLog` con `OdometerKm` valorizzato riusa una lettura dello stesso giorno e valore senza cambiarne `Source`; se manca la lettura, ne crea una con `Source = Service`. Una lettura discordante rifiuta atomicamente la registrazione (vedi decisione approvata sopra).
 
 #### `OdometerReading` — owned, figlio di `Camper`, **CASCADE**
 
@@ -214,9 +234,9 @@ Indice `(OwnerId, CamperId, TakenOnUtc DESC)` — è insieme la query "lettura c
 > ⚠️ Una lettura **senza data mente**: "94.120 km" inseriti a marzo sembrerebbero di oggi. Per questo non esiste un campo `CurrentOdometerKm` su `Camper`.
 > **Nessuna estrapolazione.** Se la lettura più recente è vecchia, il server la espone com'è (con la sua data) e la marca `stale` oltre i 90 giorni. Se non esiste alcuna lettura, il `Ribbon` degrada sul solo asse temporale (R25). La qualifica del dato è lecita; la stima no.
 
-### 2.3 Entità 🟡 **Phase 2+** — topologia decisa ora, tabella creata dopo
+### 2.3 Entità Phase 2+ — topologia e perimetro schema
 
-> Queste entità **non entrano nella prima migration** (§2.6). Ciò che va fissato adesso è la *topologia*: cambiare una FK composita dopo significa riscrivere lo schema.
+> Queste entità **non entrano nella migration iniziale** (§2.6). La topologia resta normativa: cambiare una FK composita dopo significa riscrivere lo schema. `Trip`, `TripStop` ed `Expense` sono nel modello applicativo; `SavedPlace` ha una tabella strutturale per la FK opzionale, senza feature pubblica fino alla Phase 3.
 
 #### `Expense` — owned, figlio di `Camper` (**obbligatorio**) e di `Trip` (**opzionale**) — Phase 2
 
@@ -234,6 +254,7 @@ Argomento: la metrica portante del prodotto è il **costo reale del camper** (to
 | `IncurredOnUtc` | `date` | no | |
 | `Description` | `nvarchar(200)` | sì | |
 | `OdometerKm` | `int` | sì | serve al €/km |
+| `RowVersion` | SQL Server `rowversion` | — | concorrenza indipendente sulle operazioni di update/delete |
 
 Indici: `(OwnerId, CamperId, IncurredOnUtc)`, `(OwnerId, TripId) WHERE TripId IS NOT NULL`.
 
@@ -246,11 +267,15 @@ Conseguenze della scelta:
 > ⚠️ Lo sganciamento è **codice applicativo** nell'handler `DeleteTrip`, non un vincolo di database: `ON DELETE SET NULL` è **vietato** (§5.2). Quindi è dimenticabile, e va coperto da test.
 > ⚠️ **Tradeoff accettato**: non si può registrare una spesa senza camper (la spesa fatta prima di possedere il mezzo, o l'assicurazione di un camper venduto). Chi non ha un camper non usa Roamly.
 
-#### `Trip` — owned, figlio di `Camper` (**obbligatorio**), **CASCADE** — Phase 2
+#### `Trip` — owned, figlio di `Camper` (**obbligatorio**), **CASCADE** — Phase 2 (schema introdotto)
 
 Un viaggio, dalla pianificazione al consuntivo. `CamperId` obbligatorio è conseguenza diretta del grafo di cancellazione e del principio "camper-first".
 
-Campi: `Id`, `OwnerId`, `CamperId`, `Name`, `Status tinyint`, `PlannedStartOnUtc?`, `PlannedEndOnUtc?`, `ActualStartOnUtc?`, `ActualEndOnUtc?`, `CreatedAtUtc`, `UpdatedAtUtc`, `RowVersion`.
+Campi: `Id`, `OwnerId`, `CamperId`, `Name`, `Status tinyint`, `PlannedStartOnUtc?`, `PlannedEndOnUtc?`, `ActualStartOnUtc?`, `ActualEndOnUtc?`, `EstimatedDistanceKm decimal(18,2)?`, `EstimatedDurationMinutes int?`, `FuelPricePerLiter Money?`, `CreatedAtUtc`, `UpdatedAtUtc`, `RowVersion`.
+
+Le due stime di distanza e durata sono **facoltative e indipendenti**: ciascuna può essere assente senza l'altra. Sono inserite manualmente dall'utente e descrivono l'intero `Trip`, non le singole tappe. La distanza usa `decimal(18,2)`; la durata è un numero intero di minuti. Non sono calcolate da un provider di routing né ricalcolate automaticamente.
+
+La stima carburante v1 è soltanto il costo del carburante, calcolato localmente dalla UI e mai persistito: `litri = EstimatedDistanceKm × Camper.AverageConsumptionLPer100Km / 100`; `costo = litri × FuelPricePerLiter.Amount`. Prezzo e risultato mantengono la valuta esplicita di `FuelPricePerLiter` (`Money`); non si convertono valute. Il prezzo è facoltativo e resta sul Trip per ricalcolare il risultato con il profilo Camper corrente; quando presente, importo e valuta sono entrambi valorizzati. Una stima completa richiede distanza, consumo medio e prezzo: se uno manca, non si mostra importo o stima parziale. È visibile soltanto per `Planned` e `Active`. Per `FuelKind.Electric` la UI dichiara la stima non disponibile; non si convertono kWh. La v1 copre alimentazioni liquide, non routing né stime di altre categorie.
 PK: `(OwnerId, Id)` CLUSTERED — referenziata dalle FK composite di `TripStop`, `Checklist`, `JournalEntry`, `Expense`.
 
 **Stati: enum a 4 valori** — `Planned`, `Active`, `Completed`, `Cancelled`.
@@ -280,11 +305,13 @@ PK: `(OwnerId, Id)` CLUSTERED — referenziata dalle FK composite di `TripStop`,
 
 Invarianti: `Active` richiede `ActualStartOnUtc`; `Completed` richiede `ActualEndOnUtc`; un `Cancelled` non accetta nuove spese né nuove tappe.
 
+Le transizioni sono esposte da `POST /api/v1/trips/{tripId}/transitions`, con `If-Match` obbligatorio e stato di destinazione nel body. Le date effettive sono assegnate dal server usando `TimeProvider` in UTC: `Planned → Active` imposta `ActualStartOnUtc` alla data UTC corrente; `Active → Completed` imposta `ActualEndOnUtc`; `Completed → Active` conserva l'inizio originale e azzera la fine. Ogni altra coppia, incluso lo stesso stato, è rifiutata senza mutare viaggio o date.
+
 Implementazione: `enum byte` + metodo di dominio `Trip.TransitionTo(status)` con `switch` sulle coppie legali + **test parametrico sulla matrice 4×4**. **Nessuna libreria di state machine**: per un grafo con 5 archi aggiungerebbe un vocabolario, una dipendenza e un punto di configurazione senza restituire nulla.
 
 > ⚠️ Gli stati **non vanno derivati dalle date** ("è in corso se oggi è tra start ed end"). Uno stato derivato cambia da solo mentre l'utente non guarda, e il journal e le metriche di prodotto hanno bisogno di un **atto** esplicito da tracciare (`TripCompleted`).
 
-#### `TripStop` — owned, figlio di `Trip`, **CASCADE** — Phase 2
+#### `TripStop` — owned, figlio di `Trip`, **CASCADE** — Phase 2 (schema introdotto)
 
 Una **tappa di un viaggio specifico**, con posizione e momento propri. Appartiene a un solo viaggio: non è un luogo riusabile.
 
@@ -294,7 +321,11 @@ PK: `(OwnerId, Id)` CLUSTERED — referenziata dalla FK composita opzionale di `
 
 La posizione è uno **snapshot**: se il `SavedPlace` collegato cambia o sparisce, la tappa resta leggibile.
 
-#### `SavedPlace` — owned, figlio **diretto di `User`**, `NO ACTION` — Phase 3
+**Confine di concorrenza R49 approvato dall'utente (2026-10-07).** `PUT /api/v1/trips/{tripId}` sostituisce atomicamente i campi pianificabili di `Trip` e i campi modificabili delle sue tappe; il rowversion appartiene al **Trip aggregate**, non a ogni riga figlia. `TripStop` non ha un token autonomo né richiede una migration per `RowVersion`: ogni PUT aggiorna `Trip.UpdatedAtUtc` nella stessa `SaveChanges`, anche quando cambia solo una tappa, così `Trip.RowVersion` avanza e protegge l'intera sostituzione. L'ordine è l'ordine dell'array; l'ID di ogni tappa mantenuta va inviato, gli ID esistenti assenti dall'array indicano rimozione e una tappa senza ID è nuova. R49 L0 verifica il root Trip con `IsConcurrencyToken`/`ValueGenerated.OnAddOrUpdate` e l'assenza di un endpoint indipendente per `TripStop`; R49 L2 verifica `428`, `412`, `200` con ETag nuovo, incluso l'update limitato a una tappa.
+
+La rimozione di una tappa collegata a `JournalEntry` è rifiutata con `409` e annulla l'intero PUT; la voce di diario non viene sganciata né eliminata. `JournalEntry` non è nel modello runtime Phase 2, quindi l'API Phase 2 non può ancora incontrare questo vincolo; la FK `NO ACTION` è nel solo schema completo e la traduzione mirata del suo errore SQL resta necessaria quando la tabella entrerà nel runtime.
+
+#### `SavedPlace` — owned, figlio **diretto di `User`**, `NO ACTION` — Phase 3 (tabella strutturale introdotta in Phase 2)
 
 > **`Place` non esiste più come entità unica.** Era ambiguo perché erano **due cose diverse chiamate con lo stesso nome**:
 > il *fatto geografico* ("il campeggio X è a queste coordinate") non è un dato personale; **il fatto che io l'abbia salvato, valutato o visitato lo è** — ed è esattamente ciò che l'utente si aspetta sparisca alla cancellazione.
@@ -334,10 +365,30 @@ FK: `(OwnerId, TripId) → Trip` **CASCADE**; `(OwnerId, TripStopId) → TripSto
 
 > 🔴 **La seconda FK è `NO ACTION` per obbligo, non per stile.** `Trip → JournalEntry` diretto e `Trip → TripStop → JournalEntry` sono due percorsi verso la stessa tabella: se entrambi fossero in cascade, la migration fallirebbe con l'errore **1785**. Vedi §5.2 caso (c).
 
+#### `JournalEntryAttachment` — owned, figlio di `JournalEntry`, **CASCADE** — Phase 2
+
+Un'immagine originale allegata a una singola voce del Journal. I byte sono in Azure Blob Storage; SQL conserva solo i metadati owner-scoped. Il nome del file non è un identificatore né una chiave di storage.
+
+Campi: `Id`, `OwnerId`, `JournalEntryId`, `StorageKey nvarchar(512)`, `ContentType varchar(64)`, `SizeBytes bigint`, `CreatedAtUtc`.
+Chiave Blob: `{ownerId}/journal-entry-attachment/{journalEntryId}/{attachmentId}`. Formati ammessi JPEG, PNG e WebP; massimo 10 MiB per immagine e 10 immagini per voce. Gli originali e i metadati EXIF, incluse eventuali coordinate GPS, sono conservati. La decisione accetta esplicitamente l'assenza di scansione antimalware per l'uso personale attuale.
+FK: `(OwnerId, JournalEntryId) → JournalEntry(OwnerId, Id)` **CASCADE**.
+
+L'eliminazione della riga SQL non elimina da sola il blob: upload, eliminazione della singola immagine, eliminazione della voce e account erasure devono coordinare esplicitamente lo storage. Gli errori parziali devono essere rilevabili dalla riconciliazione F2; il job di account erasure conferma F7 prima di emettere la ricevuta.
+
 #### `Document` — owned, figlio di `Camper`, **CASCADE** — 🟡 Phase 4
 
 Documenti relativi al camper e al viaggio (libretto, assicurazione, revisione, ricevute). **Fuori dall'MVP per decisione esplicita**: introduce lo storage di file, che è un sottosistema a sé (e un secondo grafo di cancellazione, quello degli oggetti binari).
 Topologia prevista: `(OwnerId, CamperId) → Camper` **CASCADE**, più una FK opzionale `NO ACTION` verso `Trip` se servirà. La sua introduzione richiede di **rileggere §5 prima di scrivere la migration**.
+
+#### Manuale tecnico del Camper — semantica approvata, schema in attesa di ADR
+
+Il **manuale tecnico** è una fonte PDF associata a un solo `Camper`. Può essere caricato oppure indicato tramite un URL HTTPS diretto a un PDF pubblico; il file è conservato in storage privato e, se fornito, si conserva anche l'URL originale.
+
+Per ogni `Camper` esiste un solo manuale attivo. La sostituzione genera una nuova bozza di importazione; la fonte precedente e il suo insieme di misure restano archiviati. Alla conferma si attivano insieme il nuovo manuale e il suo **insieme completo di misure**, senza unione automatica con la versione precedente.
+
+La **bozza di importazione** contiene solo valori esplicitamente presenti nel PDF. L'utente li rivede e conferma prima di aggiornare il profilo; le unità sono normalizzate e i valori assenti restano vuoti nella bozza. Alla conferma, `Dimensions`, `Weights` e `Capacities` — i campi tipizzati delle misure principali — cambiano solo quando la bozza contiene un valore esplicito: un campo assente non cancella quello già presente sul `Camper`. Le misure puntuali aggiuntive sono dati strutturati persistenti del `Camper`, ciascuna con punto/area, valore, unità e pagina-fonte, oltre alla descrizione fedele al manuale.
+
+> La collocazione di questa funzione nel roadmap, la forma EF delle misure e il rapporto tra il manuale e `Document` non sono ancora decisi. Questo paragrafo fissa la semantica, non introduce una nuova entità né autorizza una migration. Prima dell'implementazione serve un ADR che applichi anche i requisiti file F1-F7 di ADR-0004.
 
 ### 2.4 Diagramma del modello
 
@@ -389,19 +440,19 @@ graph TD
 
 | Categoria | Entità |
 |---|---|
-| **Owned** (R1, export e erasure R8/R9) | 🟢 `Camper`, `Equipment`, `MaintenanceItem`, `MaintenanceLog`, `OdometerReading` · 🟡 `Trip`, `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `Expense`, `Document` · 🟡 `SavedPlace` |
+| **Owned** (R1, export e erasure R8/R9) | 🟢 `Camper`, `Equipment`, `MaintenanceItem`, `MaintenanceLog`, `OdometerReading` · 🟡 `Trip`, `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `JournalEntryAttachment`, `Expense`, `Document` · 🟡 `SavedPlace` |
 | **Non owned, whitelist R1/R10** | `ErasureReceipt` (motivazione in ADR-0004) · ⚪ `PublicPlace` (motivazione da scrivere in Phase 6) |
 | **Non entità** | `Money`, `Coordinates`, `Dimensions`, `Weights`, `Capacities` → complex type, colonne del padre, esportate col contenitore |
 | **Fuori da entrambi i grafi per costruzione** | catalogo dei seed (risorsa di codice, non tabella) |
 
-**Ordine di cancellazione derivato dal modello:** `MaintenanceLog` → `MaintenanceItem` → `OdometerReading` → `Equipment` → `ChecklistItem` → `Checklist` → `JournalEntry` → `Expense` → `TripStop` → `Trip` → `Document` → `SavedPlace` → `Camper` → utente.
+**Ordine di cancellazione derivato dal modello:** `MaintenanceLog` → `MaintenanceItem` → `OdometerReading` → `Equipment` → `ChecklistItem` → `Checklist` → `JournalEntryAttachment` → `JournalEntry` → `Expense` → `TripStop` → `Trip` → `Document` → `SavedPlace` → `Camper` → utente. Lo sweep degli oggetti Blob owner-prefixed precede la scrittura della `ErasureReceipt`.
 Le CASCADE farebbero gran parte del lavoro da sole; **il job non deve dipendere da questo**: deve derivare l'ordine dal modello e verificare `COUNT(*) = 0` (R9).
 
-### 2.6 Perimetro della prima migration
+### 2.6 Perimetro delle migration e dei contesti
 
-**La prima migration crea solo le tabelle 🟢 Phase 1** (`Camper`, `Equipment`, `MaintenanceItem`, `MaintenanceLog`, `OdometerReading`, `ErasureReceipt`, più le colonne ADR-0004 su Identity). Le entità 🟡 hanno **topologia decisa e documentata qui, ma nessuna tabella**: tabelle vuote in produzione per sei mesi sono debito, non preparazione.
+**La migration iniziale crea solo le tabelle Phase 1** (`Camper`, `Equipment`, `MaintenanceItem`, `MaintenanceLog`, `OdometerReading`, `ErasureReceipt`, più le colonne ADR-0004 su Identity). La migration applicativa `AddTripsAndTripStops` aggiunge `Trip` e `TripStop` e `SavedPlace` come supporto strutturale della FK opzionale; non espone ancora feature Places. La migration additiva `ActivateTripChecklists` attiva `Checklist` e `ChecklistItem` con la catena CASCADE già definita in §5. `RoamlyDbContext` rappresenta lo schema applicativo corrente, compresa la gestione manuale delle checklist; `FullSchemaDbContext` continua invece a includere tutte le entità decise, anche quelle senza tabella runtime.
 
-**Insieme però va scritto subito un test "schema completo"**: costruisce l'**intero** modello (Phase 1 + Phase 2/3) su un **SQL Server reale in container** e verifica che lo schema si crei. Serve a far emergere **il primo giorno** i due casi 1785 di §5.2, in un momento in cui costano un'ora invece di una settimana. Questo test non produce migration in repo.
+**Il test "schema completo"** costruisce l'intero modello su un SQL Server reale in container e verifica che lo schema si crei. I test delle migration verificano separatamente sia un database vuoto sia l'upgrade dalla Phase 1 allo schema applicativo. Il test dello schema completo non produce migration in repo.
 
 > ⚠️ Senza questo test, §5 resta una dimostrazione **analitica**: l'errore 1785 **non emerge in `migrations add`**, emerge all'esecuzione.
 
@@ -495,7 +546,7 @@ Le lacune **chiuse** restano qui con la decisione presa e il motivo — non veng
 
 ### 3.6 Ricorrenza di `MaintenanceItem` — ✅ **chiusa**
 
-**Decisione: regola persistita (`IntervalKm?` / `IntervalMonths?`, almeno uno) + stato di scadenza denormalizzato (`NextDueOnUtc`, `NextDueOdometerKm`)** ricalcolato dal dominio a ogni `MaintenanceLog`. `bindingAxis` e `severity` **calcolati dal server**. Definizione e formule in §2.2.
+**Decisione: regola persistita (`IntervalKm?` / `IntervalMonths?`, almeno uno) + stato di scadenza denormalizzato (`NextDueOnUtc`, `NextDueOdometerKm`)** ricalcolato dal dominio a ogni `MaintenanceLog`. Le soglie sono verificate dal server indipendentemente per ciascun asse, secondo §2.2; la dashboard non sceglie un asse vincolante.
 
 *Perché denormalizzare:* il widget "prossime manutenzioni" e il reminder job **ordinano per scadenza**. Ricalcolarla in query significa una sottoquery sull'ultimo log per ogni item, oppure un calcolo in memoria su tutti gli item.
 
@@ -537,15 +588,13 @@ Le lacune **chiuse** restano qui con la decisione presa e il motivo — non veng
 
 > ✅ **CHIUSA. Decisione: entità `OdometerReading` datata** (§2.2), alimentata **anche automaticamente** da ogni `MaintenanceLog` con `OdometerKm`.
 
-Il `Ribbon` mostra quanto manca alla prossima manutenzione lungo **due assi: tempo e chilometri**. L'asse temporale si calcola da solo; l'asse km richiede di sapere a quanti chilometri è il camper **adesso**.
+La dashboard verifica separatamente le soglie di manutenzione per **tempo e chilometri**. L'asse km richiede una lettura datata sufficientemente recente; non si deduce un dato attuale da una lettura vecchia.
 
 *Perché un'entità e non un campo:* l'argomento decisivo **non è il `Ribbon`**. I widget "km annuali" e il "€/km" del Cost Management richiedono *comunque* letture **datate**: un campo `CurrentOdometerKm` su `Camper` non è più economico, è solo posticipato — e **senza data il dato mente**. Con l'entità, lo scenario "conosco solo i km all'ultimo intervento" diventa un **caso particolare** del modello (tutte le letture con `Source = Service`), non un modello alternativo.
 
-*Scartato:* il fallback puro R25 (nessuna lettura, solo asse temporale) — svuoterebbe di metà contenuto il componente identitario dell'MVP.
+*Decisione aggiornata per la dashboard MVP (2026-10-05):* non si degrada a uno stato complessivo basato sul solo asse temporale. Se la lettura manca o è più vecchia di 90 giorni, l'asse km è **non verificabile**; se esiste una lettura vecchia, viene mostrata solo insieme alla sua data e alla qualifica di dato non attuale.
 
-**Dove vive il calcolo: nel server**, in un read model dedicato che espone `from`, `to`, `current` (con `asOfUtc` obbligatorio), `bindingAxis`, `kmRemaining`, `daysRemaining`, `severity` **già risolti**. Il React riceve numeri e li disegna.
-- `current` **assente** se non esiste alcuna lettura → il componente degrada all'asse temporale senza alcuna logica di dominio nel client;
-- **nessuna estrapolazione** (R25): se `asOfUtc` è più vecchia di **90 giorni**, il server marca `currentStale: true`. È una qualifica del dato, non una stima.
+**Il server** espone nel read model della dashboard il camper, l'ultima lettura con data e qualifica `isStale`, e gli stati separati `timeAxis` e `odometerAxis` per ogni manutenzione. Le soglie imminenti sono entro 30 giorni o 1.000 km; raggiunta la soglia lo stato è `Overdue`. La lettura è `isStale` quando è più vecchia di **90 giorni**. Nessun `bindingAxis`, previsione o stato complessivo viene inviato al client.
 
 *Costo dichiarato:* l'utente deve compiere un gesto in più. La mitigazione (lettura automatica dal log di manutenzione) copre lo scenario minimo ma **non rende il `Ribbon` "vivo" tra un intervento e l'altro**.
 
@@ -595,6 +644,9 @@ La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotne
 | Termine | Definizione (vale in DB, API e UI) | **Non** è |
 |---|---|---|
 | **`Camper`** | Il mezzo dell'utente con la sua anagrafica tecnica. Radice pratica del dominio: tutto ciò che Roamly misura pende da lui | un "profilo veicolo" dentro l'utente |
+| **Manuale tecnico del Camper** | Fonte PDF associata a un Camper; una sola versione è attiva e le precedenti restano archiviate insieme al rispettivo insieme di misure | un allegato generico del Journal |
+| **Bozza di importazione** | Valori espliciti estratti da un manuale, non applicati al profilo finché l'utente non li rivede e conferma | un aggiornamento automatico del Camper |
+| **Insieme di misure del Camper** | Versione completa delle misure puntuali derivate da un singolo manuale, con valore, unità e pagina-fonte; si attiva insieme al manuale | un'unione implicita di misure provenienti da manuali diversi |
 | **`Equipment`** | Accessorio installato o trasportato sul camper | una spesa |
 | **`MaintenanceItem`** | La **regola** di una manutenzione ricorrente, con la sua prossima scadenza. Vive finché vive il camper | l'intervento eseguito |
 | **`MaintenanceLog`** | Il **fatto** che un intervento è stato eseguito a una data e a un chilometraggio, con il suo costo. Immutabile | la regola |
@@ -605,11 +657,12 @@ La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotne
 | **`PublicPlace`** *(Phase 6)* | Il **fatto geografico** condiviso tra utenti, soggetto su cui aggregare i rating. Non owned, in whitelist | un luogo salvato |
 | **`Checklist`** | Lista di controllo legata a un viaggio **e a un momento** (`Departure`/`Arrival`/`Storage`) | un promemoria generico |
 | **`JournalEntry`** (*Journal*) | Una nota o un ricordo del viaggio, opzionalmente ancorata a una tappa. Il "diario" è la collezione, non l'entità | il viaggio |
+| **`JournalEntryAttachment`** | Immagine originale appartenente a una sola `JournalEntry`, con metadati owner-scoped in SQL e byte in Blob Storage | un `Document` del camper |
 | **`Expense`** | Un esborso attribuito a un camper e, facoltativamente, a un viaggio. **Non include i costi di manutenzione**, che vivono su `MaintenanceLog` | un preventivo |
 | **`Money`** | Importo **+ valuta**. Somme e differenze ammesse **solo tra valute uguali** | un `decimal` |
 | **`Coordinates`** | Latitudine/longitudine in gradi decimali **WGS84**, complex type nullable | una geometria indicizzabile spazialmente |
 | **`Origin`** | La **provenienza persistita e immutabile** di una riga: inserita dall'utente (`User`) o proposta dal catalogo (`Seed`). Il badge "suggerita" in UI si spegne alla prima modifica, ma `Origin` non cambia mai | uno stato di UI |
-| **`bindingAxis`** | Quale delle due soglie (km o tempo) scade prima. **Risolto dal server** | una scelta della UI |
+| **Stato per asse** | Verifica autonoma della soglia temporale o chilometrica di una manutenzione; la dashboard non confronta gli assi per sceglierne uno | un asse vincolante o uno stato complessivo |
 | **`Ribbon`** | Il componente che rappresenta un asse (km/tempo in Phase 1, geografico in Phase 3) | una progress bar |
 | **complex type** | Value object mappato a colonne della tabella padre, **senza identità propria**. Non compare tra le entità del modello | un owned type |
 
@@ -644,15 +697,16 @@ La dimostrazione di §5.2 è **analitica**. L'errore 1785 **non emerge in `dotne
 | 15 | `ChecklistItem.(OwnerId,ChecklistId) → Checklist` | checklist→item | **CASCADE** | 1 |
 | 16 | `JournalEntry.(OwnerId,TripId) → Trip` | trip→journal | **CASCADE** | 1 |
 | 17 | `JournalEntry.(OwnerId,TripStopId) → TripStop` | stop→journal | **NO ACTION** | no |
-| 18 | `Expense.(OwnerId,CamperId) → Camper` | camper→expense | **CASCADE** | 1 |
-| 19 | `Expense.(OwnerId,TripId) → Trip` | trip→expense | **NO ACTION** | no |
-| 20 | `SavedPlace.OwnerId → AspNetUsers.Id` | user→place | **NO ACTION** | no |
-| 21 | `Document.(OwnerId,CamperId) → Camper` *(Phase 4)* | camper→document | **CASCADE** | 1 |
+| 18 | `JournalEntryAttachment.(OwnerId,JournalEntryId) → JournalEntry` | journal→attachment | **CASCADE** | 1 |
+| 19 | `Expense.(OwnerId,CamperId) → Camper` | camper→expense | **CASCADE** | 1 |
+| 20 | `Expense.(OwnerId,TripId) → Trip` | trip→expense | **NO ACTION** | no |
+| 21 | `SavedPlace.OwnerId → AspNetUsers.Id` | user→place | **NO ACTION** | no |
+| 22 | `Document.(OwnerId,CamperId) → Camper` *(Phase 4)* | camper→document | **CASCADE** | 1 |
 | — | `ErasureReceipt` | — | **nessuna FK** | — |
 
 Ogni entità owned ha inoltre la propria FK `OwnerId → AspNetUsers`, sempre **NO ACTION**, anche dove non elencata sopra.
 
-> ⚠️ **"21" è il numero di righe di questa tabella, non il numero di FK del modello.** Sopra sono elencate solo **7** delle **13** FK `OwnerId` (mancano quelle di `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `Expense`, `Document`). Il modello EF costruito nel Blocco 2 contiene **27 FK di dominio** = 13 `OwnerId` + 14 verso il padre, più 6 FK interne a Identity, per un totale di **33** in `FullSchemaDbContext`. Un verificatore che asserisse `== 21` sarebbe rosso a torto. *Misurato sul modello, 2026-09-25.*
+> ⚠️ **"22" è il numero di righe di questa tabella, non il numero di FK del modello.** Sopra sono elencate solo **7** delle **14** FK `OwnerId` (mancano quelle di `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `JournalEntryAttachment`, `Expense`, `Document`). Il modello EF completo contiene **29 FK di dominio** = 14 `OwnerId` + 15 verso il padre, più 6 FK interne a Identity, per un totale atteso di **35** in `FullSchemaDbContext`.
 
 ### 5.2 Dimostrazione: nessuna coppia con due percorsi
 

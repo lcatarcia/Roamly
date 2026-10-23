@@ -4,9 +4,11 @@
     <ProjectReference Include="..\Roamly.TestSupport\Roamly.TestSupport.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Respawn" />
     <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers" />
   </ItemGroup>
   <ItemGroup>
     <!-- Isolamento G1 (ADR-0009): una sola collection, nessuna parallelizzazione sul database. -->

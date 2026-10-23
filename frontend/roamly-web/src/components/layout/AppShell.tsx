@@ -10,7 +10,7 @@ interface AppShellProps {
 /**
  * Involucro dell'intera app: fondo/testo dai token semantici (mai letterali,
  * R12), header minimale con il toggle di tema. Nessuna navigazione qui:
- * l'MVP di Phase 0 e' solo la schermata di login, la navigazione entra
+ * Phase 0 comprende accesso, registrazione e conferma email; la navigazione entra
  * in Phase 1 (1.8, bottom nav mobile).
  */
 export function AppShell({ children }: AppShellProps) {

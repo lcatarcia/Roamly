@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 
 import { loadThemeTokens, resolveLiteralHex } from './lib/theme-tokens.mjs'
 import { contrastRatio } from './lib/wcag-contrast.mjs'
+import { validateManifestCounts } from './lib/contrast-coverage.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const MANIFEST_PATH = path.resolve(__dirname, '../src/design/contrast-pairs.json')
@@ -33,6 +34,11 @@ function main() {
   let failures = 0
   let warnings = 0
   const rows = []
+
+  for (const detail of validateManifestCounts(manifest)) {
+    failures++
+    rows.push({ id: 'R14', esito: 'ERRORE manifesto', dettaglio: detail })
+  }
 
   for (const pair of manifest.coppie) {
     let fgHex
@@ -101,14 +107,8 @@ function main() {
     `Totale coppie: ${manifest.coppie.length} (attese ${manifest.totale}) | falliti: ${failures} | avvisi: ${warnings}`,
   )
 
-  if (manifest.coppie.length !== manifest.totale) {
-    console.log(
-      `AVVISO: il manifesto dichiara totale=${manifest.totale} ma contiene ${manifest.coppie.length} voci. Aggiornare "totale"/"chiare"/"scure" o completare la matrice.`,
-    )
-  }
-
   if (failures > 0) {
-    console.error(`\ncontrast-check: FALLITO (${failures} coppie sotto soglia o con errore).`)
+    console.error(`\ncontrast-check: FALLITO (${failures} errori su soglie, manifesto o token).`)
     process.exit(1)
   }
 

@@ -19,6 +19,7 @@ public sealed class ExpenseConfiguration(RoamlyDbContextBase context) : IEntityT
         builder.Property(e => e.IncurredOnUtc).HasDate().IsRequired();
         builder.Property(e => e.Description).HasNvarchar(200);
         builder.Property(e => e.OdometerKm).HasColumnType("int");
+        builder.Property(e => e.RowVersion).IsRowVersion();
 
         builder.ComplexProperty(e => e.Amount, amount =>
         {

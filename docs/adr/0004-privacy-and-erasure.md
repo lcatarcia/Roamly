@@ -150,7 +150,7 @@ Resta ammesso — e solo lì — il **soft delete locale a una singola entità**
 2. **Export model-driven.** `GET /api/v1/me/export` produce uno **ZIP** contenente un file JSON per tipo di entità owned più un `manifest.json`. L'insieme delle entità esportate è **derivato da `DbContext.Model` a runtime**, non da una lista scritta a mano.
 3. **Hard delete con periodo di grazia di 30 giorni.** `POST /api/v1/me/deletion` registra la richiesta; l'account viene immediatamente reso inaccessibile; `DELETE /api/v1/me/deletion` la revoca entro la grazia. Alla scadenza, `AccountErasureJob` esegue la cancellazione **fisica** in ordine topologico e termina con l'emissione di una `ErasureReceipt`.
 4. **Regole invarianti R8, R9, R10**, ciascuna con un verificatore automatico, nella stessa forma di R1-R7 in `SECURITY.md` §2.2.
-5. **Vincoli F1-F7** dichiarati come **requisiti di verifica per la decisione #8**. `StoredFile` **non entra** nello schema MVP: i Documenti del camper sono fuori dalla Phase 1.
+5. **Vincoli F1-F7** dichiarati come **requisiti di verifica per la decisione #8**. `StoredFile` generico non entra nello schema MVP; i Documenti del camper restano fuori dalla Phase 1. La successiva decisione #8 e la relazione specifica `JournalEntryAttachment` sono in ADR-0010.
 6. **`ICurrentUser` acquisisce un quarto modo: `RunAsUser(userId, "motivo")`**, e la descrizione di `RunAsSystem` in ADR-0003 viene corretta (§Emendamento).
 7. **Nessuna tabella dei consensi, nessuna tabella `SecurityEvent`, nessun job di purge dei log.** Gli eventi di sicurezza vivono sulla **pipeline di logging strutturato**, con retention configurata **nel sink**.
 8. **Informativa** come contenuto statico versionato, con la versione vista registrata su `User` (`PrivacyPolicyVersionSeen`). Non è un consenso: è una traccia di quale testo l'utente ha visto.
@@ -170,7 +170,7 @@ Una regola di privacy che si applica "ricordandosi di aggiungere la nuova entit�
 |---|---|---|
 | **R8** | **Copertura universale.** Ogni entità owned presente in `DbContext.Model` deve essere **raggiungibile** sia dal grafo di export sia dal grafo di cancellazione. Entrambi i grafi sono **derivati dal modello a runtime**, mai da una lista letterale. Un'entità può essere esclusa **solo** iscrivendola a una whitelist esplicita con motivazione | test di convenzione sul modello EF (**bloccante**): confronta l'insieme delle entità owned con l'insieme coperto; una nuova entità non coperta e non in whitelist **rompe la build** |
 | **R9** | **Cancellazione effettiva.** Dopo l'esecuzione di `AccountErasureJob` per un utente, **nessuna riga con quel `OwnerId` sopravvive in alcuna tabella owned**, e nessuna FK resta pendente verso il principal cancellato | integration test "erase and sweep" (**bloccante**): popola un utente con almeno una riga per **ogni** tipo di entità owned usando i test data builder, esegue il job, poi **itera sul modello** verificando `COUNT(*) = 0` per ciascuna entità. Richiede un database reale → **dipende dalla #6** |
-| **R10** | **Residuo non personale.** Ciò che sopravvive alla cancellazione è **solo** non-owned e privo di identificatori diretti dell'utente: la `ErasureReceipt` (identificativo **pseudonimizzato**, timestamp, versione dello schema, conteggi) e i log di sicurezza, la cui retention è configurata nel sink. Nessuna entità non-owned può contenere un riferimento diretto a un utente cancellato | test di convenzione sulla **whitelist delle entità non-owned**: ogni entità non-owned deve essere dichiarata esplicitamente e annotata; il test fallisce se compare un'entità non-owned non dichiarata, o se `ErasureReceipt` acquisisce una FK verso `AspNetUsers` |
+| **R10** | **Residuo non personale.** Ciò che sopravvive alla cancellazione è **solo** non-owned e privo di identificatori diretti dell'utente: la `ErasureReceipt` (SHA-256 pseudonimizzato, timestamp, versione dello schema, conteggi) e i log di sicurezza, la cui retention è configurata nel sink. Nessuna entità non-owned può contenere un riferimento diretto a un utente cancellato | test di convenzione sulla **whitelist delle entità non-owned**: ogni entità non-owned deve essere dichiarata esplicitamente e annotata; il test fallisce se compare un'entità non-owned non dichiarata, o se `ErasureReceipt` acquisisce una FK verso `AspNetUsers` |
 
 La regola è soddisfatta quando **tutti e tre** i verificatori sono verdi, e **nessuno dei tre dipende dalla memoria di chi aggiunge un'entità**.
 
@@ -190,7 +190,7 @@ R8 e R10 sono **test di convenzione** (veloci, senza database, bloccanti in CI c
 
 ## Vincoli F1-F7 — requisiti di verifica per la decisione #8
 
-> **Questi non sono entità da creare ora.** `StoredFile` **non entra** nello schema MVP, perché i Documenti del camper sono fuori dalla Phase 1. F1-F7 sono i requisiti che la decisione #8 dovrà soddisfare, dichiarati **adesso** perché il momento in cui verranno ignorati è precisamente il momento in cui verranno scritti senza averli davanti.
+> `StoredFile` generico non entra nello schema MVP; i Documenti del camper sono fuori dalla Phase 1. F1-F7 sono i requisiti di accettazione del confine file/storage. La decisione #8 è stata chiusa da ADR-0010, che specifica la loro applicazione alle immagini di `JournalEntryAttachment`.
 
 | # | Vincolo | Perché |
 |---|---|---|
@@ -198,7 +198,7 @@ R8 e R10 sono **test di convenzione** (veloci, senza database, bloccanti in CI c
 | **F2** | **Riconciliazione bidirezionale.** Deve esistere un verificatore che rilevi sia gli oggetti senza riga corrispondente nel database, sia le righe che puntano a oggetti inesistenti | la coerenza tra due sistemi di persistenza senza transazione comune **non è mai garantita**: o è verificata, o è sperata |
 | **F3** | **Export incluso.** I binari devono entrare nello **stesso ZIP** dell'export model-driven, oppure l'export deve dichiarare esplicitamente URL a tempo con scadenza indicata nel manifest. Non due meccanismi diversi | un export che copre il database ma non le foto è un export che dice di essere completo e non lo è |
 | **F4** | **Hard delete reale lato provider.** La cancellazione deve rimuovere l'oggetto, non spostarlo in uno stato recuperabile che sopravvive al periodo di grazia | ⚠️ **requisito di verifica, non affermazione.** Il comportamento di soft delete, versioning, retention policy e recycle bin **varia per provider ed è spesso attivabile o attivo per default**. Non ho verificato il comportamento di alcun provider specifico, perché il provider non è scelto. **La #8 deve verificarlo esplicitamente e documentarlo**, non assumerlo |
-| **F5** | **Backup e retention dichiarati.** I backup del provider e del database **sopravvivono** alla cancellazione. La finestra va misurata, dichiarata nell'informativa e allineata alla grazia | ⚠️ è in parte un requisito legale/organizzativo, non tecnico. Il punto tecnico è che la finestra sia **nota**; ciò che se ne dichiara all'utente non è una mia competenza |
+| **F5** | **Backup e retention dichiarati.** Per Azure SQL sono approvati PITR di **7 giorni**, senza LTR, e ridondanza backup LRS; un restore a un punto precedente può ripristinare dati cancellati e richiede di rieseguire le erasure successive al punto ripristinato. Per lo storage file si applica la decisione specifica di [`ADR-0010`](0010-journal-image-storage.md): nessun backup Blob applicativo recuperabile, durabilità LRS dichiarata e hard delete da verificare sull'account. LRS non offre geo-restore. | ⚠️ È in parte un requisito legale/organizzativo, non tecnico: la retention effettiva va dichiarata nell'informativa; il testo dell'informativa non è un parere legale |
 | **F6** | **URL firmati owner-checked, a scadenza breve.** La firma si emette solo dopo una verifica di ownership fatta nell'applicazione; mai serving diretto dall'API; la durata della firma deve essere ≪ del periodo di grazia | eredità diretta di ADR-0003 §2.6: **R1-R7 si fermano al confine del database**, e ora R8-R10 si fermano allo stesso confine |
 | **F7** | **Cancellazione idempotente e osservabile.** Lo sweep dello storage deve poter essere rieseguito senza effetti collaterali, e un fallimento parziale deve essere visibile: **la `ErasureReceipt` non viene emessa finché lo sweep dello storage non è confermato** | senza questo, la ricevuta attesta una cancellazione che potrebbe non essere avvenuta — che è peggio di non avere ricevuta |
 
@@ -373,13 +373,21 @@ Il risultato è che l'allentamento della sicurezza resta **puntuale, esplicito, 
 - `MaintenanceReminderJob` calcola i reminder di *quell'* utente;
 - `AccountErasureJob` cancella i dati di *quell'* utente.
 
-Con `RunAsUser`, la sequenza è: *seleziona gli id degli utenti da processare* (una query su `AspNetUsers`, che non è owned) *→ per ciascuno, apri uno scope `RunAsUser` e lavora normalmente*. Dentro lo scope **il filtro `"OwnerScope"` è pienamente attivo e punta all'utente giusto**. Il job non ha alcun bisogno di disattivare niente.
+Con `RunAsUser`, la sequenza è: *seleziona gli id degli utenti da processare* (una query su `AspNetUsers`, che non è owned) *→ per ciascuno, entra in un callback `RunAsUser` esplicito e lavora normalmente*. Dentro il callback **il filtro `"OwnerScope"` è pienamente attivo e punta all'utente giusto**. Il job non ha alcun bisogno di disattivare niente.
 
 > Questo capovolge il rischio. Con `RunAsSystem` il job cancella i dati di tutti gli utenti **tranne quelli che si ricorda di filtrare**. Con `RunAsUser` il job non è **in grado** di toccare i dati di un altro utente: un bug nel job produce un reminder mancante o una cancellazione incompleta — che R9 rileva — **non una cancellazione dei dati di qualcun altro.**
 
 Un job di cancellazione è l'ultimo posto al mondo in cui si vuole un'identità con accesso a tutto. `RunAsUser` è il modo di non averla.
 
-`RunAsSystem` resta per ciò che utente non ha: il polling di `AspNetUsers`, il seed, la scrittura della `ErasureReceipt`.
+`RunAsSystem` resta per ciò che l'utente non ha: polling di `AspNetUsers`, seed e scrittura della `ErasureReceipt`. Per l'erasure comprende anche il delete finale della riga Identity, dopo receipt e sweep verificato.
+
+### Implementazione del contratto R9 (2026-10-06)
+
+`AccountErasureJob.RunOnceAsync` è l'entry point one-shot; il processo API lo espone con `--job account-erasure`, mentre lo scheduler ACA resta esterno e non è ancora configurato. `ICurrentUserScope` è scoped DI esplicito: nessun `AsyncLocal`, `Guid.Empty` o fallback permissivo; in HTTP `ICurrentUser` continua a leggere i claim normali.
+
+Per ogni candidato, il job apre la transazione EF **prima** di `SELECT ... WITH (UPDLOCK, HOLDLOCK)` su `AspNetUsers`, quindi rilegge la richiesta e verifica la scadenza con `TimeProvider` sotto lock. Sotto `RunAsUser` elimina soltanto righe con `OwnerId` esplicito e filtro `OwnerScope` attivo, seguendo tutte le FK fra tipi owned in ordine inverso derivato da `IModel` (non solo `CASCADE`). Conta le righe effettive e verifica zero residui; sotto `RunAsSystem` salva la receipt e cancella l'utente per ultimo. Sweep, verifica, receipt e delete Identity restano sulla stessa connessione e transazione: un errore o uno sweep incompleto annulla tutto.
+
+La receipt usa SHA-256 del GUID in formato `D` minuscolo, istanti da `TimeProvider`, conteggi reali per tipo e `SchemaVersion = "1"` (da incrementare quando cambia il contratto del grafo). `StorageSweepConfirmed` è `true` perché in Phase 1 non esiste uno storage di file. R9 L1 usa SQL Server reale e migration Phase 1; L0 verifica il piano runtime e la completezza dei 13 tipi owned in `FullSchemaDbContext`. Il key ring di Data Protection è persistito in SQL tramite la migration additiva `AddDataProtectionKeys`; la strategia di persistenza è approvata, ma il deploy ACA, l'applicazione release della migration, la verifica TDE, la retention, i backup e le soglie di allerta restano fuori da questa implementazione e non implicano production readiness.
 
 ---
 
@@ -486,7 +494,7 @@ Al verificarsi di **uno solo** di questi, la parte corrispondente va rivista **p
 | **Job di purge dei log** | non serve: la retention è configurata nel **sink** | come sopra |
 | **DPIA** | ⚠️ giudizio: "monitoraggio su larga scala" non si sostiene a zero utenti | **numero di utenti non banale** (trigger 3) |
 | **ROPA formale** | ⚠️ l'esenzione art. 30 **probabilmente non si applica**, ma a zero utenti il registro sarebbe un documento su un trattamento che non avviene | come sopra |
-| **`StoredFile` e tutto lo storage** | i Documenti del camper sono **fuori dalla Phase 1**, per decisione dell'utente | **upload in Phase 1** (trigger 2) → F1-F7 bloccanti, #8 da chiudere |
+| **`StoredFile` generico e documenti del camper** | `Document` resta fuori dalla Phase 1; il Journal usa la propria `JournalEntryAttachment` secondo ADR-0010 | richiesta di supporto a nuovi tipi di file o documenti camper → nuova decisione su relazioni e policy |
 | **Anonimizzazione al posto della cancellazione** | richiede di decidere cosa ha valore aggregato, e oggi nulla ce l'ha | esistono metriche o dati aggregati che si vuole preservare |
 | **Audit trail delle modifiche** | un solo utente, nessun operatore | **backoffice o secondo operatore** (trigger 8) |
 | **UI curata dell'export** | è `BASSO` come costo di inversione: si aggiunge quando serve, senza toccare nulla | un utente reale si lamenta, o serve per una richiesta formale |
@@ -499,3 +507,7 @@ Al verificarsi di **uno solo** di questi, la parte corrispondente va rivista **p
 Documenti impattati da questo ADR: `architecture/SECURITY.md` (§2.2, §2.5, §2.6, §3, §4, §5), `architecture/DATA.md` (§2, §6 nuova), `architecture/CONTEXT.md` (§2, §3.2, §3.3, §3.8, §4), `architecture/TESTING.md` (§2, §4, §5), `architecture/ARCHITECTURE.md` (§6), `architecture/DEVOPS.md` (§2.3, §5 nuova), `product/UX.md`, `product/ROADMAP.md`, `OPEN-DECISIONS.md`.
 
 Correzioni e aggiunte ad [`ADR-0003`](0003-auth-and-ownership.md): §Emendamento di questo documento. ADR-0003 **non viene modificato** (`ADR-FORMAT.md`): va letto insieme a questa sezione.
+
+## Emendamento del 2026-10-09 — storage Blob
+
+La decisione #8, registrata in [`ADR-0010`](0010-journal-image-storage.md), specifica F4-F5 per le immagini del Journal: Azure Blob LRS senza soft delete, versioning o backup applicativi recuperabili; configurazione da verificare prima del primo upload reale. I backup SQL restano invariati. L'emendamento documenta anche l'accettazione esplicita della conservazione degli EXIF (incluse coordinate GPS) e dell'assenza di scansione antimalware nell'uso personale attuale.

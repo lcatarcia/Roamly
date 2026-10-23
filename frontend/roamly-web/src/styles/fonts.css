@@ -15,7 +15,7 @@
 
 @font-face {
   font-family: 'Inter';
-  src: url('/fonts/inter-subset.woff2') format('woff2-variations'), url('/fonts/inter-subset.woff2') format('woff2');
+  src: url('../assets/fonts/inter-subset.woff2') format('woff2-variations'), url('../assets/fonts/inter-subset.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;
@@ -28,7 +28,7 @@
 
 @font-face {
   font-family: 'Fraunces';
-  src: url('/fonts/fraunces-subset.woff2') format('woff2-variations'), url('/fonts/fraunces-subset.woff2') format('woff2');
+  src: url('../assets/fonts/fraunces-subset.woff2') format('woff2-variations'), url('../assets/fonts/fraunces-subset.woff2') format('woff2');
   font-weight: 400 700;
   font-style: normal;
   font-display: swap;

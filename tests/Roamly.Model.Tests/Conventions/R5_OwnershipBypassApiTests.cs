@@ -37,10 +37,9 @@ public sealed class R5_OwnershipBypassApiTests
         [
             new PathExemption(
                 "src/Roamly.Api/Common/Ownership",
-                MustExistToday: false,
-                "ADR-0003: unico luogo autorizzato ad aggirare il query filter. Oggi la cartella NON esiste "
-                + "(non c'e' ancora composition root), quindi l'esenzione e' dichiarata ma non esercitata: "
-                + "nascera' con la prima slice e il lint la rispettera' senza modifiche."),
+                MustExistToday: true,
+                "ADR-0003: unico perimetro autorizzato per lock SQL e operazioni set-based di ownership/erasure. "
+                + "La deroga e' confinata alle query esplicite di Common/Ownership; non allargarla a feature o repository."),
         ],
         Symbols =
         [

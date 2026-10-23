@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Roamly.Domain.Abstractions;
 
 namespace Roamly.TestSupport;
 
@@ -58,7 +59,13 @@ public static class BuilderRegistry
     {
         ArgumentNullException.ThrowIfNull(model);
 
-        var builders = Discover();
+        var modelOwnedTypes = model.GetEntityTypes()
+            .Where(entityType => typeof(IOwnedResource).IsAssignableFrom(entityType.ClrType))
+            .Select(entityType => entityType.ClrType)
+            .ToHashSet();
+        var builders = Discover()
+            .Where(builder => modelOwnedTypes.Contains(builder.EntityType))
+            .ToList();
         var byType = builders.ToDictionary(b => b.EntityType);
 
         // Dipendenze: i principal delle FK dichiarate dal tipo, limitati ai tipi che hanno un

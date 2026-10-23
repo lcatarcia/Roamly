@@ -21,6 +21,7 @@ public sealed class ApplicationUserConfiguration : IEntityTypeConfiguration<Appl
         builder.Property(e => e.DeletionRequestedAtUtc).HasUtcTimestamp();
         builder.Property(e => e.DeletionScheduledForUtc).HasUtcTimestamp();
         builder.Property(e => e.PrivacyPolicyVersionSeen).HasNvarchar(32);
+        builder.Property(e => e.RequiresPasswordChange).HasDefaultValue(false).IsRequired();
 
         builder.ToTable(table => table.HasCheckConstraint(
             "CK_AspNetUsers_ReportingCurrency",

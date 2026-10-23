@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Identity;
+using Roamly.Api.Common.Http;
 using Roamly.Common;
 using Roamly.Infrastructure.Identity;
 
 namespace Roamly.Api.Features.Identity.GetMe;
 
 /// <summary>Legge il profilo dell'utente autenticato. Endpoint protetto: <see cref="ICurrentUser.Id"/> non lancia mai qui.</summary>
+[ProtocolOutcomeHandler("Il profilo mancante dopo l'autenticazione e' tradotto dall'endpoint nel ProblemDetails HTTP 404.")]
 internal sealed class GetMeHandler
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -29,6 +31,11 @@ internal sealed class GetMeHandler
 
         return user is null
             ? null
-            : new GetMeResponse(user.Id, user.Email ?? string.Empty, user.DisplayName, user.ReportingCurrency);
+            : new GetMeResponse(
+                user.Id,
+                user.Email ?? string.Empty,
+                user.DisplayName,
+                user.ReportingCurrency,
+                user.RequiresPasswordChange);
     }
 }

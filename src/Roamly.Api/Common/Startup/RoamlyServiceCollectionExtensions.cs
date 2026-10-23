@@ -1,3 +1,6 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Roamly.Common;
+
 namespace Roamly.Api.Common.Startup;
 
 /// <summary>
@@ -17,9 +20,14 @@ public static class RoamlyServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IIdGenerator>(provider =>
+            new SequentialGuidGenerator(provider.GetRequiredService<TimeProvider>()));
+
         return services
             .AddPersistence(configuration)
             .AddSecurity(configuration)
+            .AddJournalImageStorage(configuration)
             .AddHttpConcerns()
             .AddObservability()
             .AddFeatures();

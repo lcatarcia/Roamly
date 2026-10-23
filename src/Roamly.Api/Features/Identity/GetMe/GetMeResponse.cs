@@ -5,4 +5,10 @@ namespace Roamly.Api.Features.Identity.GetMe;
 /// <param name="Email">Email.</param>
 /// <param name="DisplayName">Nome visualizzato, se impostato.</param>
 /// <param name="ReportingCurrency">Valuta preferita per la presentazione (CONTEXT.md §2.1: non converte nulla).</param>
-public sealed record GetMeResponse(Guid Id, string Email, string? DisplayName, string ReportingCurrency);
+/// <param name="MustChangePassword">Indica se l'utente deve cambiare la password prima di usare le funzionalità protette.</param>
+public sealed record GetMeResponse(
+    Guid Id,
+    string Email,
+    string? DisplayName,
+    string ReportingCurrency,
+    bool MustChangePassword);

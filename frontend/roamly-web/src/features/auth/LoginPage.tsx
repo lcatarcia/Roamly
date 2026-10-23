@@ -1,55 +1,45 @@
 import { useState, type FormEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { PageContainer } from '@/components/layout/PageContainer'
+import { clearAccountScopedQueries, ME_QUERY_KEY } from '@/features/account/accountQueries'
+import { useAccountLogout, useAccountSession } from '@/features/account/accountSession'
+import { CamperRoutes } from '@/features/campers/CamperRoutes'
+import { TripNavigation } from '@/features/trips/TripNavigation'
+import { ForcedPasswordChangePage } from '@/features/auth/ForcedPasswordChangePage'
+import { RestrictedSessionPage } from '@/features/privacy/PrivacyPage'
 import { t } from '@/i18n/catalog'
-import { ApiError, fetchMe, login, logout, type LoginProfile } from '@/lib/api'
-
-const ME_QUERY_KEY = ['me'] as const
+import { ApiError, login } from '@/lib/api'
 
 /**
- * Schermata di login (0.7): non contiene dati di dominio, e' il banco di
- * prova dei token in entrambi i temi. Chiamate reali verso il backend
- * (nessun mock): POST /api/v1/auth/login preceduto dal fetch del token CSRF
- * (vedi src/lib/api.ts). Le credenziali invalide mostrano un messaggio
- * generico, coerente con il backend che non fa oracolo sul campo sbagliato.
+ * Gestisce la sessione, il login e il primo flusso autenticato di dominio.
+ * Le chiamate sono reali verso il backend (nessun mock): ogni mutazione
+ * recupera il token CSRF appena prima della richiesta (vedi src/lib/api.ts).
+ * Le credenziali invalide mostrano un messaggio generico, coerente con il
+ * backend che non fa oracolo sul campo sbagliato.
  */
 export function LoginPage() {
   const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-
-  const meQuery = useQuery({
-    queryKey: ME_QUERY_KEY,
-    queryFn: fetchMe,
-    staleTime: Infinity,
-    // Niente retry automatico: un 401 e' gia' intercettato in fetchMe() e
-    // risolve a null. Un vero errore di rete/server non deve tenere la UI
-    // bloccata su "Verifica della sessione..." per i ritardi di backoff di
-    // default di TanStack Query (fino a ~7s su 3 tentativi) - meglio
-    // mostrare subito il form di login (fallback sicuro, nessun oracolo).
-    retry: false,
-  })
+  const meQuery = useAccountSession()
+  const logoutMutation = useAccountLogout()
 
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
-    onSuccess: (profile: LoginProfile) => {
-      queryClient.setQueryData(ME_QUERY_KEY, {
-        id: profile.id,
-        email: profile.email,
-        displayName: profile.displayName,
-        reportingCurrency: '',
-      })
-    },
-  })
+    onSuccess: async (profile) => {
+      setPassword('')
+      clearAccountScopedQueries(queryClient)
+      if (profile.sessionMode === 'limited') {
+        queryClient.setQueryData(ME_QUERY_KEY, { mode: 'limited' as const })
+        return
+      }
 
-  const logoutMutation = useMutation({
-    mutationFn: logout,
-    onSuccess: () => {
-      queryClient.setQueryData(ME_QUERY_KEY, null)
+      await queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY })
     },
   })
 
@@ -59,7 +49,7 @@ export function LoginPage() {
     loginMutation.mutate()
   }
 
-  if (meQuery.isLoading) {
+  if (meQuery.isFetching) {
     return (
       <PageContainer>
         <p className="text-sm text-muted-foreground">{t('neutral.login.checkingSession')}</p>
@@ -67,31 +57,51 @@ export function LoginPage() {
     )
   }
 
-  const currentUser = meQuery.data
+  const currentUser = meQuery.isError ? null : meQuery.data
 
-  if (currentUser) {
+  if (currentUser?.mode === 'limited') {
+    return <RestrictedSessionPage />
+  }
+
+  if (currentUser?.mode === 'normal' && currentUser.mustChangePassword) {
+    return <ForcedPasswordChangePage />
+  }
+
+  if (currentUser?.mode === 'normal') {
     return (
-      <PageContainer>
-        <div className="rounded-xl border border-border bg-card p-6">
-          <p className="text-sm text-muted-foreground">{t('neutral.login.signedInAs')}</p>
-          <p className="numeral-display" style={{ fontSize: '24px' }}>
-            {currentUser.displayName ?? currentUser.email}
-          </p>
+      <>
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{t('neutral.login.signedInAs')}</p>
+            <p className="truncate text-sm font-semibold">
+              {currentUser.displayName ?? currentUser.email}
+            </p>
+            <Link
+              className="text-sm text-muted-foreground underline underline-offset-4"
+              to="/account/privacy"
+            >
+              {t('neutral.account.privacy.link')}
+            </Link>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => logoutMutation.mutate()}
+            disabled={logoutMutation.isPending}
+          >
+            {logoutMutation.isPending ? t('neutral.login.signingOut') : t('neutral.login.signOut')}
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => logoutMutation.mutate()}
-          disabled={logoutMutation.isPending}
-        >
-          {logoutMutation.isPending ? t('neutral.login.signingOut') : t('neutral.login.signOut')}
-        </Button>
+        <TripNavigation />
         {logoutMutation.isError && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="mx-auto max-w-5xl px-4 text-sm text-danger-text sm:px-6">
             {t('neutral.login.signOutError')}
           </p>
         )}
-      </PageContainer>
+        <div className="pb-20 md:pb-0">
+          <CamperRoutes />
+        </div>
+      </>
     )
   }
 
@@ -135,7 +145,7 @@ export function LoginPage() {
           </Field>
 
           {loginMutation.isError && (
-            <FieldDescription role="alert" className="text-destructive">
+            <FieldDescription role="alert" className="text-danger-text">
               {loginErrorMessage(loginMutation.error)}
             </FieldDescription>
           )}
@@ -147,6 +157,14 @@ export function LoginPage() {
           </Button>
         </FieldGroup>
       </form>
+      {import.meta.env.DEV && (
+        <p className="text-sm text-muted-foreground">
+          {t('neutral.login.noAccount')}{' '}
+          <Link className="underline underline-offset-4" to="/register">
+            {t('neutral.login.register')}
+          </Link>
+        </p>
+      )}
     </PageContainer>
   )
 }
@@ -154,9 +172,15 @@ export function LoginPage() {
 /** Registro neutro (R21): mai un dettaglio su quale campo sia sbagliato.
  * Il backend stesso non fa oracolo (401 generico su credenziali). */
 function loginErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 429) {
-    return t('neutral.login.tooManyAttempts')
+  if (error instanceof ApiError) {
+    if (error.status === 429) {
+      return t('neutral.login.tooManyAttempts')
+    }
+
+    if (error.status === 401) {
+      return t('neutral.login.invalidCredentials')
+    }
   }
 
-  return t('neutral.login.invalidCredentials')
+  return t('neutral.login.serviceError')
 }

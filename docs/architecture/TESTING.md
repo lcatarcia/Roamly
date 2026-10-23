@@ -1,6 +1,6 @@
 # Roamly — Strategia di test
 
-Stato: **attivo — decisione #6 chiusa** · Ultimo aggiornamento: 2026-09-25
+Stato: **attivo — decisione #6 chiusa** · Ultimo aggiornamento: 2026-10-20
 Owner: **@argus** · Decisione di riferimento: [`ADR-0009`](../adr/0009-test-strategy.md)
 Origine: `docs/archive/Roamly_Planning_2026-09-24.md` §19 — esteso secondo review I8, riscritto con ADR-0009
 
@@ -17,7 +17,7 @@ Il criterio che governa tutta la suite (**R31**): **ogni verificatore vive al li
 |---|---|---|---|---|
 | **L0** | convenzioni sul modello EF, unit puri di dominio | **nessun database**: `IModel` costruito offline + POCO puri | `Roamly.Model.Tests`, `Roamly.Domain.Tests` | **< 5 s** in totale |
 | **L1** | schema reale, FK che mordono, erasure, migration | **Testcontainers `MsSql`** | `Roamly.IntegrationTests` | 60-100 s fissi + 1-3 min |
-| **L2** | contratti HTTP, cookie, antiforgery, ownership per slice | `WebApplicationFactory` **sopra lo stesso container** di L1 | `Roamly.IntegrationTests` | incluso in L1 |
+| **L2** | contratti HTTP, cookie, antiforgery, ownership per slice, approval OpenAPI R51 | `WebApplicationFactory` **sopra lo stesso container** di L1 | `Roamly.IntegrationTests` | incluso in L1 |
 | **L3** | design system, i18n, budget, contrasto | Vitest + lint + script Node | `frontend/roamly-web` | ~2 min |
 | **L4** | accessibilità, reduced motion, flussi critici | Playwright + `@axe-core/playwright` | `frontend/roamly-web/e2e` | 4-6 min |
 
@@ -54,6 +54,34 @@ Poi, nell'ordine: 1. autenticazione · 2. camper · 3. manutenzione · 4. viaggi
 
 ---
 
+## 2.1 R51 — approval dello snapshot OpenAPI (L2)
+
+È stato provato `Microsoft.Extensions.ApiDescription.Server` 10.0.12 per generare `/api/v1`
+durante la build senza aprire il database. La generazione pulita è riuscita, ma ha impiegato
+**21,89 s** (incluso l'avvio del processo `GetDocument`), oltre il budget L0 di 5 s. In coerenza
+con ADR-0005 §6/§9 è stato quindi scelto il fallback già approvato: il test L2 legge il documento
+HTTP `GET /openapi/v1.json` dal `WebApplicationFactory` sopra il container SQL Server condiviso.
+Il pacchetto di build-time generation non è mantenuto.
+
+`Roamly.IntegrationTests` confronta il documento HTTP con
+[`tests/Roamly.IntegrationTests/Conventions/openapi-v1.json`](../../tests/Roamly.IntegrationTests/Conventions/openapi-v1.json). Il confronto blocca route/operation e
+`operationId` rimossi o rinominati, parametri o proprietà rimosse/rinominate, parametri opzionali
+resi obbligatori, required aggiunti a proprietà request opzionali e restrizioni di tipo/schema.
+Route, parametri e proprietà opzionali nuovi superano il controllo di compatibilità, ma ogni
+differenza richiede anche di rigenerare e revisionare lo snapshot nella stessa PR. Un cambiamento
+incompatibile a `v1` resta vietato da ADR-0005 §6: la diff dello snapshot va revisionata e non
+può essere usata per approvare rimozioni o restrizioni. Il documento include soltanto `/api/v1`,
+incluse le route manutenzione.
+Il documento HTTP acquisito viene anche scritto in `TestResults/openapi-v1.generated.json`;
+dopo aver revisionato il diff, copiarlo in `tests/Roamly.IntegrationTests/Conventions/openapi-v1.json` per approvare una modifica
+additiva allo snapshot.
+
+**Limite dell'approver:** il confronto usa lo snapshot presente nel checkout. Se una PR riscrive
+anche lo snapshot, il test non può ricostruire da solo la versione precedente; perciò la review
+della diff committata resta il gate umano già previsto da ADR-0005 §6.
+
+---
+
 ## 3. Struttura dei progetti
 
 ```text
@@ -87,6 +115,7 @@ tests/
 │   │   ├── RoamlyApiFactory.cs             # WebApplicationFactory + CookieContainer
 │   │   ├── RoamlyClient.cs                 # login vero + antiforgery nascosto (R35)
 │   │   └── DatabaseCollection.cs           # [CollectionDefinition] — punto di sblocco G1→G2
+│   ├── Conventions/                        # R51 — approval del documento OpenAPI HTTP
 │   ├── Schema/                             # test B, test C, topologia FK
 │   ├── Privacy/                            # R9, isolamento export, idempotenza, revoca
 │   ├── Features/                           # ownership per slice
@@ -286,9 +315,10 @@ Vedi §9 per l'elenco completo dei test di privacy.
 
 | Regole | Livello | Come |
 |---|---|---|
-| R11, R12, R13, R15, R16, R17, R21, R24, R25 | **L3** | lint, `design:guard`, `dependency-cruiser`, test di render |
-| **R14** matrice 47 coppie × 2 temi | **L3** | script che **parsa `theme.css`** e ricalcola WCAG · **+ test di copertura del manifesto** — ⚠️ è la R8 del design system, la seconda metà è quella che protegge il futuro |
-| **R18 / R22** budget font, Fraunces per eccezione | **L3** | somma byte di `public/fonts/**/*.woff2` + lint CSS + conteggio occorrenze per pagina |
+| R11, R12, R13, R15, R16, R17, R21, R24 | **L3** | lint, `design:guard`, `dependency-cruiser`, test di render |
+| **R25, dashboard camper** | **L2 + L3** | L2: odometro assente o oltre 90 giorni ⇒ asse km `Unknown`, lettura vecchia mostrata solo con data e qualifica; L3: nessuno stato complessivo verde quando un asse è ignoto |
+| **R14** matrice 47 coppie × 2 temi | **L3** | script che **parsa `theme.css`** e ricalcola WCAG · AST TypeScript per le coppie semantiche nei JSX, test Node dedicati e conteggi manifesto bloccanti — ⚠️ è la R8 del design system, la seconda metà è quella che protegge il futuro |
+| **R18 / R22** budget font, Fraunces per eccezione | **L3** | somma byte dei WOFF2 emessi sotto `dist/` + verifica che siano tutti fingerprintati in `dist/assets` + lint CSS + conteggio occorrenze per componente-schermata |
 | **R19** nessun asset di terzi | **L3** | ⚠️ **deve girare sul bundle prodotto**, non sul sorgente: una dipendenza npm può iniettare un `@import` da CDN |
 | **R20** reduced motion | **L4** | Playwright con `prefers-reduced-motion: reduce`: nessun elemento con `opacity < 1` computata |
 | **R23** date dal server | **L2 + L3** | L2: la risposta contiene `deletionScheduledForUtc`. L3: lint contro aritmetica su date in `features/privacy/**` |
@@ -317,6 +347,8 @@ Gli integration test non possono usare un header `Authorization`. Servono:
 
 - un `WebApplicationFactory` che esegua un **vero login** e conservi il cookie in un `HttpClient` con `CookieContainer`;
 - due client preconfigurati (`AsUserA`, `AsUserB`), fondamento dei test di ownership.
+
+- Il progetto `Roamly.IntegrationTests` usa `Microsoft.AspNetCore.Mvc.Testing` **10.0.13** per il seam `WebApplicationFactory` dei test L2.
 
 **Antiforgery (R35): resta attivo.** ❌ È **vietato** disattivarlo nell'ambiente di test: smetterebbe di testare una barriera reale. ✅ L'estrazione del token vive **dentro `RoamlyClient`** e **non compare mai nel corpo di un test** — è l'unica conciliazione possibile tra "antiforgery attivo" e "un test di ownership costa una riga". Senza questa regola scritta, la tensione si risolve da sola nel modo sbagliato.
 
@@ -556,8 +588,11 @@ Derivano da R8/R9/R10 ([`ADR-0004`](../adr/0004-privacy-and-erasure.md)).
 | d | **Idempotenza**: il job rieseguito non lancia e non altera la `ErasureReceipt` | **L1** |
 | e | **Annullamento**: richiesta → +10 giorni → revoca → account pieno | **L1 + `FakeTimeProvider`** |
 | f | **Accesso bloccato**: durante la grazia il login non riesce | **L2** |
+| g | **Piano di cancellazione**: esattamente tutti gli `IOwnedResource` runtime, figli prima dei padri considerando tutte le FK; Identity e receipt escluse; FullSchema copre i 13 owned | **L0** |
+| h | **Skip e rollback**: account futuri/revocati non cancellati; sweep fallito dopo un delete annulla la transazione e non emette receipt | **L1, SQL Server reale** |
+| i | **Serializzazione**: gate/interceptor deterministici fanno competere aggiornamento account e lock job, senza `Thread.Sleep` | **L1, SQL Server reale** |
 
-Il test (c) non è "per slice": è **globale**, e **popola via `BuilderRegistry`**, mai a mano. La catena è chiusa: **modello → registro → popolamento → verifica sul modello.** Un'entità nuova senza builder rompe la build a **L0 in 10 ms**, invece di produrre un R9 silenziosamente parziale.
+Il test (c) non è "per slice": è **globale**, e **popola via `BuilderRegistry`**, mai a mano. La catena è chiusa: **modello → registro → popolamento → verifica sul modello.** Un'entità nuova senza builder rompe la build a **L0 in 10 ms**, invece di produrre un R9 silenziosamente parziale. R9 L1 usa il database creato con le migration della Phase 1 e `RoamlyDbContext`; il registro filtra i builder sui tipi presenti in quel modello. `FullSchemaDbContext` è usato a L0 per completezza prospettica, non per il test L1.
 
 ---
 
@@ -599,7 +634,7 @@ Quelli sopra sono i controlli automatici dei workflow. In locale si possono eseg
 
 ### 12.1.1 `frontend-e2e.yml` — PR
 
-Il job installa Node.js 22.18.0, esegue `npm ci`, installa Chromium con `npx playwright install --with-deps chromium` e invoca `npm run design:axe`. Lo script costruisce l'app, avvia `vite preview` e verifica axe sui temi chiaro e scuro.
+Il job installa Node.js 22.18.0, esegue `npm ci`, installa Chromium con `npx playwright install --with-deps chromium` e invoca `npm run design:axe`. Lo script avvia il server Vite, necessario per includere la route `/register` abilitata solo in sviluppo, e verifica axe sulle schermate di autenticazione nei temi chiaro e scuro. La build di produzione resta verificata separatamente dal job `frontend`.
 
 Il package non definisce uno script E2E distinto per reduced-motion o per la cancellazione da tastiera. Questi controlli restano prescritti ma non sono eseguiti dal workflow finche' non esistono i relativi script/test; non vengono sostituiti con verifiche inventate.
 
@@ -707,7 +742,9 @@ npm run build
 npm run design:guard-font-assets
 ```
 
-Questi script esistono nel `package.json` attuale e non avviano un browser. La guardia R18/R19/R22 va eseguita dopo `npm run build`: verifica budget e origini locali dei font, riferimenti esterni riconoscibili negli asset HTML/CSS/JS emessi e applicazione CSS/usi statici delle classi display. Non rileva metadati interni WOFF2, URL costruiti dinamicamente o occorrenze runtime composte da componenti figli. `design:axe` e' eseguito solo dai workflow PR e nightly dopo l'installazione di Chromium. `npm run test`, `npm run e2e`, `fonts:budget` e `no-external-assets` non sono script presenti nel package, quindi non sono dichiarati come controlli eseguiti.
+`design:coverage` esegue prima `node --test scripts/tests/contrast-coverage.test.mjs`, poi analizza classi statiche JSX (con ereditarietà dei token nei discendenti), stringhe `cva()` e CSS `@apply`; confronta ciascuna coppia foreground/superficie nei due temi col manifesto. I conteggi dichiarati sono validati da `design:contrast`, eseguito prima nella suite `design:check`; i test Node includono anche casi di conteggio. I limiti statici sono documentati in ADR-0007 R14: classi runtime, composizione fra componenti separati, colori inline/CSS-in-JS e blending numerico delle classi con opacità non sono risolti dal parser.
+
+Gli altri script elencati esistono nel `package.json` attuale e non avviano un browser. La guardia R18/R19/R22 va eseguita dopo `npm run build`: verifica budget e origini locali dei font, riferimenti esterni riconoscibili negli asset HTML/CSS/JS emessi e applicazione CSS/usi statici delle classi display. Non rileva metadati interni WOFF2, URL costruiti dinamicamente o occorrenze runtime composte da componenti figli. `design:axe` e' eseguito solo dai workflow PR e nightly dopo l'installazione di Chromium. `npm run test`, `npm run e2e`, `fonts:budget` e `no-external-assets` non sono script presenti nel package, quindi non sono dichiarati come controlli eseguiti.
 
 > **Perché `--project` e mai `--solution` negli step di test.** È il modo in cui **R39** (ADR-0009) resta in vigore da sola: quando `Roamly.Benchmarks` entrerà nella solution, un `dotnet test --solution` lo eseguirebbe in CI senza che nessuno debba dimenticarsene. Con progetti nominati, includerlo richiede una modifica deliberata di `ci.yml`.
 >
@@ -726,6 +763,23 @@ Questi script esistono nel `package.json` attuale e non avviano un browser. La g
 
 > ℹ️ **Annotazione della prima esecuzione, non bloccante.** `actions/checkout@v4`, `actions/setup-dotnet@v4` e `actions/cache@v4` puntano a Node.js 20, deprecato: i runner le forzano già su Node 24 e i job restano verdi. Il passaggio ai tag `@v5` va fatto insieme al pin per SHA, cioè **prima del primo workflow che tocca credenziali di deploy**.
 
+### 13.2 Test d'accettazione Azure Blob (opt-in, solo manuale)
+
+`JournalImageAzureAcceptanceTests` verifica il flusso HTTP contro l'account Blob reale usando SQL Server Testcontainers: upload, download SAS e contenuto, export ZIP, cancellazione tramite outbox e account-erasure. Usa owner e immagini sintetici, ID univoci e cleanup del prefisso owner. Non viene eseguito in CI e, senza entrambi gli opt-in sotto, il test è skipped.
+
+Prima di abilitarlo, verificare manualmente le proprietà effettive dell'account e del Blob service. Il marker `ROAMLY_AZURE_BLOB_ACCOUNT_CONFIGURATION_VERIFIED=1` dichiara questa precondizione: **non** è una verifica automatica di versioning, retention, snapshot o backup. L'identità locale usata da `DefaultAzureCredential` deve avere temporaneamente `Storage Blob Delegator` allo scope dell'account e `Storage Blob Data Contributor` allo scope del container; revocare entrambe le assegnazioni al termine. Non usare dati o account personali.
+
+```powershell
+$env:ROAMLY_AZURE_BLOB_ACCEPTANCE = "1"
+$env:ROAMLY_AZURE_BLOB_ACCOUNT_CONFIGURATION_VERIFIED = "1"
+dotnet test --project tests/Roamly.IntegrationTests `
+  --filter FullyQualifiedName~JournalImageAzureAcceptanceTests
+Remove-Item Env:ROAMLY_AZURE_BLOB_ACCEPTANCE
+Remove-Item Env:ROAMLY_AZURE_BLOB_ACCOUNT_CONFIGURATION_VERIFIED
+```
+
+Un errore del test o del cleanup va investigato prima di ripetere la prova; non assumere che il prefisso sia stato rimosso se il cleanup segnala un errore.
+
 ---
 
 ## 14. Tempi misurati
@@ -742,6 +796,7 @@ Questi script esistono nel `package.json` attuale e non avviano un browser. La g
 | **Tutto L0 insieme, 16 test** | < 5 s | **Blocco 3** | **3,5 s** — ✅ Checkpoint 3 |
 | **Suite L0 `Roamly.Model.Tests`, 21 test** (con R33, R36, forma dei progetti) | < 5 s | **Blocco 4** | **2,0 s** di esecuzione |
 | **Suite L1 `Roamly.IntegrationTests`, 9 test**, container incluso | — | **Blocco 4** | **17,6 s** (di cui ~10,5 s di avvio container) |
+| **Test d'accettazione Azure Blob + SQL Server Testcontainers** | — | 2026-10-20 | **64 s** (run locale, inclusi container e flusso API) |
 | **Tutta la soluzione, 33 test** (`dotnet test --solution --no-build`) | — | **Blocco 4** | **32,7 s** — ✅ Checkpoint 4 |
 | Pull immagine su runner GHA (non cachata) | 40-70 s | **Blocco 5** | **≤ 26 s** — l'intero step `Test L1 e L2` (pull + avvio container + 14 test) è durato **26 s**, quindi il solo pull vale meno di così |
 | Readiness del container | 20-45 s | **Blocco 4** | **9,6-14,6 s** (x64, Docker Desktop/WSL2, 2 GB, immagine locale) |
@@ -762,8 +817,13 @@ Questi script esistono nel `package.json` attuale e non avviano un browser. La g
 | `--project tests/Roamly.Model.Tests --no-build` (21 test) | — | **Blocco 5** | **21,0 s** a freddo |
 | `--project tests/Roamly.IntegrationTests --no-build` (14 test) | — | **Blocco 5** | **53,4 s**, di cui **17,4 s** di avvio container |
 | `--solution Roamly.slnx --no-build` (38 test, `Release`) | — | **Blocco 5** | **38,6 s** — ✅ 38/38, exit 0 |
+| `--project tests/Roamly.Model.Tests --no-build` (48 test, `Debug`) | budget < 5 s | **2026-10-07** | **11,6-19,3 s**, 48/48 |
+| `dotnet test --solution Roamly.slnx` (204 test, `Debug`, immagine locale) | — | **2026-10-07** | **5m38s** di parete; IntegrationTests 5m37s, 204/204 |
+| `dotnet test --solution Roamly.slnx` (308 test, `Debug`, immagine locale) | — | **2026-10-13** | **4m42s** di parete; IntegrationTests 4m41s, 308/308 |
 
 > ⚠️ **I 405 s della build `Release` a freddo non sono una stima per la CI.** Sono misurati su Windows con antivirus attivo e cache degli analyzer vuota; la stessa build incrementale costa **3,9 s**. Su un runner Linux GitHub-hosted la voce dominante di una build a freddo è il `restore` (mitigato dalla cache NuGet) e la prima esecuzione degli analyzer. Il numero è annotato perché è **l'unico dato in mio possesso** su una build a freddo, non perché sia trasferibile.
+
+> ⚠️ **Misure locali dopo l'espansione della suite al 2026-10-07.** I tempi osservati superano il budget storico L0 e il precedente dato locale dell'intera soluzione. Sono misure su Windows e non sostituiscono un confronto CI omogeneo; non vanno nascosti né trattati come una nuova stima stabile. Prima di attribuire la differenza a una regressione del codice, ripetere la misura su una macchina non sotto carico e annotare separatamente build, runner e test.
 
 > ✅ **Tempo di parete della CI, misurato alla prima esecuzione reale** (run `36410434236`, commit `b3199c1`, `ubuntu-latest`, cache NuGet **fredda**).
 > `backend-fast` **41 s**: checkout 1 s · setup SDK 1 s · cache 0 s · restore **11 s** · build **15 s** · 3 test Domain 1 s · 21 test Model **3 s**.

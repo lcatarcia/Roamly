@@ -250,7 +250,7 @@ public Task Cross_owner_access_is_indistinguishable_from_absence(HttpMethod m, s
 | **R15** `ui/` senza dominio | L3 | `dependency-cruiser` |
 | **R16** niente `Card` generico | L3 | lint su naming di file ed export |
 | **R17** tre segnali di distruttività | L3 | render di `DangerButton`/`DangerDialog` + lint sui token `danger-*` |
-| **R18 / R22** budget font, Fraunces per eccezione | L3 | somma byte di `public/fonts/**/*.woff2`; lint CSS su `var(--font-display)`; conteggio occorrenze per pagina |
+| **R18 / R22** budget font, Fraunces per eccezione | L3 | somma byte dei WOFF2 emessi sotto `dist/`; verifica che siano tutti fingerprintati in `dist/assets`; lint CSS su `var(--font-display)`; conteggio occorrenze per componente-schermata |
 | **R19** nessun asset di terzi | L3 | scan di `index.html`, CSS e **bundle prodotto**. ⚠️ **deve girare sul bundle**: una dipendenza npm può iniettare un `@import` da CDN |
 | **R20** reduced motion | **L4** | Playwright con `prefers-reduced-motion: reduce`; nessun elemento con `opacity < 1` computata |
 | **R21** registro doppio i18n | L3 | nessun letterale di testo nel JSX; `features/privacy/**` importa solo `neutral.*` |

@@ -19,7 +19,7 @@ public static class DomainModelManifest
         typeof(ErasureReceipt),
     ];
 
-    /// <summary>Le otto entita' a topologia decisa e tabella rimandata (CONTEXT.md §2.3).</summary>
+    /// <summary>Le nove entita' a topologia decisa e tabella rimandata (CONTEXT.md §2.3).</summary>
     public static IReadOnlyList<Type> LaterPhaseEntityTypes { get; } =
     [
         typeof(Trip),
@@ -27,12 +27,29 @@ public static class DomainModelManifest
         typeof(Checklist),
         typeof(ChecklistItem),
         typeof(JournalEntry),
+        typeof(JournalEntryAttachment),
+        typeof(JournalAttachmentDeletionOutboxMessage),
         typeof(Expense),
         typeof(SavedPlace),
         typeof(Document),
     ];
 
-    /// <summary>Tutte e 14 le entita' del modello, Phase 1 comprese.</summary>
+    /// <summary>Entita' applicative attive nella Phase 2 del Journal.</summary>
+    public static IReadOnlyList<Type> ApplicationEntityTypes { get; } =
+    [
+        .. Phase1EntityTypes,
+        typeof(Trip),
+        typeof(TripStop),
+        typeof(Checklist),
+        typeof(ChecklistItem),
+        typeof(JournalEntry),
+        typeof(JournalEntryAttachment),
+        typeof(JournalAttachmentDeletionOutboxMessage),
+        typeof(SavedPlace),
+        typeof(Expense),
+    ];
+
+    /// <summary>Tutte le entita' di dominio e dell'outbox nel modello completo.</summary>
     public static IReadOnlyList<Type> AllEntityTypes { get; } =
-        [.. Phase1EntityTypes, .. LaterPhaseEntityTypes];
+        [.. Phase1EntityTypes, .. LaterPhaseEntityTypes, typeof(JournalAttachmentDeletionOutboxMessage)];
 }

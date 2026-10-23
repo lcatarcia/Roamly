@@ -2,13 +2,12 @@
 
 ## Contesto di progetto (leggere prima di operare)
 
-Il progetto è **in implementazione**. Il gate alle decisioni bloccanti è superato e le nove ADR sono accettate.
+Il progetto è **in implementazione**. Le decisioni architetturali approvate sono indicizzate in `docs/README.md`; le decisioni e i gate ancora aperti sono tracciati in `docs/OPEN-DECISIONS.md` e `docs/product/DECISION-MAP-PRE-PUBBLICAZIONE.md`.
 
 - Indice documentazione: `docs/README.md`
-- **Decisioni aperte: `docs/OPEN-DECISIONS.md`**. Restano aperte #3 (geo, blocca la Phase 3), #5, #8, #9, #10: **nessuna blocca l'MVP**.
+- **Avanzamento:** Phase 2 è chiusa secondo `docs/product/ROADMAP.md`. La Phase 3 è differita: la decisione geo #3 resta aperta e blocca Maps & Places. Il confine prodotto #4 (Intelligence/AI) è definito e Gemini UE è il provider di riferimento scelto; la due diligence pubblica #7 è documentata. Nella mappa pre-pubblicazione le #8-#9 registrano l'accettazione dei default anti-abuso per modelli ordinari e la scelta di disabilitare la cache implicita; Gemini 3.1 Flash-Lite è solo il primo candidato per una futura valutazione sintetica (#10 della mappa), non una scelta di produzione. Contratto, modello e applicazione effettiva dei controlli vanno verificati prima dell'uso; la configurazione è rimandata. La Personal Memory (#5 della mappa) è definita come profilo inferito trasparente e usato solo su richiesta. La decisione offline/PWA #10 di `OPEN-DECISIONS.md` è chiusa: niente modalità offline, PWA installabile o cache applicativa dei dati utente nella v1. Il deploy #9 resta da configurare.
 - Vincoli non negoziabili già stabiliti: **SQL Server** (non PostgreSQL), **ASP.NET Core 10**, **GitHub Actions**, ownership owner-scoped su ogni query, **PK composita `(OwnerId, Id)`** (ADR-0008).
-- Avanzamento: `docs/adr/0009-test-strategy.md` §9. **Blocchi 1 e 2 chiusi** — solution, toolchain, e il modello completo (14 entità, 5 complex type, 27 FK) costruibile offline. **Prossimo: Blocco 3**, i verificatori senza Docker.
-- ⛔ **Nessuna slice di dominio prima del Checkpoint 3.**
+- I checkpoint infrastrutturali 1-5 della strategia di test sono chiusi; la suite completa si esegue con `dotnet test --solution Roamly.slnx`.
 
 ### Comandi di test
 
@@ -19,7 +18,7 @@ Due livelli, separati per **costo**, non per livello architetturale ([`docs/adr/
 | `dotnet test --project tests/Roamly.Model.Tests` | **L0** — dominio + 17 dei 25 verificatori | **< 5 s** | **no** |
 | `dotnet test --solution Roamly.slnx` | suite completa, include Testcontainers | 60-100 s in CI, 5-15 s in locale | sì |
 
-> ⚠️ Col runner Microsoft.Testing.Platform di .NET 10 RTM il percorso del progetto **non è più posizionale**: serve `--project` o `--solution`. E un progetto di test **senza test** fa uscire il comando con **exit code 8** — finché `Roamly.Domain.Tests` e `Roamly.IntegrationTests` sono vuoti, la suite completa è rossa per questo motivo, non per un test fallito ([`TESTING.md`](docs/architecture/TESTING.md) §13).
+> ⚠️ Col runner Microsoft.Testing.Platform di .NET 10 RTM il percorso del progetto **non è più posizionale**: serve `--project` o `--solution`. Un progetto di test senza test produce exit code 8, quindi i nuovi progetti di test devono aggiungere almeno un test prima di entrare nella suite ([`TESTING.md`](docs/architecture/TESTING.md) §13).
 
 Usa **L0 durante il lavoro**: EF Core costruisce `DbContext.Model` offline con `UseSqlServer` senza mai connettersi, quindi la maggior parte delle regole si verifica senza database. La suite completa prima di consegnare.
 

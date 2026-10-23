@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Roamly.Domain.Abstractions;
 using Roamly.Domain.Entities;
+using Roamly.Infrastructure.Persistence;
 
 namespace Roamly.Model.Tests.Ownership;
 
@@ -33,6 +34,9 @@ public sealed class R56_OwnedResourceCoverageTests(ModelFixture model)
             "Prova della cancellazione: sopravvive per definizione oltre la cancellazione dell'account " +
             "che l'ha generata (ADR-0004). Una FK verso OwnerId non avrebbe senso su un record che esiste " +
             "proprio perche' quell'utente non esiste piu'.",
+        [typeof(LoginAttemptCounter)] =
+            "Contatore infrastrutturale pseudonimizzato per il rate limit login: scade dopo la finestra, " +
+            "non contiene account/IP in chiaro, non ha OwnerId/FK e non appartiene a export o cancellazione.",
     };
 
     [Fact]

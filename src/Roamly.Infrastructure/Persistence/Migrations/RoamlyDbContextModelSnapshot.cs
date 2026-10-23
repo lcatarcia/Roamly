@@ -18,10 +18,29 @@ namespace Roamly.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys");
+                });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
                 {
@@ -258,6 +277,95 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.ToTable("Campers");
                 });
 
+            modelBuilder.Entity("Roamly.Domain.Entities.Checklist", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<byte>("Kind")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<byte>("Origin")
+                        .HasColumnType("tinyint");
+
+                    b.Property<string>("SeedCatalogVersion")
+                        .HasMaxLength(32)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("SeedTemplateKey")
+                        .HasMaxLength(64)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<Guid>("TripId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "TripId");
+
+                    b.ToTable("Checklists", t =>
+                        {
+                            t.HasCheckConstraint("CK_Checklist_SeedProvenance", "([Origin] = 1 AND [SeedTemplateKey] IS NOT NULL) OR ([Origin] = 0 AND [SeedTemplateKey] IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.ChecklistItem", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ChecklistId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<bool>("IsDone")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "ChecklistId");
+
+                    b.ToTable("ChecklistItems");
+                });
+
             modelBuilder.Entity("Roamly.Domain.Entities.Equipment", b =>
                 {
                     b.Property<Guid>("OwnerId")
@@ -288,6 +396,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .IsUnicode(true)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2(3)");
@@ -335,6 +448,192 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ErasureReceipts");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.Expense", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CamperId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte>("Category")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateOnly>("IncurredOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("OdometerKm")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid?>("TripId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Amount", "Roamly.Domain.Entities.Expense.Amount#Money", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(19,4)")
+                                .HasColumnName("Amount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .IsUnicode(false)
+                                .HasColumnType("char(3)")
+                                .HasColumnName("Currency");
+                        });
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "TripId")
+                        .HasFilter("[TripId] IS NOT NULL");
+
+                    b.HasIndex("OwnerId", "CamperId", "IncurredOnUtc");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("OwnerId", "CamperId", "IncurredOnUtc"), new[] { "Category" });
+
+                    b.ToTable("Expenses", t =>
+                        {
+                            t.HasCheckConstraint("CK_Expense_Currency", "[Currency] = UPPER([Currency]) AND LEN([Currency]) = 3");
+                        });
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalAttachmentDeletionOutboxMessage", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "CreatedAtUtc");
+
+                    b.ToTable("JournalAttachmentDeletionOutbox");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalEntry", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateOnly>("EntryOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(120)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("TripId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("TripStopId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "TripId");
+
+                    b.HasIndex("OwnerId", "TripStopId");
+
+                    b.ToTable("JournalEntries");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalEntryAttachment", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid>("JournalEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "JournalEntryId");
+
+                    b.ToTable("JournalEntryAttachments");
                 });
 
             modelBuilder.Entity("Roamly.Domain.Entities.MaintenanceItem", b =>
@@ -524,6 +823,217 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.ToTable("OdometerReadings");
                 });
 
+            modelBuilder.Entity("Roamly.Domain.Entities.SavedPlace", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(300)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<byte>("Category")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime?>("ExternalFetchedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("ExternalPlaceId")
+                        .HasMaxLength(128)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("ExternalProvider")
+                        .HasMaxLength(32)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Position", "Roamly.Domain.Entities.SavedPlace.Position#Coordinates", b1 =>
+                        {
+                            b1.Property<decimal>("Latitude")
+                                .HasColumnType("decimal(8,6)")
+                                .HasColumnName("Latitude");
+
+                            b1.Property<decimal>("Longitude")
+                                .HasColumnType("decimal(9,6)")
+                                .HasColumnName("Longitude");
+                        });
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.ToTable("SavedPlaces", t =>
+                        {
+                            t.HasCheckConstraint("CK_SavedPlace_Position", "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180)");
+                        });
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.Trip", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("ActualEndOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ActualStartOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("CamperId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<decimal?>("EstimatedDistanceKm")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("EstimatedDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateOnly?>("PlannedEndOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PlannedStartOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<byte>("Status")
+                        .HasColumnType("tinyint");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "FuelPricePerLiter", "Roamly.Domain.Entities.Trip.FuelPricePerLiter#Money", b1 =>
+                        {
+                            b1.Property<decimal>("Amount")
+                                .HasColumnType("decimal(19,4)")
+                                .HasColumnName("FuelPricePerLiterAmount");
+
+                            b1.Property<string>("Currency")
+                                .IsRequired()
+                                .HasMaxLength(3)
+                                .IsUnicode(false)
+                                .HasColumnType("char(3)")
+                                .HasColumnName("FuelPricePerLiterCurrency");
+                        });
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "CamperId");
+
+                    b.ToTable("Trips", t =>
+                        {
+                            t.HasCheckConstraint("CK_Trip_FuelPricePerLiter_Amount", "[FuelPricePerLiterAmount] IS NULL OR [FuelPricePerLiterAmount] > 0");
+
+                            t.HasCheckConstraint("CK_Trip_FuelPricePerLiter_Currency", "[FuelPricePerLiterCurrency] IS NULL OR ([FuelPricePerLiterCurrency] = UPPER([FuelPricePerLiterCurrency]) AND LEN([FuelPricePerLiterCurrency]) = 3)");
+
+                            t.HasCheckConstraint("CK_Trip_FuelPricePerLiter_Pair", "([FuelPricePerLiterAmount] IS NULL AND [FuelPricePerLiterCurrency] IS NULL) OR ([FuelPricePerLiterAmount] IS NOT NULL AND [FuelPricePerLiterCurrency] IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.TripStop", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly?>("ArrivalOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateOnly?>("DepartureOnUtc")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("SavedPlaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SequenceNo")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TripId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Position", "Roamly.Domain.Entities.TripStop.Position#Coordinates", b1 =>
+                        {
+                            b1.Property<decimal>("Latitude")
+                                .HasColumnType("decimal(8,6)")
+                                .HasColumnName("Latitude");
+
+                            b1.Property<decimal>("Longitude")
+                                .HasColumnType("decimal(9,6)")
+                                .HasColumnName("Longitude");
+                        });
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "SavedPlaceId");
+
+                    b.HasIndex("OwnerId", "TripId", "SequenceNo");
+
+                    b.ToTable("TripStops", t =>
+                        {
+                            t.HasCheckConstraint("CK_TripStop_Position", "([Latitude] IS NULL AND [Longitude] IS NULL) OR ([Latitude] BETWEEN -90 AND 90 AND [Longitude] BETWEEN -180 AND 180)");
+                        });
+                });
+
             modelBuilder.Entity("Roamly.Infrastructure.Identity.ApplicationUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -594,6 +1104,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .HasColumnType("char(3)")
                         .HasDefaultValue("EUR");
 
+                    b.Property<bool>("RequiresPasswordChange")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
 
@@ -621,6 +1136,35 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_AspNetUsers_ReportingCurrency", "[ReportingCurrency] = UPPER([ReportingCurrency]) AND LEN([ReportingCurrency]) = 3");
                         });
+                });
+
+            modelBuilder.Entity("Roamly.Infrastructure.Persistence.LoginAttemptCounter", b =>
+                {
+                    b.Property<string>("BucketKey")
+                        .HasColumnType("char(64)");
+
+                    b.Property<DateTime>("WindowStartUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CounterKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("varchar(24)")
+                        .HasDefaultValue("legacy");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.HasKey("BucketKey", "WindowStartUtc");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("CounterKind", "ExpiresAtUtc");
+
+                    b.ToTable("LoginAttemptCounters", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -683,6 +1227,40 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Roamly.Domain.Entities.Checklist", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.Trip", "Trip")
+                        .WithMany("Checklists")
+                        .HasForeignKey("OwnerId", "TripId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.ChecklistItem", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.Checklist", "Checklist")
+                        .WithMany("Items")
+                        .HasForeignKey("OwnerId", "ChecklistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Checklist");
+                });
+
             modelBuilder.Entity("Roamly.Domain.Entities.Equipment", b =>
                 {
                     b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
@@ -698,6 +1276,80 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Camper");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.Expense", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.Camper", "Camper")
+                        .WithMany()
+                        .HasForeignKey("OwnerId", "CamperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.Trip", "Trip")
+                        .WithMany()
+                        .HasForeignKey("OwnerId", "TripId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Camper");
+
+                    b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalAttachmentDeletionOutboxMessage", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalEntry", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.Trip", "Trip")
+                        .WithMany("JournalEntries")
+                        .HasForeignKey("OwnerId", "TripId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.TripStop", "TripStop")
+                        .WithMany()
+                        .HasForeignKey("OwnerId", "TripStopId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Trip");
+
+                    b.Navigation("TripStop");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalEntryAttachment", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.JournalEntry", "JournalEntry")
+                        .WithMany("Attachments")
+                        .HasForeignKey("OwnerId", "JournalEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("JournalEntry");
                 });
 
             modelBuilder.Entity("Roamly.Domain.Entities.MaintenanceItem", b =>
@@ -751,6 +1403,56 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.Navigation("Camper");
                 });
 
+            modelBuilder.Entity("Roamly.Domain.Entities.SavedPlace", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.Trip", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.Camper", "Camper")
+                        .WithMany()
+                        .HasForeignKey("OwnerId", "CamperId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Camper");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.TripStop", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Roamly.Domain.Entities.SavedPlace", "SavedPlace")
+                        .WithMany("TripStops")
+                        .HasForeignKey("OwnerId", "SavedPlaceId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Roamly.Domain.Entities.Trip", "Trip")
+                        .WithMany("Stops")
+                        .HasForeignKey("OwnerId", "TripId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SavedPlace");
+
+                    b.Navigation("Trip");
+                });
+
             modelBuilder.Entity("Roamly.Domain.Entities.Camper", b =>
                 {
                     b.Navigation("Equipment");
@@ -760,9 +1462,33 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.Navigation("OdometerReadings");
                 });
 
+            modelBuilder.Entity("Roamly.Domain.Entities.Checklist", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.JournalEntry", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
             modelBuilder.Entity("Roamly.Domain.Entities.MaintenanceItem", b =>
                 {
                     b.Navigation("Logs");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.SavedPlace", b =>
+                {
+                    b.Navigation("TripStops");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.Trip", b =>
+                {
+                    b.Navigation("Checklists");
+
+                    b.Navigation("JournalEntries");
+
+                    b.Navigation("Stops");
                 });
 #pragma warning restore 612, 618
         }

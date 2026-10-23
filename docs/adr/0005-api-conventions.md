@@ -41,12 +41,14 @@ L'istruttoria partiva dall'ipotesi che il `rowversion` fosse «solo dichiarato»
 |---|---|---|---|
 | `Camper` | `byte[]? RowVersion` | ✅ `CamperConfiguration` | ✅ colonna `rowversion` |
 | `MaintenanceItem` | `byte[]? RowVersion` | ✅ `MaintenanceItemConfiguration` | ✅ colonna `rowversion` |
-| `Trip` | `byte[]? RowVersion` | ✅ `TripConfiguration` | ❌ assente, **e correttamente** |
-| le altre 11 entità owned | — | ❌ | ❌ |
+| `Trip` | `byte[]? RowVersion` | ✅ `TripConfiguration` | ❌ `InitialPhase1`; presente in `AddTripsAndTripStops` |
+| `Expense` | `byte[]? RowVersion` | ✅ `ExpenseConfiguration` | presente nella migration additiva `ActivateExpenseManagement` |
+| `TripStop` | — | — | nessun token autonomo; aggiornato tramite il Trip aggregate |
+| le altre entità owned | — | ❌ | ❌ |
 
-`Trip` non è nella migration perché non è nel `RoamlyDbContext` di runtime: è registrata **solo** in `FullSchemaDbContext` (Phase 2+, **R32, ADR-0009**). Non è una migration disallineata dal modello: è la Phase 1 come progettata. Conseguenza operativa: **questo ADR non tocca `InitialPhase1`**, perché l'unico update di Phase 1 è `PUT /api/v1/campers/{id}` e `Campers.RowVersion` esiste già.
+Quando fu approvato questo ADR, `Trip` era fuori dal `RoamlyDbContext` runtime e quindi `InitialPhase1` era l'unica migration applicativa rilevante. La migration Phase 2 `AddTripsAndTripStops` l'ha poi portato nel runtime insieme al suo `RowVersion`; la migration additiva `ActivateExpenseManagement` introduce `Expense` con token autonomo per `PUT` e `DELETE`. Il chiarimento R49 approvato il 2026-10-07 definisce `Trip` come confine di concorrenza anche per gli update di `TripStop`; nessuna migration aggiuntiva serve al figlio.
 
-⚠️ `RowVersion` è `byte[]?` **nullable**. SQL Server valorizza sempre la colonna, quindi il null si osserva solo su un'entità mai persistita — ma il codice che genera l'ETag deve trattarlo come «nessun ETag» invece di emettere `W/""`.
+⚠️ `RowVersion` è `byte[]?` **nullable**. SQL Server valorizza sempre la colonna, quindi il null si osserva solo su un'entità mai persistita: il codice che genera l'ETag deve trattarlo come «nessun ETag», senza emettere un header vuoto.
 
 ---
 
@@ -139,9 +141,11 @@ public static ProblemDetails NotFound() => new()
 
 ### 2. Status code di dominio — `DomainResult<T>` nel ritorno dell'handler
 
-**Decisione.** Un `DomainResult<T>` di dominio come tipo di ritorno di ogni `HandleAsync`, più un envelope uniforme per gli esiti negativi: `{ "outcome": "rejected", "reasons": [{ "code": "...", "message": "..." }] }`, servito con HTTP `200`.
+**Decisione.** Gli handler che possono restituire un esito negativo di dominio usano `DomainResult<T>`; tali esiti viaggiano con un envelope uniforme, `{ "outcome": "rejected", "reasons": [{ "code": "...", "message": "..." }] }`, servito con HTTP `200`. Gli handler che modellano esiti di protocollo possono restituire un risultato tipizzato dalla slice, ma devono dichiararlo esplicitamente con `ProtocolOutcomeHandlerAttribute` e motivarne il contratto.
 
-**Motivo dominante: senza un tipo di ritorno che lo imponga, questa regola non è verificabile.** È l'unica delle otto in cui la convenzione riguarda il **codice dell'handler** e non l'HTTP, e quindi l'unica in cui un documento da solo non basta: il *principio* («camper non compatibile con il percorso» → `200`, non `400`) è già in vigore in `API-CONVENTIONS.md` §2 e non viene riaperto; è la *forma* che mancava. `DomainResult<T>` è il minimo che rende la regola automatizzabile, e non introduce indirezione: è un tipo di ritorno, non un layer.
+**Motivo dominante: senza un tipo di ritorno che lo imponga, la regola sui rifiuti di dominio non è verificabile.** È l'unica delle otto in cui la convenzione riguarda il **codice dell'handler** e non l'HTTP: il *principio* («camper non compatibile con il percorso» → `200`, non `400`) è già in vigore in `API-CONVENTIONS.md` §2 e non viene riaperto; è la *forma* che mancava. `DomainResult<T>` rende automatizzabile il contratto di dominio. Non va però usato per mascherare un esito di protocollo come rifiuto o successo di dominio.
+
+Un esito di protocollo ha un contratto HTTP distinto già fissato: per esempio, l'idempotenza IdentityBased di **R50** richiede `409 ProblemDetails` se lo stesso `(OwnerId, Id)` del camper arriva con contenuto normalizzato diverso. Questo conflitto non è un rifiuto di dominio e non va trasformato nell'envelope `rejected` su `200`. Lo stesso confine si applica ai flussi di autenticazione e alle lookup il cui endpoint traduce un risultato tipizzato in uno status HTTP. Ogni eccezione è visibile tramite `[ProtocolOutcomeHandler("motivazione")]`; l'attributo non autorizza esiti di dominio fuori da `DomainResult<T>`.
 
 **Alternative scartate**
 
@@ -167,13 +171,13 @@ return result switch
 };
 ```
 
-**Dove si implementa.** **Handler** (tipo di ritorno) + **endpoint** (traduzione a `TypedResults`). **Non** un endpoint filter: un filter non conosce la semantica dell'esito. **Non** il modello EF. È una delle due voci che `ARCHITECTURE.md` §1 conta fra i concern HTTP ma che vive nell'handler.
+**Dove si implementa.** **Handler** (tipo di ritorno) + **endpoint** (traduzione a `TypedResults`). La classificazione degli esiti di protocollo è esplicita in `ProtocolOutcomeHandlerAttribute`; R47 la verifica insieme ai ritorni `DomainResult<T>`. **Non** un endpoint filter: un filter non conosce la semantica dell'esito. **Non** il modello EF. È una delle due voci che `ARCHITECTURE.md` §1 conta fra i concern HTTP ma che vive nell'handler.
 
 **Regola**
 
 | Regola | Enunciato | Verificatore | Livello |
 |---|---|---|---|
-| **R47, ADR-0005** | **Un esito di dominio non è un'eccezione e non è un `4xx`.** Ogni metodo `HandleAsync` sotto `Features/` restituisce `Task<DomainResult<T>>`; nessun handler lancia un'eccezione per esprimere un esito di dominio previsto. Gli esiti negativi viaggiano su `200` con l'envelope dichiarato | **L0 (bloccante)** in `Roamly.Model.Tests/Conventions/`: riflessione su tutti i tipi `*Handler` sotto `Features/` — il tipo di ritorno di `HandleAsync` è `Task<DomainResult<...>>`. **Riusa la stessa scoperta per riflessione di R44** (`ARCHITECTURE.md` §4): costa ~10 righe in più, non un test nuovo. **+ L2** su un caso di riferimento: esito negativo → `200`, non `400` | **L0 + L2** |
+| **R47, ADR-0005** | **Un rifiuto di dominio non è un'eccezione e non è un `4xx`.** Un handler senza esiti di protocollo dichiarati restituisce `Task<DomainResult<T>>`; un handler con contratto di protocollo distinto dichiara `[ProtocolOutcomeHandler]` con motivazione non vuota. Nessun handler usa eccezioni per esprimere esiti previsti. I rifiuti di dominio viaggiano su `200` con l'envelope dichiarato; gli esiti di protocollo seguono il contratto HTTP della slice (per R50, mismatch idempotente → `409`) | **L0 (bloccante)** in `Roamly.Model.Tests/Conventions/`: riflessione condivisa con R44 su tutti i tipi `*Handler` — ogni handler restituisce `Task<DomainResult<...>>` oppure dichiara `[ProtocolOutcomeHandler]` con motivazione. **L2:** il primo caso di rifiuto di dominio verifica envelope e `200`; i casi di protocollo verificano il proprio contratto, incluso R50 | **L0 + L2** |
 
 ---
 
@@ -216,15 +220,15 @@ return result switch
 
 ---
 
-### 4. Concorrenza — ETag debole dal `rowversion`, `If-Match` **obbligatorio**
+### 4. Concorrenza — ETag forte dal `rowversion`, `If-Match` **obbligatorio**
 
-**Decisione.** ETag **debole** (`W/"<base64url del RowVersion>"`) sul `GET` di singola risorsa; `If-Match` **obbligatorio** su `PUT`/`PATCH`/`DELETE` di risorsa aggiornabile. Header assente → **`428 Precondition Required`**; token non combaciante → **`412 Precondition Failed`**. `RowVersion` nullo ⇒ **nessun header `ETag`**, mai `W/""`.
+**Decisione originaria.** ETag dal `RowVersion` sul `GET` di singola risorsa; `If-Match` **obbligatorio** su `PUT`/`PATCH`/`DELETE` di risorsa aggiornabile. La forma globale è stata emendata il 2026-10-08: si vedano l'emendamento datato qui sotto e la scelta esplicita dell'utente.
 
 **Il perimetro, che è la parte che chiude l'anello fra `API-CONVENTIONS.md` §2 e `DATA.md` §2:**
 
-> Un endpoint di update esiste **solo** per entità che hanno un token di concorrenza nel modello. Aggiungere un `PUT`/`PATCH`/`DELETE` su un'entità che non ce l'ha richiede **prima** una migration che glielo aggiunga.
+> Un endpoint di update esiste solo entro un **confine di concorrenza** protetto da un token configurato nel modello. Per un endpoint su una risorsa aggregata, il token appartiene all'aggregato: una modifica dei figli deve aggiornare il token del padre nella stessa scrittura atomica. Un figlio senza endpoint indipendente non richiede un proprio token. Se il figlio diventa aggiornabile in modo indipendente, serve prima una migration che gli aggiunga il suo token.
 
-Oggi è soddisfatto a costo zero (`PUT /api/v1/campers/{id}` è l'unico update di Phase 1 e `Camper.RowVersion` esiste). È un **trigger**, non un lavoro. `Equipment`, `MaintenanceLog` e `OdometerReading` **non** hanno token: il giorno in cui uno di essi diventa aggiornabile, R49 diventa rossa prima che l'endpoint esista.
+In Phase 1 è soddisfatto da `PUT /api/v1/campers/{id}` e `Camper.RowVersion`; l'aggregato Trip applica la stessa regola al proprio root e `Expense.RowVersion` protegge i suoi endpoint autonomi `PUT`/`DELETE`. È un **trigger**, non un lavoro. `Equipment`, `MaintenanceLog` e `OdometerReading` **non** hanno token: il giorno in cui uno di essi diventa aggiornabile autonomamente, R49 diventa rossa prima che l'endpoint esista.
 
 **Motivo dominante: il token esiste già nello schema e la PWA è multi-dispositivo per progetto.** Telefono in cantina e tablet in cucina sullo stesso camper è lo scenario normale, non l'eccezione. Non usare una colonna già pagata significa pagarla senza il beneficio.
 
@@ -249,7 +253,7 @@ Senza queste due righe il pattern raccomandato **sembrerà una violazione**, e v
 
 | Pezzo | Luogo |
 |---|---|
-| Lettura di `If-Match`, `428` se assente, `412` se non combacia | **endpoint filter** (`Common/Http/ConcurrencyFilter.cs`) applicato al gruppo degli endpoint di update |
+| Lettura di `If-Match`, `428` se assente, `412` se non combacia | **slice di update** — endpoint legge l'header e handler lo verifica dopo il lookup owner-scoped |
 | Emissione dell'header `ETag` sul `GET` | **endpoint** (o filter di risposta) dal `RowVersion` del read model |
 | Token di concorrenza | **modello EF** — `IsRowVersion()`, già presente |
 | Confronto reale e `DbUpdateConcurrencyException` | **handler**, via `Entry(...).Property(...).OriginalValue` |
@@ -260,15 +264,25 @@ Una voce sola che tocca **filter + modello + handler**: è l'esempio più chiaro
 
 | Regola | Enunciato | Verificatore | Livello |
 |---|---|---|---|
-| **R49, ADR-0005** | **Nessun update senza token.** (a) Ogni entità raggiunta da un endpoint `PUT`/`PATCH`/`DELETE` ha un token di concorrenza configurato con `IsRowVersion()`. (b) Ogni endpoint di update rifiuta con `428` una richiesta priva di `If-Match` e con `412` un token non combaciante | **L0 (bloccante):** su `FullSchemaDbContext.Model` — l'insieme delle entità esposte da endpoint di update è ⊆ dell'insieme delle entità con `IsConcurrencyToken` + `ValueGenerated.OnAddOrUpdate`. Nessun database: basta il modello EF in memoria, quindi **L0 e non L1** per **R31, ADR-0009**. **+ L2:** `PUT` senza header → 428; ETag stantio → 412; ETag corrente → 200 | **L0 + L2** |
+| **R49, ADR-0005** | **Nessun update senza token al confine di concorrenza.** (a) Ogni risorsa aggregata esposta da `PUT`/`PATCH`/`DELETE` ha un token configurato con `IsRowVersion()`; i figli aggiornati solo attraverso quell'aggregato non richiedono un token autonomo, ma ogni loro modifica deve toccare il padre nella stessa `SaveChanges`. (b) Ogni endpoint rifiuta con `428` una richiesta priva di `If-Match` e con `412` un token non combaciante | **L0 (bloccante):** verificare sul modello EF che ciascun confine radice con endpoint di update abbia `IsConcurrencyToken` + `ValueGenerated.OnAddOrUpdate`; verificare che i figli coperti non abbiano un endpoint di update autonomo. Nessun database: basta il modello EF e il metadata degli endpoint, quindi **L0 e non L1** per **R31, ADR-0009**. **+ L2:** `PUT` senza header → 428; ETag malformato/stantio o concorrenza reale → 412; ETag corrente → 200 con nuovo ETag. Per il PUT Trip, anche una sostituzione limitata a `TripStop` deve restituire un nuovo ETag del `Trip` | **L0 + L2** |
 
-> La parte (a) a L0 è ciò che rende impossibile la regressione peggiore: aggiungere un `PUT` su `Equipment` e scoprire mesi dopo che non c'era concorrenza.
+> **Chiarimento di ambito R49 approvato dall'utente il 2026-10-07 — aggregato Trip.** `PUT /api/v1/trips/{tripId}` sostituisce atomicamente i campi modificabili di `Trip` e `TripStop`; `Trip.RowVersion`/ETag protegge l'intero aggregate. Ogni update, anche se cambia solo una tappa, aggiorna `Trip.UpdatedAtUtc` nello stesso `SaveChanges`, facendo avanzare il rowversion del padre. `TripStop` non ha `RowVersion` e non richiede una migration dedicata finché non esiste un endpoint di update autonomo. L'ordine delle tappe deriva dall'array della richiesta. La rimozione di una tappa referenziata da `JournalEntry` è un conflitto `409`, senza scollegare né cancellare la voce di diario.
+
+> **Chiarimento R49 approvato dall'utente il 2026-10-08 — checklist sotto il confine Trip.** La migration additiva `ActivateTripChecklists` attiva soltanto `Checklist` e `ChecklistItem`. Entrambi sono figli dell'aggregate Trip e non hanno `RowVersion`: ogni mutazione annidata richiede l'ETag del Trip e aggiorna `Trip.UpdatedAtUtc` nella stessa `SaveChanges`, facendo avanzare il token radice. Le route di scrittura restano annidate sotto `/api/v1/trips/{tripId}/checklists/...`; `GET` restituisce il token Trip da riutilizzare.
+
+> **Ambito R49 per Expense approvato dall'utente il 2026-10-08.** `Expense` è un confine aggiornabile indipendente: `GET` espone l'ETag, `PUT` e `DELETE` richiedono `If-Match`; la migration `ActivateExpenseManagement` aggiunge il relativo `rowversion`.
+
+> **Emendamento globale approvato dall'utente il 2026-10-08 (HIGH, prima della pubblicazione).** Ogni endpoint corrente che usa `RowVersionEtag` emette il token SQL Server come ETag **forte** (`"<base64url RowVersion>"`, senza `W/`) e accetta in `If-Match` la stessa forma forte e quotata. I token deboli `W/"…"` e i token malformati/non corrispondenti sono rifiutati con `412`; l'header assente resta `428`. Non cambiano database, schema o semantica degli status code. Poiché l'API non è ancora pubblicata, il formato si aggiorna globalmente dentro `v1` e non si introduce `/api/v2`.
+>
+> **Decisione utente del 2026-10-08 — formato ETag globale.** La scelta approvata è **ETag forti globali per RowVersion (Raccomandata)**: `Camper` (incluso il profilo), `Equipment`, `Trip` (incluse le mutazioni delle checklist protette dal root), `Expense` e ogni altro endpoint che usa il helper condiviso adottano la forma forte sopra descritta.
+>
+> La parte (a) a L0 impedisce di aggiungere un endpoint di update autonomo a una risorsa senza token. Non vieta che un aggregate root con token governi una modifica atomica dei propri figli; questa relazione deve essere esplicita e verificata (come Trip/TripStop).
 
 ---
 
 ### 5. Idempotency — nessun header: idempotenza dall'identità client-side
 
-**Decisione.** Il client genera l'`Id` COMB (già previsto da [`ADR-0008`](0008-primary-key-strategy.md)) e lo manda. Un `POST` che collide sulla PK con una riga **identica per contenuto** restituisce `200` + la risorsa esistente invece di `409`. **Nessuno store, nessuna tabella, nessuna scadenza.** In più, ogni `POST` **dichiara** la propria politica come metadata.
+**Decisione.** Per `POST /api/v1/campers`, il browser invia nel body l’ID COMB. Per la stessa coppia `(OwnerId, Id)`, contenuto normalizzato equivalente restituisce `200` con la risorsa esistente; contenuto diverso restituisce `409 Conflict` con `ProblemDetails`. Il confronto include solo i campi business del request model corrente: `Name.Trim()`, confrontato ordinalmente e case-sensitive, e `VehicleKind`, confrontato per uguaglianza esatta. `Id`, `OwnerId` e timestamp sono esclusi. Non si introducono header o store di idempotenza. In più, ogni `POST` **dichiara** la propria politica come metadata.
 
 **Motivo dominante: l'identità client-side rende lo store ridondante per tutti i casi che Roamly ha oggi.** ADR-0008 ha già pagato il prezzo del Guid COMB generato dal client per un altro motivo; la deduplicazione ne è un sottoprodotto gratuito.
 
@@ -282,20 +296,20 @@ Il caso reale non è il pagamento: **nessun POST di Phase 1 chiama un servizio a
 | **C — `Idempotency-Key` completo con tabella di persistenza delle risposte (stile Stripe)** | **Sproporzionato**: sarebbe l'unico pezzo di infrastruttura di Roamly senza un caso d'uso in produzione, e l'unica tabella che non modella il dominio. Richiede retention e scadenze, e **tocca il grafo di cancellazione di `DATA.md` §6**, quindi tocca ADR-0004. Se l'utente la scegliesse in futuro, la severità salirebbe a HIGH e coinvolgerebbe @oracle e @sentinel |
 | **D — `Idempotency-Key` solo su `/me/deletion`, senza store** | Un meccanismo per un endpoint solo: costa quanto la scelta adottata e copre meno |
 
-**Il limite accettato:** questa scelta non copre il caso «stesso intento, payload diverso», e richiede di definire il confronto di contenuto. È accettabile perché il caso reale è il doppio tap, non il retry semantico.
+Per `POST /api/v1/campers`, un ID già presente per lo stesso owner con contenuto normalizzato diverso restituisce `409 Conflict`, come definito sopra.
 
 **Dove si implementa**
 
 | Pezzo | Luogo |
 |---|---|
 | Dichiarazione della politica per endpoint | **metadata sull'endpoint** — `.WithMetadata(new IdempotencyPolicy(...))` |
-| Rilevazione della collisione e risposta `200` | **handler** (la `DbUpdateException` su PK) + traduzione nell'endpoint |
+| Lookup owner-scoped; confronto del contenuto e risposta `200`/`409 Conflict` | **handler** (query `OwnerScope` e collisione PK) + traduzione nell'endpoint |
 
 **Regola**
 
 | Regola | Enunciato | Verificatore | Livello |
 |---|---|---|---|
-| **R50, ADR-0005** | **Ogni `POST` dichiara la sua politica di idempotenza.** Ogni endpoint mappato con `MapPost` porta un metadata `IdempotencyPolicy` esplicito, con valore fra `IdentityBased`, `NotRequired` o `KeyRequired`. Nessun default implicito | **L0 (bloccante):** enumerazione di `EndpointDataSource` — ogni endpoint POST ha il metadata. Il test **non** giudica *quale* politica sia giusta: obbliga a sceglierne una consapevolmente. **+ L2:** per gli endpoint `IdentityBased`, doppio POST con stesso `Id` e stesso corpo → stessa risorsa, nessun duplicato | **L0 + L2** |
+| **R50, ADR-0005** | **Ogni `POST` dichiara la sua politica di idempotenza.** Ogni endpoint mappato con `MapPost` porta un metadata `IdempotencyPolicy` esplicito, con valore fra `IdentityBased`, `NotRequired` o `KeyRequired`. Nessun default implicito | **L0 (bloccante):** enumerazione di `EndpointDataSource` — ogni endpoint POST ha il metadata. Il test **non** giudica *quale* politica sia giusta: obbliga a sceglierne una consapevolmente. **+ L2:** per `POST /api/v1/campers`, stesso `(OwnerId, Id)` e `Name.Trim()` ordinal case-sensitive più `VehicleKind` uguale → stessa risorsa e `200`; contenuto normalizzato diverso → `409 Conflict`. Per i POST di Authentication dichiarati `NotRequired`, R50 richiede il metadata esplicito senza il test comportamentale `IdentityBased` | **L0 + L2** |
 
 > **R50 conta più della scelta stessa.** Il giorno in cui arriverà un POST a pagamento (decisione #8), il verificatore obbligherà a dichiarare una politica, e la decisione verrà presa **in quel momento, con il caso reale davanti**, invece di essere anticipata oggi su un'ipotesi. Passare a uno store persistito resta additivo: si aggiunge un header e un filter, gli endpoint esistenti continuano a funzionare.
 
@@ -322,7 +336,7 @@ Il caso reale non è il pagamento: **nessun POST di Phase 1 chiama un servizio a
 | Pezzo | Luogo |
 |---|---|
 | Prefisso di versione | **routing** — un `MapGroup("/api/v1")` unico, non ripetuto per endpoint |
-| Snapshot e diff | **CI** + un file committato (`docs/api/openapi-v1.json` o `tests/.../__snapshots__/`) |
+| Snapshot e diff | **CI** + un file committato (`docs/api/openapi-v1.json` o `tests/.../__snapshots__/`); collocarlo sotto `tests/` quando la CI esclude le modifiche documentali |
 | Deprecazione | metadata OpenAPI sull'endpoint |
 
 **Regola**
@@ -409,7 +423,7 @@ Se l'utente ritenesse questa lettura di `DATA.md` §7 troppo stretta, la voce to
 | Naming dei `type` di `ProblemDetails` | URI stabili sotto `https://roamly.app/problems/{slug}`, mai localizzati, **non necessariamente risolvibili** |
 | Encoding del cursore | `Base64Url` di una stringa opaca, **senza firma** — non contiene segreti, contiene un `Id` che il client già possiede. ⚠️ Se un giorno il cursore contenesse qualcosa che il client **non** possiede, diventerebbe materia di @sentinel |
 | `limit` di default e massimo | **50 / 200**, modificabili senza breaking change |
-| Forma dell'ETag | debole `W/"…"`, da `RowVersion` in `Base64Url`; `RowVersion` nullo ⇒ nessun header. Conseguenza tecnica della voce 4, non una scelta indipendente |
+| Forma dell'ETag | forte `"<base64url RowVersion>"`; `RowVersion` nullo ⇒ nessun header. Conseguenza tecnica della decisione utente globale del 2026-10-08 |
 | `MapGroup` unico per `/api/v1` | sì, un solo gruppo, con auth e filtri comuni applicati lì |
 
 ---
@@ -424,7 +438,7 @@ Se l'utente ritenesse questa lettura di `DATA.md` §7 troppo stretta, la voce to
 | **R46** | **Nessun corpo d'errore è funzione dello stato del database.** `detail`/`instance` mai popolati sui 4xx di lookup; chiavi di `Extensions` = lista chiusa dichiarata in un punto unico | unit test sulla factory (`Detail == null`, `Instance == null`, `Extensions.Keys` = costante); + confronto R7 sul corpo privato della lista chiusa | **L0 + L2** |
 | **R47** | **Un esito di dominio non è un'eccezione e non è un `4xx`.** Ogni `HandleAsync` sotto `Features/` restituisce `Task<DomainResult<T>>`; esiti negativi su `200` con l'envelope dichiarato | riflessione sui tipi `*Handler` (riusa la scoperta di R44); + un caso di riferimento HTTP | **L0 + L2** |
 | **R48** | **Nessun request model senza validazione attiva.** Ogni tipo di binding del corpo sotto `Features/` è coperto da un validatore in esecuzione; input invalido → `400` + `errors` **chiavizzato sui nomi JSON** | riflessione sui `*Command`/`*Request` → metadati `[ValidatableType]` presenti; + un caso per slice che verifica status e chiavi | **L0 + L2** |
-| **R49** | **Nessun update senza token.** (a) ogni entità con endpoint di update ha `IsRowVersion()`; (b) update senza `If-Match` → `428`, token stantio → `412` | sul modello EF in memoria: entità con endpoint di update ⊆ entità con token; + i tre casi HTTP | **L0 + L2** |
+| **R49** | **Nessun update senza token al confine aggregato.** (a) ogni root aggiornabile ha `IsRowVersion()`; i figli modificabili solo attraverso il root non hanno bisogno di token autonomi ma ogni loro update tocca il parent. Un figlio aggiornato in modo indipendente deve avere il proprio token. (b) senza `If-Match` → `428`, token malformato/stantio → `412` | sul modello EF in memoria: ogni root con endpoint update ha token e i figli coperti non hanno endpoint update autonomo; + i casi HTTP, incluso un PUT Trip che cambia solo una tappa e avanza l'ETag Trip | **L0 + L2** |
 | **R50** | **Ogni `POST` dichiara la sua politica di idempotenza** (`IdentityBased` \| `NotRequired` \| `KeyRequired`). Nessun default implicito | enumerazione di `EndpointDataSource`; + doppio POST `IdentityBased` senza duplicati | **L0 + L2** |
 | **R51** | **Il contratto di una versione non si restringe mai.** Snapshot OpenAPI di `/api/v1` committato; rimozione, rinomina, restrizione di tipo o parametro reso obbligatorio fanno fallire la build. Aggiungere è sempre lecito | approval test sullo snapshot | **L0 se la generazione offline è praticabile, L2 altrimenti** — conferma **@vulcan** |
 | **R52** | **Nessuna collection nuda.** Ogni endpoint multi-risorsa restituisce `Page<T>` (`items` + `nextCursor`), mai un array al primo livello. `limit` ha default e massimo dichiarati | riflessione sui tipi di ritorno dei `MapGet` di collection; + impaginazione reale in due chiamate | **L0 + L2** |
@@ -446,7 +460,7 @@ Se l'utente ritenesse questa lettura di `DATA.md` §7 troppo stretta, la voce to
 
 ### Cosa diventa più difficile — vincoli che questo ADR impone al futuro
 
-1. **Una migration prima di ogni nuovo `PUT`.** Un endpoint `PUT`/`PATCH`/`DELETE` su `Equipment`, `MaintenanceLog` o `OdometerReading` **non è più una slice**: richiede prima una migration che aggiunga il token di concorrenza. R49(a) lo rende rosso a L0 nel momento in cui l'endpoint viene mappato, non dopo. È un attrito deliberato, non un effetto collaterale.
+1. **Una migration prima di ogni nuovo confine di update autonomo.** Un endpoint `PUT`/`PATCH`/`DELETE` indipendente su `Equipment`, `MaintenanceLog`, `OdometerReading` o `TripStop` **non è più una slice**: richiede prima una migration che aggiunga il token di concorrenza. I figli sostituiti atomicamente da un root con token (come `TripStop` tramite `Trip`) restano protetti da quel confine. R49(a) lo rende rosso a L0 nel momento in cui l'endpoint indipendente viene mappato, non dopo. È un attrito deliberato, non un effetto collaterale.
 2. **Lo snapshot OpenAPI va mantenuto.** Ogni PR che cambia il contratto deve aggiornarlo, e il diff va letto invece che rigenerato per far passare la build. Uno snapshot rigenerato senza guardarlo è uno snapshot inutile: è l'unico punto di questo ADR in cui la disciplina umana resta necessaria, e va detto.
 3. **R48 è la condizione della validazione nativa, non un suo complemento.** Se R48 non esiste dal primo giorno, la scelta della validazione nativa **va riaperta**, perché il meccanismo adottato fallisce in silenzio per progetto. Non è una raccomandazione: è la clausola sotto cui la sotto-decisione è stata accettata.
 4. **`If-Match` è obbligatorio, quindi rimuoverlo è breaking.** Per la policy della voce 6, rilassare il `428` a un update permissivo è una restrizione del contratto dal punto di vista di chi si aspettava il rifiuto — e comunque una modifica di comportamento che lo snapshot rende visibile.

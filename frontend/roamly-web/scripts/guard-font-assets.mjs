@@ -2,9 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { collectDisplayFontUsageByComponent } from './lib/display-font-usage.mjs'
+import { isFingerprintedViteWoff2 } from './lib/vite-asset-fingerprint.mjs'
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const sourceRoot = path.join(root, 'src')
-const publicFontsRoot = path.join(root, 'public', 'fonts')
 const distRoot = path.join(root, 'dist')
 const fontBudgetBytes = 120 * 1024
 const allowedDisplaySelectors = new Set(['.numeral-display', '.page-title'])
@@ -57,16 +59,16 @@ function extractBlocks(source, atRule) {
 }
 
 function checkFontBudgetAndSources() {
-  const fontFiles = listFiles(publicFontsRoot, (filePath) => filePath.toLowerCase().endsWith('.woff2'))
+  const fontFiles = listFiles(distRoot, (filePath) => filePath.toLowerCase().endsWith('.woff2'))
   const totalBytes = fontFiles.reduce((sum, filePath) => sum + fs.statSync(filePath).size, 0)
 
   if (totalBytes > fontBudgetBytes) {
     errors.push(
-      `R18: public/fonts/**/*.woff2 totals ${totalBytes} bytes; budget is ${fontBudgetBytes} bytes (120 KiB).`,
+      `R18: built WOFF2 files total ${totalBytes} bytes; budget is ${fontBudgetBytes} bytes (120 KiB).`,
     )
   }
 
-  if (fontFiles.length === 0) errors.push('R18: no public/fonts/**/*.woff2 files were found.')
+  if (fontFiles.length === 0) errors.push('R18: no built WOFF2 files were found; run npm run build first.')
 
   const cssFiles = listFiles(sourceRoot, (filePath) => filePath.endsWith('.css'))
   for (const filePath of cssFiles) {
@@ -138,28 +140,25 @@ function checkDisplayFontScope() {
   }
 
   const pageFiles = listFiles(path.join(sourceRoot, 'features'), (filePath) => /Page\.(tsx|jsx)$/.test(filePath))
+  let pageComponentCount = 0
   for (const filePath of pageFiles) {
     const source = fs.readFileSync(filePath, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
-    const classAttributes = [...source.matchAll(/\bclassName\s*=\s*(["'`])([^"'`]*?)\1/gs)]
-    let titleCount = 0
-    let totalDisplayCount = 0
+    const usages = collectDisplayFontUsageByComponent(filePath, source)
+    pageComponentCount += usages.length
 
-    for (const [, , classNames] of classAttributes) {
-      const classes = classNames.split(/\s+/)
-      titleCount += classes.filter((name) => name === 'page-title').length
-      totalDisplayCount += classes.filter((name) => allowedDisplaySelectors.has(`.${name}`)).length
-    }
-
-    if (titleCount > 1) errors.push(`R22: ${relative(filePath)} has ${titleCount} static .page-title uses; maximum is one per screen.`)
-    if (totalDisplayCount > 2) {
-      errors.push(`R22: ${relative(filePath)} has ${totalDisplayCount} static display-font uses; maximum is two per screen.`)
+    for (const { name, pageTitles, total } of usages) {
+      const component = `${relative(filePath)} (${name})`
+      if (pageTitles > 1) {
+        errors.push(`R22: ${component} has ${pageTitles} static .page-title uses; maximum is one per screen.`)
+      }
+      if (total > 2) {
+        errors.push(`R22: ${component} has ${total} static display-font uses; maximum is two per screen.`)
+      }
     }
   }
 
-  if (pageFiles.length === 0) errors.push('R22: no features/**/*Page.tsx screen components were found for the per-screen usage check.')
-  console.log(`R22: display font selectors checked in ${cssFiles.length} source/build CSS file(s); static class usage checked in ${pageFiles.length} page component(s).`)
+  if (pageComponentCount === 0) errors.push('R22: no features/**/*Page.tsx screen components were found for the per-screen usage check.')
+  console.log(`R22: display font selectors checked in ${cssFiles.length} source/build CSS file(s); static class usage checked in ${pageComponentCount} screen component(s).`)
 }
 
 function removeComments(content, kind) {
@@ -323,9 +322,25 @@ function checkBuiltAssets() {
   console.log(`R19: checked ${files.length} built HTML/CSS/JavaScript asset file(s) for external resource references.`)
 }
 
+function checkBuiltFontFingerprints() {
+  const builtFontFiles = listFiles(distRoot, (filePath) => filePath.toLowerCase().endsWith('.woff2'))
+
+  if (builtFontFiles.length === 0) {
+    errors.push('R19: no fingerprinted WOFF2 files were found in dist/assets.')
+    return
+  }
+
+  for (const filePath of builtFontFiles) {
+    if (!isFingerprintedViteWoff2(path.relative(distRoot, filePath))) {
+      errors.push(`R19: WOFF2 asset is not a fingerprinted Vite asset: ${relative(filePath)}.`)
+    }
+  }
+}
+
 checkFontBudgetAndSources()
 checkDisplayFontScope()
 checkBuiltAssets()
+checkBuiltFontFingerprints()
 
 if (errors.length > 0) {
   console.error(`\nDesign font/asset guard failed with ${errors.length} finding(s):`)

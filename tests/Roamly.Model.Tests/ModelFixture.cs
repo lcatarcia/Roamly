@@ -26,23 +26,31 @@ public sealed class ModelFixture
     public ModelFixture()
     {
         FullSchemaModel = BuildFullSchemaModel();
-        Phase1Model = BuildPhase1Model();
+        ApplicationModel = BuildApplicationModel();
+        FullSchemaRuntimeModel = BuildFullSchemaRuntimeModel();
+        ApplicationRuntimeModel = BuildApplicationRuntimeModel();
 
         OwnedEntityTypes = [.. FullSchemaModel.GetEntityTypes()
             .Where(IsOwned)
             .OrderBy(e => e.ClrType.Name, StringComparer.Ordinal)];
     }
 
-    /// <summary>Modello di <see cref="FullSchemaDbContext"/>: tutte e 14 le entita' piu' Identity.</summary>
+    /// <summary>Modello <see cref="FullSchemaDbContext"/>: entita' di dominio, tipi infrastrutturali e Identity.</summary>
     public IModel FullSchemaModel { get; }
 
-    /// <summary>Modello di <see cref="RoamlyDbContext"/>: solo le sei entita' della Phase 1, piu' Identity.</summary>
-    public IModel Phase1Model { get; }
+    /// <summary>Modello runtime read-optimized dello schema completo, usato dal walker R8.</summary>
+    public IModel FullSchemaRuntimeModel { get; }
+
+    /// <summary>Modello applicativo corrente, oltre a Identity e alle tabelle infrastrutturali.</summary>
+    public IModel ApplicationModel { get; }
+
+    /// <summary>Modello runtime read-optimized applicativo, sorgente dell'export.</summary>
+    public IModel ApplicationRuntimeModel { get; }
 
     /// <summary>Entity type dello schema completo che implementano <see cref="IOwnedResource"/>.</summary>
     public IReadOnlyList<IEntityType> OwnedEntityTypes { get; }
 
-    /// <summary>Vero se l'entity type e' una risorsa owned (esclude Identity ed <c>ErasureReceipt</c>).</summary>
+    /// <summary>Vero se l'entity type e' una risorsa owned (esclude Identity e tipi infrastrutturali).</summary>
     /// <param name="entityType">Entity type da classificare.</param>
     /// <returns><see langword="true"/> se il tipo CLR implementa <see cref="IOwnedResource"/>.</returns>
     public static bool IsOwned(IEntityType entityType)
@@ -70,7 +78,7 @@ public sealed class ModelFixture
         return DesignTimeModelOf(context);
     }
 
-    private static IModel BuildPhase1Model()
+    private static IModel BuildApplicationModel()
     {
         var options = new DbContextOptionsBuilder<RoamlyDbContext>()
             .UseSqlServer(NeverOpenedConnectionString)
@@ -78,6 +86,26 @@ public sealed class ModelFixture
 
         using var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
         return DesignTimeModelOf(context);
+    }
+
+    private static IModel BuildFullSchemaRuntimeModel()
+    {
+        var options = new DbContextOptionsBuilder<FullSchemaDbContext>()
+            .UseSqlServer(NeverOpenedConnectionString)
+            .Options;
+
+        using var context = new FullSchemaDbContext(options, ThrowingCurrentUser.Instance);
+        return context.Model;
+    }
+
+    private static IModel BuildApplicationRuntimeModel()
+    {
+        var options = new DbContextOptionsBuilder<RoamlyDbContext>()
+            .UseSqlServer(NeverOpenedConnectionString)
+            .Options;
+
+        using var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
+        return context.Model;
     }
 
     /// <summary>

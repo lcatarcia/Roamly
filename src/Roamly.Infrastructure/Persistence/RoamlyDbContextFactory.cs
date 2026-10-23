@@ -34,7 +34,7 @@ public sealed class RoamlyDbContextFactory : IDesignTimeDbContextFactory<RoamlyD
     /// </summary>
     private const string NeverOpenedConnectionString = "Server=none;Database=none;";
 
-    /// <summary>Costruisce il contesto della Phase 1 per il tooling di design-time.</summary>
+    /// <summary>Costruisce il contesto applicativo corrente per il tooling di design-time.</summary>
     /// <param name="args">Argomenti passati dal tooling. Non usati.</param>
     /// <returns>Il contesto su cui si generano le migration.</returns>
     public RoamlyDbContext CreateDbContext(string[] args)

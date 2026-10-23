@@ -39,3 +39,12 @@ jobs:
 
       - name: axe sui temi chiaro e scuro
         run: npm run design:axe
+
+      - name: Interazioni profilo camper ed equipaggiamento
+        run: npm run test:camper-flow
+
+      - name: Stima carburante nei viaggi
+        run: npm run test:fuel-estimate-flow
+
+      - name: Cambio password obbligatorio
+        run: npm run test:password-change-flow

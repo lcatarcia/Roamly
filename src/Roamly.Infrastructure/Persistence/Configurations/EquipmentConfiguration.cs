@@ -18,6 +18,7 @@ public sealed class EquipmentConfiguration(RoamlyDbContextBase context) : IEntit
         builder.Property(e => e.Category).HasTinyint().IsRequired();
         builder.Property(e => e.Notes).HasNvarchar(500);
         builder.Property(e => e.InstalledOnUtc).HasDate();
+        builder.Property(e => e.RowVersion).IsRowVersion();
 
         builder.HasOne(e => e.Camper)
             .WithMany(c => c.Equipment)
