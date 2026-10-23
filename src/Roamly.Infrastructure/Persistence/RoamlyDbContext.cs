@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Roamly.Common;
 using Roamly.Domain.Entities;
@@ -8,7 +9,7 @@ namespace Roamly.Infrastructure.Persistence;
 /// Contesto applicativo: <b>solo le sei entita' della Phase 1</b> (CONTEXT.md §2.6).
 /// E' questo il contesto su cui si generano le migration.
 /// </summary>
-public class RoamlyDbContext : RoamlyDbContextBase
+public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
 {
     /// <summary>Costruisce il contesto applicativo.</summary>
     /// <param name="options">Opzioni del contesto.</param>
@@ -35,6 +36,12 @@ public class RoamlyDbContext : RoamlyDbContextBase
 
     /// <summary>Ricevute di cancellazione, non owned.</summary>
     public DbSet<ErasureReceipt> ErasureReceipts => Set<ErasureReceipt>();
+
+    /// <summary>Chiavi di Data Protection condivise fra istanze applicative.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
+    /// <summary>Contatori infrastrutturali condivisi per il rate limit login.</summary>
+    public DbSet<LoginAttemptCounter> LoginAttemptCounters => Set<LoginAttemptCounter>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

@@ -4,11 +4,10 @@ namespace Roamly.Common;
 /// Identita' dell'utente corrente. Alimenta il query filter nominato "OwnerScope" (R2, ADR-0003).
 /// <para>
 /// Due soli membri di lettura, deliberatamente. Non c'e' un terzo membro "IsSystem": un'identita'
-/// di sistema (per i job futuri della Phase 1, ADR-0004) non e' un'identita' corrente ma un modo
-/// diverso di eseguire codice, e vivra' su un tipo separato (un futuro <c>ICurrentUserScope</c> con
-/// <c>RunAsUser</c>/<c>RunAsSystem</c>) quando i job esisteranno. Tenerla fuori di qui e' cio' che
-/// permette a <see cref="Id"/> di restare una domanda con una sola risposta valida: l'utente
-/// autenticato, o un'eccezione.
+/// di sistema (ADR-0004) non e' un'identita' corrente ma un modo diverso di eseguire codice:
+/// <c>ICurrentUserScope</c> espone i callback scoped <c>RunAsUser</c>/<c>RunAsSystem</c>. Tenerla
+/// fuori di qui e' cio' che permette a <see cref="Id"/> di restare una domanda con una sola risposta
+/// valida: l'utente HTTP autenticato o esplicitamente impersonato, oppure un'eccezione.
 /// </para>
 /// </summary>
 public interface ICurrentUser

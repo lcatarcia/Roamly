@@ -31,4 +31,7 @@ public class ApplicationUser : IdentityUser<Guid>
 
     /// <summary>Versione dell'informativa mostrata. Non e' un consenso.</summary>
     public string? PrivacyPolicyVersionSeen { get; set; }
+
+    /// <summary>Indica che l'utente deve cambiare la password prima di usare normalmente l'account.</summary>
+    public bool RequiresPasswordChange { get; set; }
 }

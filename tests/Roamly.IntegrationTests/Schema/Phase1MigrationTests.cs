@@ -58,7 +58,8 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
     [Fact]
     public async Task no_migration_is_left_pending_after_migrate()
     {
-        var database = await sqlServer.Phase1MigratedAsync();
+        var database = await sqlServer.ApplicationMigratedAsync();
+        Assert.Null(database.Failure);
         await using var context = ContextOn(database);
 
         var pending = (await context.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken)).ToList();
@@ -189,6 +190,15 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
     /// interroga il catalogo delle migration, non i dati.
     /// </summary>
     private static RoamlyDbContext ContextOn(Phase1Database database)
+    {
+        var options = new DbContextOptionsBuilder<RoamlyDbContext>()
+            .UseSqlServer(database.ConnectionString)
+            .Options;
+
+        return new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
+    }
+
+    private static RoamlyDbContext ContextOn(ApplicationDatabase database)
     {
         var options = new DbContextOptionsBuilder<RoamlyDbContext>()
             .UseSqlServer(database.ConnectionString)

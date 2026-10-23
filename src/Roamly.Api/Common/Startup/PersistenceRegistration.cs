@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -36,13 +38,20 @@ public static class PersistenceRegistration
         services.AddDbContext<RoamlyDbContext>(options =>
         {
             options.UseSqlServer(connectionString);
-            options.AddInterceptors(new OwnershipInterceptor());
+            options.AddInterceptors(new OwnershipInterceptor(), new SqlConnectionRetryInterceptor());
         });
+
+        services.AddDataProtection()
+            .SetApplicationName("Roamly")
+            .PersistKeysToDbContext<RoamlyDbContext>();
 
         services
             .AddIdentityCore<ApplicationUser>(identityOptions =>
             {
-                identityOptions.SignIn.RequireConfirmedEmail = true;
+                identityOptions.SignIn.RequireConfirmedEmail = false;
+                identityOptions.Lockout.AllowedForNewUsers = true;
+                identityOptions.Lockout.MaxFailedAccessAttempts = 10;
+                identityOptions.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddSignInManager()

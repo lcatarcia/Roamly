@@ -29,6 +29,7 @@ public static class IdentityEndpoints
                 : Results.Ok(response);
         })
         .RequireAuthorization()
+        .WithMetadata(new AllowPasswordChangeSessionAttribute())
         .WithRateLimitPolicy("None");
 
         return app;

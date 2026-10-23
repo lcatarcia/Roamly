@@ -38,6 +38,9 @@ public class FullSchemaDbContext : RoamlyDbContextBase
     /// <summary>Ricevute di cancellazione, non owned.</summary>
     public DbSet<ErasureReceipt> ErasureReceipts => Set<ErasureReceipt>();
 
+    /// <summary>Contatori infrastrutturali condivisi per il rate limit login.</summary>
+    public DbSet<LoginAttemptCounter> LoginAttemptCounters => Set<LoginAttemptCounter>();
+
     /// <summary>Viaggi.</summary>
     public DbSet<Trip> Trips => Set<Trip>();
 

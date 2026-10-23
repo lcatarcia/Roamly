@@ -13,15 +13,25 @@ internal enum LoginOutcome
     /// </summary>
     InvalidCredentials,
 
-    /// <summary>Soglia di tentativi per-account superata (SECURITY.md §6).</summary>
+    /// <summary>Soglia di tentativi per-IP superata; è l'unico esito login che restituisce 429.</summary>
     TooManyAttempts,
+
+    /// <summary>Indirizzo client o contatori SQL non verificabili; il login fallisce chiuso.</summary>
+    Unavailable,
 }
 
 /// <summary>Profilo minimo restituito da un login riuscito.</summary>
 /// <param name="Id">Identificativo utente.</param>
 /// <param name="Email">Email.</param>
 /// <param name="DisplayName">Nome visualizzato, se impostato.</param>
-public sealed record LoginProfile(Guid Id, string Email, string? DisplayName);
+/// <param name="SessionMode">Presente solo quando il login emette una sessione limitata.</param>
+public sealed record LoginProfile(
+    Guid Id,
+    string Email,
+    string? DisplayName,
+    [property: System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? SessionMode = null);
 
 /// <summary>Esito tipizzato dell'handler di login.</summary>
 /// <param name="Outcome">Esito.</param>

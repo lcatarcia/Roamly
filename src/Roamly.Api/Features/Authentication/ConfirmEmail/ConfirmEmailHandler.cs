@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Roamly.Api.Common.Http;
 using Roamly.Infrastructure.Identity;
 
 namespace Roamly.Api.Features.Authentication.ConfirmEmail;
@@ -14,6 +15,7 @@ internal enum ConfirmEmailOutcome
 }
 
 /// <summary>Conferma l'email a partire dal token generato in fase di registrazione.</summary>
+[ProtocolOutcomeHandler("Il link invalido o scaduto e' un esito del protocollo di conferma, tradotto in HTTP 400.")]
 internal sealed class ConfirmEmailHandler
 {
     private readonly UserManager<ApplicationUser> _userManager;

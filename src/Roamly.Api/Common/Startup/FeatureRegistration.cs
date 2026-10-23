@@ -1,8 +1,11 @@
 using Roamly.Api.Common.Email;
+using Roamly.Api.Common.Identity;
+using Roamly.Api.Features.Authentication.ChangePassword;
 using Roamly.Api.Features.Authentication.ConfirmEmail;
 using Roamly.Api.Features.Authentication.Login;
 using Roamly.Api.Features.Authentication.Logout;
 using Roamly.Api.Features.Authentication.Register;
+using Roamly.Api.Features.Authentication.ResendEmailConfirmation;
 using Roamly.Api.Features.Identity.GetMe;
 using Roamly.Common.Email;
 
@@ -26,11 +29,15 @@ public static class FeatureRegistration
         // Features/Authentication/
         services.AddScoped<RegisterHandler>();
         services.AddScoped<ConfirmEmailHandler>();
+        services.AddScoped<ChangePasswordHandler>();
         services.AddScoped<LoginHandler>();
         services.AddScoped<LogoutHandler>();
+        services.AddScoped<ResendEmailConfirmationHandler>();
 
         // Features/Identity/
         services.AddScoped<GetMeHandler>();
+        services.AddScoped<ProvisionUserJob>();
+        services.AddSingleton<IProvisioningConsole, ProvisioningConsole>();
 
         // Fake di sviluppo: nessun provider SMTP e' stato scelto (OPEN-DECISIONS.md). Sostituirlo
         // e' l'unica riga da cambiare quando arriva un provider reale.

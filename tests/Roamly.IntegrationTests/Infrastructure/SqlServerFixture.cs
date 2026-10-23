@@ -25,6 +25,7 @@ public class SqlServerFixture : IAsyncLifetime
     private readonly List<(string Label, double Milliseconds)> _timings = [];
     private readonly Lazy<Task<FullSchemaDatabase>> _fullSchema;
     private readonly Lazy<Task<Phase1Database>> _phase1;
+    private readonly Lazy<Task<ApplicationDatabase>> _application;
 
     /// <summary>Costruisce la fixture con il profilo di risorse dei test.</summary>
     public SqlServerFixture()
@@ -48,6 +49,7 @@ public class SqlServerFixture : IAsyncLifetime
         Resources = resources;
         _fullSchema = new Lazy<Task<FullSchemaDatabase>>(CreateFullSchemaAsync);
         _phase1 = new Lazy<Task<Phase1Database>>(MigratePhase1Async);
+        _application = new Lazy<Task<ApplicationDatabase>>(MigrateApplicationAsync);
 
         _container = new MsSqlBuilder(new DockerImage(SqlServerImage.Tag))
             .WithEnvironment(
@@ -107,6 +109,10 @@ public class SqlServerFixture : IAsyncLifetime
     /// <returns>Lo stato dell'applicazione, riuscita o fallita.</returns>
     public Task<Phase1Database> Phase1MigratedAsync() => _phase1.Value;
 
+    /// <summary>Database con tutte le migration del modello corrente, incluse le fondamenta auth.</summary>
+    /// <returns>Lo stato dell'applicazione.</returns>
+    public Task<ApplicationDatabase> ApplicationMigratedAsync() => _application.Value;
+
     /// <summary>Annota una misura di tempo, riversata su file a fine run (Passo 15 di ADR-0009 §9).</summary>
     /// <param name="label">Che cosa e' stato misurato.</param>
     /// <param name="elapsed">Durata osservata.</param>
@@ -130,6 +136,12 @@ public class SqlServerFixture : IAsyncLifetime
         if (_phase1.IsValueCreated)
         {
             var migrated = await _phase1.Value.ConfigureAwait(false);
+            await migrated.Lease.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (_application.IsValueCreated)
+        {
+            var migrated = await _application.Value.ConfigureAwait(false);
             await migrated.Lease.DisposeAsync().ConfigureAwait(false);
         }
 
@@ -178,7 +190,8 @@ public class SqlServerFixture : IAsyncLifetime
         await using var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
 
         var stopwatch = Stopwatch.StartNew();
-        var failure = await Record.ExceptionAsync(() => context.Database.MigrateAsync()).ConfigureAwait(false);
+        var failure = await Record.ExceptionAsync(
+            () => context.Database.MigrateAsync("20260928095239_InitialPhase1")).ConfigureAwait(false);
         stopwatch.Stop();
 
         Measure(
@@ -188,6 +201,29 @@ public class SqlServerFixture : IAsyncLifetime
             stopwatch.Elapsed);
 
         return new Phase1Database(lease, failure);
+    }
+
+    private async Task<ApplicationDatabase> MigrateApplicationAsync()
+    {
+        var lease = await CreateEmptyDatabaseAsync("CREATE DATABASE per tutte le migration applicative").ConfigureAwait(false);
+
+        var options = new DbContextOptionsBuilder<RoamlyDbContext>()
+            .UseSqlServer(lease.ConnectionString)
+            .Options;
+
+        await using var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance);
+
+        var stopwatch = Stopwatch.StartNew();
+        var failure = await Record.ExceptionAsync(() => context.Database.MigrateAsync()).ConfigureAwait(false);
+        stopwatch.Stop();
+
+        Measure(
+            failure is null
+                ? "Tutte le migration applicative su database vuoto"
+                : "Tutte le migration applicative su database vuoto, FALLITE",
+            stopwatch.Elapsed);
+
+        return new ApplicationDatabase(lease, failure);
     }
 
     private async Task<FullSchemaDatabase> CreateFullSchemaAsync()

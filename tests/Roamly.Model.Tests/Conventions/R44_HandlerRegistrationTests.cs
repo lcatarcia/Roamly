@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.Routing;
 using Roamly.Api.Common.Startup;
 using Xunit;
@@ -89,6 +91,7 @@ public sealed class R44_HandlerRegistrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Roamly"] = "Server=fake;Database=fake;TrustServerCertificate=True",
+                ["RateLimiting:Login:HmacSecret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             })
             .Build();
 
@@ -98,6 +101,7 @@ public sealed class R44_HandlerRegistrationTests
         // qui costruiamo un ServiceCollection nudo, quindi va aggiunto a mano — non e' un host, e' un
         // singolo servizio di libreria, esattamente come nella produzione.
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
 
         // AddAuthorization() (dentro AddSecurity) registra AuthorizationPolicyCache, che richiede un
         // EndpointDataSource — normalmente fornito da UseRouting() sull'host reale. Un
@@ -112,6 +116,17 @@ public sealed class R44_HandlerRegistrationTests
             ValidateScopes = true,
             ValidateOnBuild = true,
         });
+    }
+
+    private sealed class TestHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = "Testing";
+
+        public string ApplicationName { get; set; } = "Roamly.Model.Tests";
+
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private static HashSet<string> DiscoverHandlerNamesFromFileSystem()
