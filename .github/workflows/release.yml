@@ -174,9 +174,9 @@ jobs:
 
           {
             printf '## Release Azure completata\n\n'
-            printf '- **URL**: `%s`\n' "$base_url"
-            printf '- **Immagine**: `%s`\n' "$RELEASE_IMAGE"
-            printf '- **Health**: `/health/live`=%s, `/health/ready`=%s\n' "$live_ok" "$ready_ok"
+            printf -- '- **URL**: `%s`\n' "$base_url"
+            printf -- '- **Immagine**: `%s`\n' "$RELEASE_IMAGE"
+            printf -- '- **Health**: `/health/live`=%s, `/health/ready`=%s\n' "$live_ok" "$ready_ok"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "$live_ok" != "true" || "$ready_ok" != "true" ]]; then
