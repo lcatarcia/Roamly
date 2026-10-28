@@ -7,6 +7,7 @@ using Roamly.Api.Features.Campers.GetCamperProfile;
 using Roamly.Api.Features.Campers.ListMaintenance;
 using Roamly.Api.Features.Campers.ListMaintenanceLogs;
 using Roamly.Api.Features.Campers.ListCampers;
+using Roamly.Api.Features.Campers.ParseCamperManual;
 using Roamly.Api.Features.Campers.RecordMaintenanceLog;
 using Roamly.Api.Features.Campers.UpdateCamperProfile;
 
@@ -29,6 +30,7 @@ public static class CampersEndpoints
     private const string MaintenanceStateConflictProblemType =
         "https://roamly.dev/problems/maintenance-state-conflict";
     private const string ConcurrencyProblemType = "https://roamly.dev/problems/concurrency-precondition";
+    private const string UnprocessableManualProblemType = "https://roamly.dev/problems/manual-source-unprocessable";
 
     /// <summary>Registra le operazioni esposte sui camper.</summary>
     public static IEndpointRouteBuilder MapCamperEndpoints(this IEndpointRouteBuilder app)
@@ -60,6 +62,19 @@ public static class CampersEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status412PreconditionFailed)
             .ProducesProblem(StatusCodes.Status428PreconditionRequired);
+
+        app.MapPost("/api/v1/campers/{camperId:guid}/manual/parse", ParseCamperManualAsync)
+            .RequireAuthorization()
+            .WithRateLimitPolicy("None")
+            .WithMetadata(new IdempotencyPolicy(IdempotencyMode.NotRequired))
+            .WithName("ParseCamperManual")
+            .WithTags("Campers")
+            .WithSummary("Estrae una bozza di specifiche tecniche e misure da un manuale PDF o link esterno")
+            .Produces<CamperManualParseResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         app.MapGet("/api/v1/campers/{camperId:guid}/dashboard", async (
             Guid camperId,
@@ -287,6 +302,26 @@ public static class CampersEndpoints
             context.Request.Headers.IfMatch.ToString(),
             cancellationToken).ConfigureAwait(false);
         return ToHttpResult(result, context);
+    }
+
+    private static async Task<IResult> ParseCamperManualAsync(
+        Guid camperId,
+        ParseCamperManualRequest request,
+        ParseCamperManualHandler handler,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(camperId, request, cancellationToken).ConfigureAwait(false);
+        return result.Outcome switch
+        {
+            ParseCamperManualOutcome.Parsed => Results.Ok(result.Response),
+            ParseCamperManualOutcome.NotFound => NotFound(context),
+            _ => Results.Problem(ProblemFactory.Create(
+                context,
+                StatusCodes.Status422UnprocessableEntity,
+                result.ErrorDetail ?? "Impossibile estrarre specifiche tecniche dalla fonte indicata.",
+                UnprocessableManualProblemType)),
+        };
     }
 
     private static IResult ToHttpResult(UpdateCamperProfileResult result, HttpContext context)

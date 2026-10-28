@@ -4,15 +4,28 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { CamperManualSection } from '@/features/campers/CamperManualSection'
 import { t } from '@/i18n/catalog'
-import { ApiError, fetchCamperProfile, updateCamperProfile, type CamperProfile, type CamperProfileInput } from '@/lib/api'
+import {
+  ApiError,
+  fetchCamperProfile,
+  updateCamperProfile,
+  type CamperManualMeasurement,
+  type CamperManualParseResponse,
+  type CamperProfile,
+  type CamperProfileInput,
+} from '@/lib/api'
 import {
   CAMPER_DASHBOARD_QUERY_KEY,
   CAMPERS_QUERY_KEY,
   camperProfileQueryKey,
 } from '@/features/campers/queryKeys'
 
-type ProfileValues = Record<keyof CamperProfileInput, string>
+type EditableFieldKey = Exclude<
+  keyof CamperProfileInput,
+  'manualSourceName' | 'manualSourceUrl' | 'manualMeasurements'
+>
+type ProfileValues = Record<EditableFieldKey, string>
 
 const DIMENSIONS: Array<{ key: keyof ProfileValues; label: string }> = [
   { key: 'lengthMm', label: t('neutral.camper.profile.lengthMm') },
@@ -67,6 +80,11 @@ function CamperProfileEditor({
 }) {
   const queryClient = useQueryClient()
   const [values, setValues] = useState(() => toProfileValues(profile))
+  const [manualSourceName, setManualSourceName] = useState(() => profile.manualSourceName ?? '')
+  const [manualSourceUrl, setManualSourceUrl] = useState(() => profile.manualSourceUrl ?? '')
+  const [manualMeasurements, setManualMeasurements] = useState<CamperManualMeasurement[]>(
+    () => profile.manualMeasurements ?? [],
+  )
   const [currentEtag, setCurrentEtag] = useState(etag)
   const [nameInvalid, setNameInvalid] = useState(false)
 
@@ -80,6 +98,9 @@ function CamperProfileEditor({
       })
       setCurrentEtag(result.etag)
       setValues(toProfileValues(result.value))
+      setManualSourceName(result.value.manualSourceName ?? '')
+      setManualSourceUrl(result.value.manualSourceUrl ?? '')
+      setManualMeasurements(result.value.manualMeasurements ?? [])
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: CAMPERS_QUERY_KEY }),
@@ -92,6 +113,9 @@ function CamperProfileEditor({
           queryClient.setQueryData(camperProfileQueryKey(camperId), latest)
           setCurrentEtag(latest.etag)
           setValues(toProfileValues(latest.profile))
+          setManualSourceName(latest.profile.manualSourceName ?? '')
+          setManualSourceUrl(latest.profile.manualSourceUrl ?? '')
+          setManualMeasurements(latest.profile.manualMeasurements ?? [])
         } catch {
           // Il messaggio di conflitto resta visibile anche se il refresh non riesce.
         }
@@ -103,6 +127,25 @@ function CamperProfileEditor({
     setValues((current) => ({ ...current, [key]: value }))
   }
 
+  function handleApplyParsedDraft(draft: CamperManualParseResponse, saveImmediately: boolean) {
+    const nextValues = mergeDraftIntoValues(values, draft)
+    const nextSourceName = draft.sourceName || manualSourceName
+    const nextSourceUrl = draft.sourceUrl ?? manualSourceUrl
+    const nextMeasurements = mergeDraftMeasurements(manualMeasurements, draft.measurements)
+
+    setValues(nextValues)
+    setManualSourceName(nextSourceName)
+    setManualSourceUrl(nextSourceUrl)
+    setManualMeasurements(nextMeasurements)
+
+    if (saveImmediately && nextValues.name.trim()) {
+      saveMutation.mutate({
+        profile: toProfileInput(nextValues, nextSourceName, nextSourceUrl, nextMeasurements, true),
+        etag: currentEtag,
+      })
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setNameInvalid(!values.name.trim())
@@ -111,12 +154,13 @@ function CamperProfileEditor({
     }
 
     saveMutation.mutate({
-      profile: toProfileInput(values),
+      profile: toProfileInput(values, manualSourceName, manualSourceUrl, manualMeasurements, false),
       etag: currentEtag,
     })
   }
 
   return (
+    <div className="space-y-6">
     <section className="rounded-xl border border-border bg-card p-6">
       <header className="mb-5">
         <h1 className="page-title">{t('neutral.camper.profile.title')}</h1>
@@ -171,6 +215,27 @@ function CamperProfileEditor({
         </p>
       )}
     </section>
+
+    <CamperManualSection
+      camperId={camperId}
+      camperName={values.name}
+      dimensions={{
+        lengthMm: values.lengthMm,
+        widthMm: values.widthMm,
+        heightMm: values.heightMm,
+      }}
+      manualSourceName={manualSourceName}
+      manualSourceUrl={manualSourceUrl}
+      manualMeasurements={manualMeasurements}
+      onSourceChange={(sourceName, sourceUrl) => {
+        setManualSourceName(sourceName)
+        setManualSourceUrl(sourceUrl)
+      }}
+      onMeasurementsChange={setManualMeasurements}
+      onApplyParsedDraft={handleApplyParsedDraft}
+      isSavingProfile={saveMutation.isPending}
+    />
+    </div>
   )
 }
 
@@ -286,7 +351,29 @@ function toProfileValues(profile: CamperProfile): ProfileValues {
   }
 }
 
-function toProfileInput(values: ProfileValues): CamperProfileInput {
+function toProfileInput(
+  values: ProfileValues,
+  manualSourceName: string,
+  manualSourceUrl: string,
+  manualMeasurements: CamperManualMeasurement[],
+  guardPartialGroups: boolean,
+): CamperProfileInput {
+  const lengthMm = optionalNumber(values.lengthMm)
+  const widthMm = optionalNumber(values.widthMm)
+  const heightMm = optionalNumber(values.heightMm)
+  const dimensionsComplete = lengthMm !== null && widthMm !== null && heightMm !== null
+
+  const kerbWeightKg = optionalNumber(values.kerbWeightKg)
+  const maxWeightKg = optionalNumber(values.maxWeightKg)
+  const weightsComplete = kerbWeightKg !== null && maxWeightKg !== null
+
+  const freshWaterL = optionalNumber(values.freshWaterL)
+  const greyWaterL = optionalNumber(values.greyWaterL)
+  const fuelTankL = optionalNumber(values.fuelTankL)
+  const gasKg = optionalNumber(values.gasKg)
+  const capacitiesComplete =
+    freshWaterL !== null && greyWaterL !== null && fuelTankL !== null && gasKg !== null
+
   return {
     name: values.name.trim(),
     brand: optionalText(values.brand),
@@ -294,18 +381,61 @@ function toProfileInput(values: ProfileValues): CamperProfileInput {
     year: optionalNumber(values.year),
     plateNumber: optionalText(values.plateNumber),
     vehicleKind: Number(values.vehicleKind),
-    lengthMm: optionalNumber(values.lengthMm),
-    widthMm: optionalNumber(values.widthMm),
-    heightMm: optionalNumber(values.heightMm),
-    kerbWeightKg: optionalNumber(values.kerbWeightKg),
-    maxWeightKg: optionalNumber(values.maxWeightKg),
-    freshWaterL: optionalNumber(values.freshWaterL),
-    greyWaterL: optionalNumber(values.greyWaterL),
-    fuelTankL: optionalNumber(values.fuelTankL),
-    gasKg: optionalNumber(values.gasKg),
+    lengthMm: !guardPartialGroups || dimensionsComplete ? lengthMm : null,
+    widthMm: !guardPartialGroups || dimensionsComplete ? widthMm : null,
+    heightMm: !guardPartialGroups || dimensionsComplete ? heightMm : null,
+    kerbWeightKg: !guardPartialGroups || weightsComplete ? kerbWeightKg : null,
+    maxWeightKg: !guardPartialGroups || weightsComplete ? maxWeightKg : null,
+    freshWaterL: !guardPartialGroups || capacitiesComplete ? freshWaterL : null,
+    greyWaterL: !guardPartialGroups || capacitiesComplete ? greyWaterL : null,
+    fuelTankL: !guardPartialGroups || capacitiesComplete ? fuelTankL : null,
+    gasKg: !guardPartialGroups || capacitiesComplete ? gasKg : null,
     fuelKind: values.fuelKind ? Number(values.fuelKind) : null,
     averageConsumptionLPer100Km: optionalNumber(values.averageConsumptionLPer100Km),
+    manualSourceName: optionalText(manualSourceName),
+    manualSourceUrl: optionalText(manualSourceUrl),
+    manualMeasurements,
   }
+}
+
+function mergeDraftIntoValues(
+  current: ProfileValues,
+  draft: CamperManualParseResponse,
+): ProfileValues {
+  return {
+    ...current,
+    brand: draft.brand ?? current.brand,
+    model: draft.model ?? current.model,
+    year: draft.year !== null ? String(draft.year) : current.year,
+    vehicleKind: draft.vehicleKind !== null ? String(draft.vehicleKind) : current.vehicleKind,
+    lengthMm: draft.lengthMm !== null ? String(draft.lengthMm) : current.lengthMm,
+    widthMm: draft.widthMm !== null ? String(draft.widthMm) : current.widthMm,
+    heightMm: draft.heightMm !== null ? String(draft.heightMm) : current.heightMm,
+    kerbWeightKg: draft.kerbWeightKg !== null ? String(draft.kerbWeightKg) : current.kerbWeightKg,
+    maxWeightKg: draft.maxWeightKg !== null ? String(draft.maxWeightKg) : current.maxWeightKg,
+    freshWaterL: draft.freshWaterL !== null ? String(draft.freshWaterL) : current.freshWaterL,
+    greyWaterL: draft.greyWaterL !== null ? String(draft.greyWaterL) : current.greyWaterL,
+    fuelTankL: draft.fuelTankL !== null ? String(draft.fuelTankL) : current.fuelTankL,
+    gasKg: draft.gasKg !== null ? String(draft.gasKg) : current.gasKg,
+    fuelKind: draft.fuelKind !== null ? String(draft.fuelKind) : current.fuelKind,
+    averageConsumptionLPer100Km:
+      draft.averageConsumptionLPer100Km !== null
+        ? String(draft.averageConsumptionLPer100Km)
+        : current.averageConsumptionLPer100Km,
+  }
+}
+
+function mergeDraftMeasurements(
+  existing: CamperManualMeasurement[],
+  extracted: CamperManualMeasurement[],
+): CamperManualMeasurement[] {
+  if (extracted.length === 0) {
+    return existing
+  }
+
+  const extractedIds = new Set(extracted.map((item) => item.id))
+  const preservedCustom = existing.filter((item) => !extractedIds.has(item.id))
+  return [...extracted, ...preservedCustom]
 }
 
 function textValue(value: string | number | null): string {

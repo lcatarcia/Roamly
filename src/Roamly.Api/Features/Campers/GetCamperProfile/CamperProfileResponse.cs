@@ -21,7 +21,10 @@ public sealed record CamperProfileResponse(
     int? FuelTankL,
     int? GasKg,
     int? FuelKind,
-    decimal? AverageConsumptionLPer100Km)
+    decimal? AverageConsumptionLPer100Km,
+    string? ManualSourceName = null,
+    string? ManualSourceUrl = null,
+    IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null)
 {
     /// <summary>Proietta il mezzo senza esporre dati di ownership o RowVersion nel body.</summary>
     public static CamperProfileResponse From(Camper camper)
@@ -45,6 +48,9 @@ public sealed record CamperProfileResponse(
             camper.Capacities?.FuelTankL,
             camper.Capacities?.GasKg,
             camper.FuelKind.HasValue ? (int)camper.FuelKind.Value : null,
-            camper.AverageConsumptionLPer100Km);
+            camper.AverageConsumptionLPer100Km,
+            camper.ManualSourceName,
+            camper.ManualSourceUrl,
+            CamperManualMeasurementsSerializer.Deserialize(camper.ManualMeasurementsJson));
     }
 }

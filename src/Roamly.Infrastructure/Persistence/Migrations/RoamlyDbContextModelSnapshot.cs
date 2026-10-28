@@ -195,6 +195,20 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.Property<byte?>("FuelKind")
                         .HasColumnType("tinyint");
 
+                    b.Property<string>("ManualMeasurementsJson")
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ManualSourceName")
+                        .HasMaxLength(200)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ManualSourceUrl")
+                        .HasMaxLength(500)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(500)");
+
                     b.Property<string>("Model")
                         .HasMaxLength(60)
                         .IsUnicode(true)

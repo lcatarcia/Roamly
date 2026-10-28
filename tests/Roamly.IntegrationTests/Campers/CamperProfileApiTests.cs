@@ -198,6 +198,117 @@ public sealed class CamperProfileApiTests(SqlServerFixture sqlServer) : IAsyncLi
             TestContext.Current.CancellationToken)).Name);
     }
 
+    [Fact]
+    public async Task owner_can_parse_manual_specifications_and_save_detailed_measurements_map()
+    {
+        using var parseResponse = await SendJsonAsync(
+            HttpMethod.Post,
+            $"{CamperPath}/manual/parse",
+            null,
+            new
+            {
+                sourceName = "Manuale Adria Twin 540 SP Axess 2025",
+                rawText = """
+                    MANUALE TECNICO E OPERATIVO
+                    ADRIA TWIN 540 SP AXESS
+                    Base Citroën Jumper • Prima immatricolazione 2025
+                    Pagina 3
+                    Elemento
+                    Riferimento
+                    Nota
+                    Lunghezza esterna
+                    5.413 mm
+                    Scheda Adria 540 SP; alcune schede riportano circa
+                    5.410 mm.
+                    Larghezza esterna
+                    2.050 mm
+                    La larghezza con specchi aperti è maggiore.
+                    Altezza esterna
+                    2.580–2.590 mm
+                    Verificare accessori montati sul tetto.
+                    Passo
+                    3.450 mm
+                    Confermare con i documenti del telaio.
+                    Altezza interna
+                    1.900 mm
+                    Quota nominale di gamma.
+                    Letto posteriore
+                    1.960 × 1.340–1.160 mm
+                    Letto trasversale rastremato; verificare materasso
+                    reale.
+                    Frigorifero
+                    84 L
+                    Dato di gamma; leggere la targhetta.
+                    Acqua pulita
+                    100 L
+                    Capacità nominale pubblicata.
+                    Acque grigie
+                    70 L
+                    Capacità nominale pubblicata.
+                    Riscaldamento
+                    Truma a gas
+                    Identificare modello esatto sulla targhetta.
+                    https://ch-it.adria-mobil.com/campervans/twin
+                    """,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, parseResponse.StatusCode);
+        var parsed = await parseResponse.Content.ReadFromJsonAsync<CamperManualParseResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(parsed);
+        Assert.Equal("Adria", parsed.Brand);
+        Assert.Equal("Twin 540 SP Axess", parsed.Model);
+        Assert.Equal((short)2025, parsed.Year);
+        Assert.Equal(1, parsed.VehicleKind);
+        Assert.Equal(0, parsed.FuelKind);
+        Assert.Equal(5413, parsed.LengthMm);
+        Assert.Equal(2050, parsed.WidthMm);
+        Assert.Equal(2580, parsed.HeightMm);
+        Assert.Equal(100, parsed.FreshWaterL);
+        Assert.Equal(70, parsed.GreyWaterL);
+        Assert.Equal("https://ch-it.adria-mobil.com/campervans/twin", parsed.SourceUrl);
+        Assert.Equal(10, parsed.Measurements.Count);
+        Assert.Contains(parsed.Measurements, item => item.Id == "rear-bed" && item.Value == "1.960 × 1.340–1.160 mm");
+
+        using var read = await _client.GetAsync(CamperPath, TestContext.Current.CancellationToken);
+        var etag = read.Headers.ETag?.ToString();
+        Assert.NotNull(etag);
+
+        using var update = await SendJsonAsync(
+            HttpMethod.Put,
+            CamperPath,
+            etag,
+            new
+            {
+                name = "Adria",
+                brand = parsed.Brand,
+                model = parsed.Model,
+                year = parsed.Year,
+                plateNumber = "GY301FG",
+                vehicleKind = parsed.VehicleKind,
+                lengthMm = parsed.LengthMm,
+                widthMm = parsed.WidthMm,
+                heightMm = parsed.HeightMm,
+                freshWaterL = parsed.FreshWaterL,
+                greyWaterL = parsed.GreyWaterL,
+                fuelTankL = 90,
+                gasKg = 22,
+                fuelKind = parsed.FuelKind,
+                manualSourceName = parsed.SourceName,
+                manualSourceUrl = parsed.SourceUrl,
+                manualMeasurements = parsed.Measurements,
+            });
+
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var saved = await update.Content.ReadFromJsonAsync<CamperProfileResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(saved);
+        Assert.Equal("Manuale Adria Twin 540 SP Axess 2025", saved.ManualSourceName);
+        Assert.Equal("https://ch-it.adria-mobil.com/campervans/twin", saved.ManualSourceUrl);
+        Assert.NotNull(saved.ManualMeasurements);
+        Assert.Equal(10, saved.ManualMeasurements!.Count);
+    }
+
     private string CamperPath => $"/api/v1/campers/{_camperId:D}";
 
     private async Task<Guid> CreateCamperAsync()
@@ -304,7 +415,42 @@ public sealed class CamperProfileApiTests(SqlServerFixture sqlServer) : IAsyncLi
         int? FuelTankL,
         int? GasKg,
         int? FuelKind,
-        decimal? AverageConsumptionLPer100Km);
+        decimal? AverageConsumptionLPer100Km,
+        string? ManualSourceName = null,
+        string? ManualSourceUrl = null,
+        IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null);
+
+    private sealed record CamperManualMeasurementDto(
+        string Id,
+        string Name,
+        string Value,
+        string Zone,
+        string View,
+        int PositionX,
+        int PositionY,
+        string? Description = null,
+        int? Page = null);
+
+    private sealed record CamperManualParseResponse(
+        string SourceName,
+        string? SourceUrl,
+        string? Brand,
+        string? Model,
+        short? Year,
+        int? VehicleKind,
+        int? FuelKind,
+        int? LengthMm,
+        int? WidthMm,
+        int? HeightMm,
+        int? KerbWeightKg,
+        int? MaxWeightKg,
+        int? FreshWaterL,
+        int? GreyWaterL,
+        int? FuelTankL,
+        int? GasKg,
+        decimal? AverageConsumptionLPer100Km,
+        IReadOnlyList<CamperManualMeasurementDto> Measurements,
+        IReadOnlyList<string> Warnings);
 
     private sealed class TestCurrentUser(Guid id) : ICurrentUser
     {

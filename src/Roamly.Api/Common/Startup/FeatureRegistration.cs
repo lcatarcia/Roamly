@@ -19,6 +19,7 @@ using Roamly.Api.Features.Campers.GetCamperProfile;
 using Roamly.Api.Features.Campers.ListMaintenance;
 using Roamly.Api.Features.Campers.ListMaintenanceLogs;
 using Roamly.Api.Features.Campers.ListCampers;
+using Roamly.Api.Features.Campers.ParseCamperManual;
 using Roamly.Api.Features.Campers.RecordMaintenanceLog;
 using Roamly.Api.Features.Campers.UpdateCamperProfile;
 using Roamly.Api.Features.Identity.GetMe;
@@ -100,6 +101,7 @@ public static class FeatureRegistration
         services.AddScoped<ListMaintenanceLogsHandler>();
         services.AddScoped<RecordMaintenanceLogHandler>();
         services.AddScoped<CreateMaintenanceHandler>();
+        services.AddScoped<ParseCamperManualHandler>();
         services.AddScoped<UpdateCamperProfileHandler>();
         services.AddScoped<CreateEquipmentHandler>();
         services.AddScoped<ListEquipmentHandler>();

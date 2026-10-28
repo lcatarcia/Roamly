@@ -201,6 +201,49 @@ export interface CreateCamperResponse {
   vehicleKind: number
 }
 
+export type CamperManualView = 'side' | 'front' | 'top'
+
+export interface CamperManualMeasurement {
+  id: string
+  name: string
+  value: string
+  zone: string
+  view: CamperManualView
+  positionX: number
+  positionY: number
+  description?: string | null
+  page?: number | null
+}
+
+export interface CamperManualParseRequest {
+  sourceName?: string | null
+  sourceUrl?: string | null
+  pdfBase64?: string | null
+  rawText?: string | null
+}
+
+export interface CamperManualParseResponse {
+  sourceName: string
+  sourceUrl: string | null
+  brand: string | null
+  model: string | null
+  year: number | null
+  vehicleKind: number | null
+  fuelKind: number | null
+  lengthMm: number | null
+  widthMm: number | null
+  heightMm: number | null
+  kerbWeightKg: number | null
+  maxWeightKg: number | null
+  freshWaterL: number | null
+  greyWaterL: number | null
+  fuelTankL: number | null
+  gasKg: number | null
+  averageConsumptionLPer100Km: number | null
+  measurements: CamperManualMeasurement[]
+  warnings: string[]
+}
+
 export interface CamperProfile {
   id: string
   name: string
@@ -220,6 +263,9 @@ export interface CamperProfile {
   gasKg: number | null
   fuelKind: number | null
   averageConsumptionLPer100Km: number | null
+  manualSourceName?: string | null
+  manualSourceUrl?: string | null
+  manualMeasurements?: CamperManualMeasurement[] | null
 }
 
 export type CamperProfileInput = Omit<CamperProfile, 'id'>
@@ -890,6 +936,20 @@ export function updateCamperProfile(
     body: profile,
     etag,
   })
+}
+
+/** POST /api/v1/campers/{id}/manual/parse — estrae bozza tecnica e misure da PDF o URL esterno. */
+export function parseCamperManual(
+  camperId: string,
+  request: CamperManualParseRequest,
+): Promise<CamperManualParseResponse> {
+  return mutate<CamperManualParseResponse>(
+    `/api/v1/campers/${encodeURIComponent(camperId)}/manual/parse`,
+    {
+      method: 'POST',
+      body: request,
+    },
+  )
 }
 
 /** GET .../maintenance/{id}/logs — storico keyset di una manutenzione. */

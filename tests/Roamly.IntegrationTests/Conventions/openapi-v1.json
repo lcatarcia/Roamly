@@ -482,6 +482,88 @@
         }
       }
     },
+    "/api/v1/campers/{camperId}/manual/parse": {
+      "post": {
+        "tags": [
+          "Campers"
+        ],
+        "summary": "Estrae una bozza di specifiche tecniche e misure da un manuale PDF o link esterno",
+        "operationId": "ParseCamperManual",
+        "parameters": [
+          {
+            "name": "camperId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseCamperManualRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CamperManualParseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/campers/{camperId}/dashboard": {
       "get": {
         "tags": [
@@ -5141,6 +5223,262 @@
         },
         "description": "Stato della sola soglia temporale."
       },
+      "CamperManualMeasurementDto": {
+        "required": [
+          "id",
+          "name",
+          "value",
+          "zone",
+          "view",
+          "positionX",
+          "positionY"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "maxLength": 64,
+            "minLength": 0,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 0,
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 120,
+            "minLength": 0,
+            "type": "string"
+          },
+          "zone": {
+            "maxLength": 80,
+            "minLength": 0,
+            "type": "string"
+          },
+          "view": {
+            "maxLength": 16,
+            "minLength": 0,
+            "type": "string"
+          },
+          "positionX": {
+            "maximum": 100,
+            "minimum": 0,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "positionY": {
+            "maximum": 100,
+            "minimum": 0,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "description": {
+            "maxLength": 300,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "page": {
+            "maximum": 2000,
+            "minimum": 1,
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Singola quota o specifica tecnica collocata sull\u0027atlante dimensionale del camper."
+      },
+      "CamperManualParseResponse": {
+        "required": [
+          "sourceName",
+          "sourceUrl",
+          "brand",
+          "model",
+          "year",
+          "vehicleKind",
+          "fuelKind",
+          "lengthMm",
+          "widthMm",
+          "heightMm",
+          "kerbWeightKg",
+          "maxWeightKg",
+          "freshWaterL",
+          "greyWaterL",
+          "fuelTankL",
+          "gasKg",
+          "averageConsumptionLPer100Km",
+          "measurements",
+          "warnings"
+        ],
+        "type": "object",
+        "properties": {
+          "sourceName": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "brand": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int16"
+          },
+          "vehicleKind": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fuelKind": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lengthMm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "widthMm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "heightMm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "kerbWeightKg": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "maxWeightKg": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "freshWaterL": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "greyWaterL": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fuelTankL": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "gasKg": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "averageConsumptionLPer100Km": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "measurements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CamperManualMeasurementDto"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Bozza strutturata estratta da un manuale PDF o da una scheda tecnica esterna."
+      },
       "CamperProfileResponse": {
         "required": [
           "id",
@@ -5304,6 +5642,27 @@
               "string"
             ],
             "format": "double"
+          },
+          "manualSourceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "manualSourceUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "manualMeasurements": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CamperManualMeasurementDto"
+            }
           }
         },
         "description": "Profilo tecnico completo del camper, senza esporre il token di persistenza."
@@ -6881,6 +7240,44 @@
         },
         "description": "Pagina keyset di una collection API (R52)."
       },
+      "ParseCamperManualRequest": {
+        "type": "object",
+        "properties": {
+          "sourceName": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sourceUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pdfBase64": {
+            "maxLength": 20000000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rawText": {
+            "maxLength": 200000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Richiesta di estrazione bozza tecnica e misure da PDF, URL esterno o testo del manuale."
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -7472,6 +7869,31 @@
               "string"
             ],
             "format": "double"
+          },
+          "manualSourceName": {
+            "maxLength": 200,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "manualSourceUrl": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "manualMeasurements": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CamperManualMeasurementDto"
+            }
           }
         },
         "description": "Corpo completo di \u0060PUT /api/v1/campers/{camperId}\u0060."

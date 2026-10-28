@@ -25,9 +25,19 @@ public sealed record UpdateCamperProfileRequest(
     [property: Range(1, int.MaxValue)] int? FuelTankL,
     [property: Range(1, int.MaxValue)] int? GasKg,
     [property: EnumDataType(typeof(FuelKind))] FuelKind? FuelKind,
-    decimal? AverageConsumptionLPer100Km)
+    decimal? AverageConsumptionLPer100Km,
+    [property: StringLength(200)] string? ManualSourceName = null,
+    [property: StringLength(500)] string? ManualSourceUrl = null,
+    IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null)
     : IValidatableObject
 {
+    private static readonly HashSet<string> AllowedViews = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "side",
+        "front",
+        "top",
+    };
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -76,6 +86,50 @@ public sealed record UpdateCamperProfileRequest(
             yield return new ValidationResult(
                 "Il consumo medio puo' avere al massimo una cifra decimale.",
                 [nameof(AverageConsumptionLPer100Km)]);
+        }
+
+        if (!string.IsNullOrWhiteSpace(ManualSourceUrl)
+            && (!Uri.TryCreate(ManualSourceUrl.Trim(), UriKind.Absolute, out var sourceUri)
+                || (sourceUri.Scheme != Uri.UriSchemeHttps && sourceUri.Scheme != Uri.UriSchemeHttp)))
+        {
+            yield return new ValidationResult(
+                "Il link della scheda tecnica deve essere un URL HTTP o HTTPS valido.",
+                [nameof(ManualSourceUrl)]);
+        }
+
+        if (ManualMeasurements is not null)
+        {
+            if (ManualMeasurements.Count > 60)
+            {
+                yield return new ValidationResult(
+                    "Non e' possibile salvare piu' di 60 misure di dettaglio.",
+                    [nameof(ManualMeasurements)]);
+            }
+
+            foreach (var item in ManualMeasurements)
+            {
+                if (item is null
+                    || string.IsNullOrWhiteSpace(item.Id)
+                    || string.IsNullOrWhiteSpace(item.Name)
+                    || string.IsNullOrWhiteSpace(item.Value)
+                    || string.IsNullOrWhiteSpace(item.Zone)
+                    || string.IsNullOrWhiteSpace(item.View)
+                    || !AllowedViews.Contains(item.View.Trim()))
+                {
+                    yield return new ValidationResult(
+                        "Ogni misura deve specificare identificativo, nome, valore, zona e vista valida (side, front, top).",
+                        [nameof(ManualMeasurements)]);
+                    break;
+                }
+
+                if (item.PositionX is < 0 or > 100 || item.PositionY is < 0 or > 100)
+                {
+                    yield return new ValidationResult(
+                        "Le coordinate sulla mappa devono essere comprese tra 0 e 100.",
+                        [nameof(ManualMeasurements)]);
+                    break;
+                }
+            }
         }
     }
 
