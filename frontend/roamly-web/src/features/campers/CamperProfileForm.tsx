@@ -233,7 +233,15 @@ function CamperProfileEditor({
       }}
       onMeasurementsChange={setManualMeasurements}
       onApplyParsedDraft={handleApplyParsedDraft}
+      onSaveManualOnly={() => {
+        if (!values.name.trim()) return
+        saveMutation.mutate({
+          profile: toProfileInput(values, manualSourceName, manualSourceUrl, manualMeasurements, true),
+          etag: currentEtag,
+        })
+      }}
       isSavingProfile={saveMutation.isPending}
+      profileSavedSuccess={saveMutation.isSuccess}
     />
     </div>
   )

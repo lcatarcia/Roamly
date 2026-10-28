@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { PageContainer } from '@/components/layout/PageContainer'
 import { t } from '@/i18n/catalog'
 import { CreateCamperForm } from '@/features/campers/CreateCamperForm'
+import { CamperDashboardManualPanel } from '@/features/campers/CamperManualSection'
 import { CamperProfileForm } from '@/features/campers/CamperProfileForm'
 import { EquipmentInventory } from '@/features/campers/EquipmentInventory'
 import {
@@ -232,6 +233,7 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
       </div>
 
       <OdometerPanel odometer={odometer} />
+      <CamperDashboardManualPanel camperId={camper.id} />
       <EquipmentInventory camperId={camper.id} />
 
       <section aria-labelledby="maintenance-heading">

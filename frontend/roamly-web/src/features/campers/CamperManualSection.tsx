@@ -1,14 +1,23 @@
 import { useState, type ChangeEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
+  CAMPER_DASHBOARD_QUERY_KEY,
+  CAMPERS_QUERY_KEY,
+  camperProfileQueryKey,
+} from '@/features/campers/queryKeys'
+import {
+  fetchCamperProfile,
   parseCamperManual,
+  updateCamperProfile,
   type CamperManualMeasurement,
   type CamperManualParseResponse,
   type CamperManualView,
+  type CamperProfile,
+  type CamperProfileInput,
 } from '@/lib/api'
 
 interface CamperDimensions {
@@ -139,7 +148,9 @@ export function CamperManualSection({
   onSourceChange,
   onMeasurementsChange,
   onApplyParsedDraft,
+  onSaveManualOnly,
   isSavingProfile,
+  profileSavedSuccess = false,
 }: {
   camperId: string
   camperName: string
@@ -150,7 +161,9 @@ export function CamperManualSection({
   onSourceChange: (sourceName: string, sourceUrl: string) => void
   onMeasurementsChange: (measurements: CamperManualMeasurement[]) => void
   onApplyParsedDraft: (draft: CamperManualParseResponse, saveImmediately: boolean) => void
+  onSaveManualOnly?: () => void
   isSavingProfile: boolean
+  profileSavedSuccess?: boolean
 }) {
   const [pdfBase64, setPdfBase64] = useState<string | null>(null)
   const [selectedFileName, setSelectedFileName] = useState<string>('')
@@ -629,16 +642,33 @@ export function CamperManualSection({
           <div>
             <h3 className="font-semibold">Scheda di rilievo sul veicolo e quote personalizzate</h3>
             <p className="text-sm text-muted-foreground">
-              Aggiungi una misura rilevata col metro (porte, cucina, doccia, gavone, vano bombole) e premi «Salva profilo» per conservarla.
+              Aggiungi o modifica una misura rilevata col metro (porte, cucina, doccia, gavone, vano bombole) e salva direttamente.
             </p>
           </div>
-          <Button
-            type="button"
-            onClick={() => setShowAddForm((current) => !current)}
-          >
-            {showAddForm ? 'Chiudi modulo misura' : 'Aggiungi misura'}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAddForm((current) => !current)}
+            >
+              {showAddForm ? 'Chiudi modulo misura' : 'Aggiungi misura'}
+            </Button>
+            {onSaveManualOnly && (
+              <Button
+                type="button"
+                disabled={isSavingProfile}
+                onClick={onSaveManualOnly}
+              >
+                {isSavingProfile ? 'Salvataggio…' : 'Salva misure e manuale'}
+              </Button>
+            )}
+          </div>
         </div>
+        {profileSavedSuccess && (
+          <p role="status" className="text-sm text-foreground">
+            Misure e riferimenti del manuale salvati nel profilo del camper.
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-2" aria-label="Preset scheda di rilievo">
           {MEASUREMENT_PRESETS.map((preset) => (
@@ -1215,3 +1245,183 @@ function shortDimension(value: string): string {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? new Intl.NumberFormat('it-IT').format(parsed) : '—'
 }
+
+export function CamperDashboardManualPanel({ camperId }: { camperId: string }) {
+  const profileQuery = useQuery({
+    queryKey: camperProfileQueryKey(camperId),
+    queryFn: () => fetchCamperProfile(camperId),
+    enabled: camperId.length > 0,
+    retry: false,
+  })
+
+  if (profileQuery.isPending || profileQuery.isError || !profileQuery.data) {
+    return null
+  }
+
+  return (
+    <CamperDashboardManualEditor
+      key={profileQuery.data.etag}
+      camperId={camperId}
+      etag={profileQuery.data.etag}
+      profile={profileQuery.data.profile}
+    />
+  )
+}
+
+function CamperDashboardManualEditor({
+  camperId,
+  etag,
+  profile,
+}: {
+  camperId: string
+  etag: string
+  profile: CamperProfile
+}) {
+  const queryClient = useQueryClient()
+  const [currentEtag, setCurrentEtag] = useState(etag)
+  const [currentProfile, setCurrentProfile] = useState(profile)
+  const [manualSourceName, setManualSourceName] = useState(profile.manualSourceName ?? '')
+  const [manualSourceUrl, setManualSourceUrl] = useState(profile.manualSourceUrl ?? '')
+  const [manualMeasurements, setManualMeasurements] = useState<CamperManualMeasurement[]>(
+    profile.manualMeasurements ?? [],
+  )
+
+  const saveMutation = useMutation({
+    mutationFn: (input: CamperProfileInput) => updateCamperProfile(camperId, input, currentEtag),
+    onSuccess: async (result) => {
+      queryClient.setQueryData(camperProfileQueryKey(camperId), {
+        profile: result.value,
+        etag: result.etag,
+      })
+      setCurrentEtag(result.etag)
+      setCurrentProfile(result.value)
+      setManualSourceName(result.value.manualSourceName ?? '')
+      setManualSourceUrl(result.value.manualSourceUrl ?? '')
+      setManualMeasurements(result.value.manualMeasurements ?? [])
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: CAMPERS_QUERY_KEY }),
+      ])
+    },
+  })
+
+  function buildInputFromProfile(
+    base: CamperProfile,
+    sourceName: string,
+    sourceUrl: string,
+    measurements: CamperManualMeasurement[],
+  ): CamperProfileInput {
+    return {
+      name: base.name,
+      brand: base.brand,
+      model: base.model,
+      year: base.year,
+      plateNumber: base.plateNumber,
+      vehicleKind: base.vehicleKind,
+      lengthMm: base.lengthMm,
+      widthMm: base.widthMm,
+      heightMm: base.heightMm,
+      kerbWeightKg: base.kerbWeightKg,
+      maxWeightKg: base.maxWeightKg,
+      freshWaterL: base.freshWaterL,
+      greyWaterL: base.greyWaterL,
+      fuelTankL: base.fuelTankL,
+      gasKg: base.gasKg,
+      fuelKind: base.fuelKind,
+      averageConsumptionLPer100Km: base.averageConsumptionLPer100Km,
+      manualSourceName: sourceName.trim() || null,
+      manualSourceUrl: sourceUrl.trim() || null,
+      manualMeasurements: measurements,
+    }
+  }
+
+  function handleApplyParsedDraft(draft: CamperManualParseResponse, saveImmediately: boolean) {
+    const nextSourceName = draft.sourceName || manualSourceName
+    const nextSourceUrl = draft.sourceUrl ?? manualSourceUrl
+    const extractedIds = new Set(draft.measurements.map((item) => item.id))
+    const preserved = manualMeasurements.filter((item) => !extractedIds.has(item.id))
+    const nextMeasurements =
+      draft.measurements.length > 0 ? [...draft.measurements, ...preserved] : manualMeasurements
+
+    const nextLength = draft.lengthMm ?? currentProfile.lengthMm
+    const nextWidth = draft.widthMm ?? currentProfile.widthMm
+    const nextHeight = draft.heightMm ?? currentProfile.heightMm
+    const dimensionsOk = nextLength !== null && nextWidth !== null && nextHeight !== null
+
+    const nextKerb = draft.kerbWeightKg ?? currentProfile.kerbWeightKg
+    const nextMaxW = draft.maxWeightKg ?? currentProfile.maxWeightKg
+    const weightsOk = nextKerb !== null && nextMaxW !== null
+
+    const nextFresh = draft.freshWaterL ?? currentProfile.freshWaterL
+    const nextGrey = draft.greyWaterL ?? currentProfile.greyWaterL
+    const nextFuelTank = draft.fuelTankL ?? currentProfile.fuelTankL
+    const nextGas = draft.gasKg ?? currentProfile.gasKg
+    const capacitiesOk =
+      nextFresh !== null && nextGrey !== null && nextFuelTank !== null && nextGas !== null
+
+    const mergedProfile: CamperProfile = {
+      ...currentProfile,
+      brand: draft.brand ?? currentProfile.brand,
+      model: draft.model ?? currentProfile.model,
+      year: draft.year ?? currentProfile.year,
+      vehicleKind: draft.vehicleKind ?? currentProfile.vehicleKind,
+      fuelKind: draft.fuelKind ?? currentProfile.fuelKind,
+      lengthMm: dimensionsOk ? nextLength : currentProfile.lengthMm,
+      widthMm: dimensionsOk ? nextWidth : currentProfile.widthMm,
+      heightMm: dimensionsOk ? nextHeight : currentProfile.heightMm,
+      kerbWeightKg: weightsOk ? nextKerb : currentProfile.kerbWeightKg,
+      maxWeightKg: weightsOk ? nextMaxW : currentProfile.maxWeightKg,
+      freshWaterL: capacitiesOk ? nextFresh : currentProfile.freshWaterL,
+      greyWaterL: capacitiesOk ? nextGrey : currentProfile.greyWaterL,
+      fuelTankL: capacitiesOk ? nextFuelTank : currentProfile.fuelTankL,
+      gasKg: capacitiesOk ? nextGas : currentProfile.gasKg,
+      averageConsumptionLPer100Km:
+        draft.averageConsumptionLPer100Km ?? currentProfile.averageConsumptionLPer100Km,
+    }
+
+    setCurrentProfile(mergedProfile)
+    setManualSourceName(nextSourceName)
+    setManualSourceUrl(nextSourceUrl)
+    setManualMeasurements(nextMeasurements)
+
+    if (saveImmediately) {
+      saveMutation.mutate(
+        buildInputFromProfile(mergedProfile, nextSourceName, nextSourceUrl, nextMeasurements),
+      )
+    }
+  }
+
+  return (
+    <CamperManualSection
+      camperId={camperId}
+      camperName={currentProfile.name}
+      dimensions={{
+        lengthMm: currentProfile.lengthMm !== null ? String(currentProfile.lengthMm) : '',
+        widthMm: currentProfile.widthMm !== null ? String(currentProfile.widthMm) : '',
+        heightMm: currentProfile.heightMm !== null ? String(currentProfile.heightMm) : '',
+      }}
+      manualSourceName={manualSourceName}
+      manualSourceUrl={manualSourceUrl}
+      manualMeasurements={manualMeasurements}
+      onSourceChange={(sourceName, sourceUrl) => {
+        setManualSourceName(sourceName)
+        setManualSourceUrl(sourceUrl)
+      }}
+      onMeasurementsChange={setManualMeasurements}
+      onApplyParsedDraft={handleApplyParsedDraft}
+      onSaveManualOnly={() =>
+        saveMutation.mutate(
+          buildInputFromProfile(
+            currentProfile,
+            manualSourceName,
+            manualSourceUrl,
+            manualMeasurements,
+          ),
+        )
+      }
+      isSavingProfile={saveMutation.isPending}
+      profileSavedSuccess={saveMutation.isSuccess}
+    />
+  )
+}
+
