@@ -1,0 +1,441 @@
+name: Release manuale OIDC (bozza)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Modalità release oppure rollback applicativo
+        type: choice
+        required: true
+        default: release
+        options:
+          - release
+          - rollback
+      rollback_digest:
+        description: Digest sha256 della precedente immagine sana; richiesto solo in modalità rollback
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-roamly-dev
+  ACR_NAME: acrroamlywse7wit7fzpja
+  ACR_LOGIN_SERVER: acrroamlywse7wit7fzpja.azurecr.io
+
+jobs:
+  guard:
+    name: Verifica trigger e branch
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Rifiuta eventi diversi dal dispatch su main
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "workflow_dispatch" || "$REF" != "refs/heads/main" ]]; then
+            echo "::error::La release è consentita solo con workflow_dispatch su refs/heads/main."
+            exit 1
+          fi
+
+  prepare:
+    name: Preparazione immagine e anteprima Bicep
+    needs: guard
+    if: ${{ github.ref == 'refs/heads/main' && needs.guard.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: azure-release
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image: ${{ steps.image.outputs.reference || steps.rollback.outputs.reference }}
+      plan_hash: ${{ steps.whatif.outputs.plan_hash }}
+    steps:
+      - name: Checkout dello SHA selezionato
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validazione modalità e digest di rollback
+        id: rollback
+        shell: bash
+        env:
+          RELEASE_MODE: ${{ inputs.mode }}
+          ROLLBACK_DIGEST: ${{ inputs.rollback_digest }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_MODE" in
+            release)
+              if [[ -n "$ROLLBACK_DIGEST" ]]; then
+                echo "::error::Non specificare rollback_digest in modalità release."
+                exit 1
+              fi
+              ;;
+            rollback)
+              if [[ ! "$ROLLBACK_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo "::error::La modalità rollback richiede un digest sha256 valido."
+                exit 1
+              fi
+              image_repository="${GITHUB_REPOSITORY##*/}"
+              image_repository="${image_repository,,}"
+              image_reference="${ACR_LOGIN_SERVER}/${image_repository}@${ROLLBACK_DIGEST}"
+              printf 'reference=%s\n' "$image_reference" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Modalità release non riconosciuta."
+              exit 1
+              ;;
+          esac
+
+      - name: Autenticazione Azure tramite OIDC
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build e push dell'immagine identificata dallo SHA
+        id: image
+        if: ${{ inputs.mode == 'release' }}
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image_repository="${GITHUB_REPOSITORY##*/}"
+          image_repository="${image_repository,,}"
+          image_tag="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"
+          image_reference="${ACR_LOGIN_SERVER}/${image_repository}:${image_tag}"
+
+          az acr login --name "$ACR_NAME"
+          docker build --file Dockerfile --tag "$image_reference" .
+          push_output="$(docker push "$image_reference" 2>&1)" || {
+            printf '%s\n' "$push_output"
+            exit 1
+          }
+          printf '%s\n' "$push_output"
+          image_digest="$(printf '%s\n' "$push_output" | sed -nE 's/.*digest: (sha256:[0-9a-f]{64}).*/\1/p' | tail -n 1)"
+          if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Docker non ha restituito un digest OCI valido per l'immagine pubblicata."
+            exit 1
+          fi
+          image_reference="${ACR_LOGIN_SERVER}/${image_repository}@${image_digest}"
+          printf 'reference=%s\n' "$image_reference" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$image_tag" >> "$GITHUB_OUTPUT"
+          printf 'RELEASE_IMAGE=%s\n' "$image_reference" >> "$GITHUB_ENV"
+
+      - name: Generazione del what-if Bicep
+        id: whatif
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RELEASE_IMAGE: ${{ steps.image.outputs.reference || steps.rollback.outputs.reference }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          ROLLBACK_DIGEST: ${{ inputs.rollback_digest }}
+        run: |
+          set -euo pipefail
+          container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-prod"
+          runtime_identity_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-roamly-runtime-prod"
+
+          what_if_output="$(az deployment group what-if \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "roamly-release-whatif-${RUN_ID}-${RUN_ATTEMPT}" \
+            --template-file infra/container-app.bicep \
+            --parameters \
+              containerAppName=ca-roamly-prod \
+              containerAppsEnvironmentResourceId="$container_apps_environment_id" \
+              runtimeIdentityResourceId="$runtime_identity_id" \
+              registryServer="$ACR_LOGIN_SERVER" \
+              image="$RELEASE_IMAGE" \
+              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
+              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
+              journalBlobContainerName=roamly-journal-images \
+              journalBlobAccountConfigurationVerified=true \
+            --output json)"
+          plan_changes="$(printf '%s\n' "$what_if_output" | jq -e -S -c '
+            if .status == "Succeeded" and (.changes | type == "array") then
+              .changes | sort_by(.resourceId, .changeType)
+            else
+              error("what-if non riuscito o output non valido")
+            end
+          ')"
+          plan_hash="$(printf '%s\n' "$plan_changes" | sha256sum | cut -d ' ' -f1)"
+          if [[ ! "$plan_hash" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Impronta SHA-256 del what-if non valida."
+            exit 1
+          fi
+          printf 'plan_hash=%s\n' "$plan_hash" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$what_if_output"
+          {
+            printf '## Piano what-if della release\n\n'
+            printf 'Modalità: `%s`\n\n' "$RELEASE_MODE"
+            printf 'Commit: `%s`\n\n' "$COMMIT_SHA"
+            if [[ "$RELEASE_MODE" == "release" ]]; then
+              printf 'Tag ACR (alias): `%s`\n\n' "$IMAGE_TAG"
+            else
+              printf 'Digest rollback richiesto: `%s`\n\n' "$ROLLBACK_DIGEST"
+            fi
+            printf 'Immagine: `%s`\n\n' "$RELEASE_IMAGE"
+            printf 'Impronta del piano: `sha256:%s`\n\n' "$plan_hash"
+            printf '```json\n%s\n```\n' "$what_if_output"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Applica Bicep dopo la revisione del what-if
+    needs:
+      - guard
+      - prepare
+    if: ${{ github.ref == 'refs/heads/main' && needs.guard.result == 'success' && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: azure-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout dello SHA selezionato
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Autenticazione Azure tramite OIDC
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verifica che il what-if approvato non sia cambiato
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+          APPROVED_PLAN_HASH: ${{ needs.prepare.outputs.plan_hash }}
+        run: |
+          set -euo pipefail
+          container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-prod"
+          runtime_identity_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-roamly-runtime-prod"
+
+          what_if_output="$(az deployment group what-if \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "roamly-release-verify-${RUN_ID}-${RUN_ATTEMPT}" \
+            --template-file infra/container-app.bicep \
+            --parameters \
+              containerAppName=ca-roamly-prod \
+              containerAppsEnvironmentResourceId="$container_apps_environment_id" \
+              runtimeIdentityResourceId="$runtime_identity_id" \
+              registryServer="$ACR_LOGIN_SERVER" \
+              image="$RELEASE_IMAGE" \
+              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
+              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
+              journalBlobContainerName=roamly-journal-images \
+              journalBlobAccountConfigurationVerified=true \
+            --output json)"
+          plan_changes="$(printf '%s\n' "$what_if_output" | jq -e -S -c '
+            if .status == "Succeeded" and (.changes | type == "array") then
+              .changes | sort_by(.resourceId, .changeType)
+            else
+              error("what-if non riuscito o output non valido")
+            end
+          ')"
+          current_plan_hash="$(printf '%s\n' "$plan_changes" | sha256sum | cut -d ' ' -f1)"
+
+          if [[ ! "$APPROVED_PLAN_HASH" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Impronta del piano approvato assente o non valida."
+            exit 1
+          fi
+          if [[ "$current_plan_hash" != "$APPROVED_PLAN_HASH" ]]; then
+            {
+              printf '## Deploy interrotto: il what-if è cambiato\n\n'
+              printf 'Piano approvato: `sha256:%s`\n\n' "$APPROVED_PLAN_HASH"
+              printf 'Piano ricalcolato: `sha256:%s`\n\n' "$current_plan_hash"
+              printf 'Nessuna risorsa è stata modificata. Avviare un nuovo dispatch per una nuova revisione.\n'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Il piano what-if è cambiato dopo l'approvazione; deploy annullato."
+            exit 1
+          fi
+          printf 'Il piano ricalcolato coincide con quello approvato: `sha256:%s`\n' "$current_plan_hash" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deployment della Container App da Bicep
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+        run: |
+          set -euo pipefail
+          container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-prod"
+          runtime_identity_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-roamly-runtime-prod"
+
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "roamly-release-${RUN_ID}-${RUN_ATTEMPT}" \
+            --template-file infra/container-app.bicep \
+            --parameters \
+              containerAppName=ca-roamly-prod \
+              containerAppsEnvironmentResourceId="$container_apps_environment_id" \
+              runtimeIdentityResourceId="$runtime_identity_id" \
+              registryServer="$ACR_LOGIN_SERVER" \
+              image="$RELEASE_IMAGE" \
+              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
+              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
+              journalBlobContainerName=roamly-journal-images \
+              journalBlobAccountConfigurationVerified=true
+
+      - name: Smoke test pubblico HTTPS post-deploy
+        timeout-minutes: 7
+        shell: bash
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+        run: |
+          set -euo pipefail
+
+          metadata_max_attempts=6
+          metadata_timeout_seconds=10
+          metadata_retry_delay_seconds=5
+          if [[ ! "$RELEASE_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Il riferimento immagine della release non è un digest OCI valido."
+            exit 1
+          fi
+
+          app_fqdn=""
+          for ((attempt = 1; attempt <= metadata_max_attempts; attempt++)); do
+            app_fqdn="$(timeout "${metadata_timeout_seconds}s" az containerapp show \
+              --name ca-roamly-prod \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.ingress.fqdn \
+              --output tsv \
+              --only-show-errors 2>/dev/null || true)"
+            if [[ "$app_fqdn" =~ ^[[:alnum:].-]+$ && "$app_fqdn" == *.* ]]; then
+              break
+            fi
+
+            printf 'Tentativo %d/%d: FQDN ACA non ancora disponibile\n' "$attempt" "$metadata_max_attempts"
+            if (( attempt < metadata_max_attempts )); then
+              sleep "$metadata_retry_delay_seconds"
+            fi
+          done
+
+          if [[ ! "$app_fqdn" =~ ^[[:alnum:].-]+$ || "$app_fqdn" != *.* ]]; then
+            {
+              printf '## Smoke test post-deploy non riuscito\n\n'
+              printf 'Azure non ha restituito un FQDN pubblico ACA valido dopo %d tentativi (timeout CLI %d s, pausa %d s). Il deployment ARM potrebbe essere già stato applicato; verificare manualmente la risorsa. Nessun rollback automatico viene eseguito.\n' \
+                "$metadata_max_attempts" "$metadata_timeout_seconds" "$metadata_retry_delay_seconds"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::FQDN pubblico ACA assente o non valido dopo i tentativi limitati; il deployment ARM potrebbe essere già stato applicato. Verificare manualmente la risorsa."
+            exit 1
+          fi
+
+          revisions_url="https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/containerApps/ca-roamly-prod/revisions?api-version=2024-03-01"
+          expected_revision_active=false
+          for ((attempt = 1; attempt <= metadata_max_attempts; attempt++)); do
+            revisions_json="$(timeout "${metadata_timeout_seconds}s" az rest \
+              --method get \
+              --url "$revisions_url" \
+              --output json \
+              --only-show-errors 2>/dev/null || true)"
+            if [[ -n "$revisions_json" ]] && printf '%s\n' "$revisions_json" | jq -e --arg expected_image "$RELEASE_IMAGE" '
+              if type == "object" and (.value | type == "array") and (.nextLink == null) then
+                [.value[] | select(.properties.active == true)] as $active
+                | ($active | length) == 1
+                  and ([$active[0].properties.template.containers[]? | select(.image == $expected_image)] | length) == 1
+              else
+                false
+              end
+            ' >/dev/null 2>&1; then
+              expected_revision_active=true
+              break
+            fi
+
+            printf 'Tentativo %d/%d: revisione attiva attesa non ancora confermata\n' "$attempt" "$metadata_max_attempts"
+            if (( attempt < metadata_max_attempts )); then
+              sleep "$metadata_retry_delay_seconds"
+            fi
+          done
+
+          if [[ "$expected_revision_active" != "true" ]]; then
+            {
+              printf '## Smoke test post-deploy non riuscito\n\n'
+              printf 'La metadata ACA non ha confermato entro %d tentativi (timeout CLI %d s, pausa %d s) esattamente una revisione attiva, con immagine identica al digest della release. Le revisioni attive ambigue o con digest precedente non superano il gate. Il deployment ARM potrebbe essere già stato applicato; verificare manualmente la risorsa e procedere con fix-forward o recovery manuale. Nessun rollback automatico viene eseguito.\n' \
+                "$metadata_max_attempts" "$metadata_timeout_seconds" "$metadata_retry_delay_seconds"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::La revisione ACA attiva non coincide in modo univoco con il digest della release; verificare manualmente la risorsa."
+            exit 1
+          fi
+
+          base_url="https://${app_fqdn}"
+          paths=(/health/live /health/ready)
+          max_attempts=5
+          retry_delay_seconds=10
+
+          printf '## Smoke test pubblico HTTPS post-deploy\n\nEndpoint: `%s`\n\nRevisione attiva: esattamente una, con immagine identica al digest della release (API ACA `2024-03-01`). Probe richiesti: `/health/live` e `/health/ready` (HTTP 200).\n\n' \
+            "$base_url" >> "$GITHUB_STEP_SUMMARY"
+
+          for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+            all_healthy=true
+            for path in "${paths[@]}"; do
+              if http_status="$(curl \
+                --connect-timeout 5 \
+                --max-time 10 \
+                --silent \
+                --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "${base_url}${path}" 2>/dev/null)"; then
+                if [[ "$http_status" == "200" ]]; then
+                  printf 'Tentativo %d/%d: %s HTTP 200\n' "$attempt" "$max_attempts" "$path"
+                  continue
+                fi
+              else
+                http_status="errore di trasporto"
+              fi
+
+              all_healthy=false
+              printf 'Tentativo %d/%d: %s non pronto (%s)\n' "$attempt" "$max_attempts" "$path" "$http_status"
+            done
+
+            if [[ "$all_healthy" == "true" ]]; then
+              printf '\nEsito: entrambi gli endpoint hanno restituito HTTP 200.\n' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            if (( attempt < max_attempts )); then
+              sleep "$retry_delay_seconds"
+            fi
+          done
+
+          {
+            printf '\nEsito: gate fallito dopo %d tentativi per probe, con timeout curl di 10 s e pausa di %d s. FQDN e revisione sono stati controllati prima dei probe.\n\n' \
+              "$max_attempts" "$retry_delay_seconds"
+            printf 'Il deployment ARM potrebbe essere già stato applicato e la risorsa potrebbe essere attiva nonostante il fallimento del workflow. Verificare lo stato e procedere con fix-forward o recovery manuale; nessun rollback applicativo o SQL viene eseguito automaticamente.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Smoke test post-deploy fallito. Il deployment ARM potrebbe essere già stato applicato; verificare la risorsa e procedere manualmente (nessun rollback automatico)."
+          exit 1

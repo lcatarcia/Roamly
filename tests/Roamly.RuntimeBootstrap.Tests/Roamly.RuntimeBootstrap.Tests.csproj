@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\infra\tools\runtime-bootstrap\bridge\Roamly.RuntimeBootstrap.csproj" />
+    <ProjectReference Include="..\..\src\Roamly.Infrastructure\Roamly.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

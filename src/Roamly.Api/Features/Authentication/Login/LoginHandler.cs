@@ -83,8 +83,23 @@ internal sealed partial class LoginHandler
         var user = await _userManager.FindByNameAsync(normalizedEmail).ConfigureAwait(false);
         if (user is null)
         {
+            var unknownStart = await _rateLimiter.BeginUnknownAccountAsync(cancellationToken).ConfigureAwait(false);
             _dummyPasswordHash.Verify(_userManager.PasswordHasher, request.Password);
-            return new LoginResult(LoginOutcome.InvalidCredentials, null);
+
+            if (unknownStart.Status == LoginAttemptLimitStatus.AccountTooManyAttempts)
+            {
+                return new LoginResult(LoginOutcome.InvalidCredentials, null);
+            }
+
+            if (unknownStart.Status == LoginAttemptLimitStatus.Unavailable
+                || unknownStart.Reservation is null)
+            {
+                return new LoginResult(LoginOutcome.Unavailable, null);
+            }
+
+            await using var unknownReservation = unknownStart.Reservation;
+            return await CompleteAttemptAsync(unknownReservation, credentialsInvalid: true, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var start = await _rateLimiter.BeginAccountAsync(user.Id, cancellationToken).ConfigureAwait(false);

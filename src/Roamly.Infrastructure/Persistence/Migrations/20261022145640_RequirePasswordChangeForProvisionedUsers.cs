@@ -19,15 +19,16 @@ namespace Roamly.Infrastructure.Persistence.Migrations
 
             migrationBuilder.Sql(
                 """
-                UPDATE [AspNetUsers]
-                SET [RequiresPasswordChange] = 1
-                WHERE EXISTS
-                (
-                    SELECT 1
-                    FROM [AspNetUserClaims]
-                    WHERE [AspNetUserClaims].[UserId] = [AspNetUsers].[Id]
-                      AND [AspNetUserClaims].[ClaimType] = N'urn:roamly:identity:provisioned-unconfirmed-login'
-                );
+                EXEC sys.sp_executesql N'
+                    UPDATE [AspNetUsers]
+                    SET [RequiresPasswordChange] = 1
+                    WHERE EXISTS
+                    (
+                        SELECT 1
+                        FROM [AspNetUserClaims]
+                        WHERE [AspNetUserClaims].[UserId] = [AspNetUsers].[Id]
+                          AND [AspNetUserClaims].[ClaimType] = N''urn:roamly:identity:provisioned-unconfirmed-login''
+                    );';
                 """);
         }
 

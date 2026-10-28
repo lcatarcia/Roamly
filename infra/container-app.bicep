@@ -36,48 +36,6 @@ param journalBlobContainerName string
 @description('Conferma esplicita della verifica della configurazione effettiva dell account Blob.')
 param journalBlobAccountConfigurationVerified bool
 
-@description('CPU in vCPU. Richiesto: il profilo di compute non e stato ancora deciso.')
-param cpuCores string
-
-@description('Memoria ACA, nel formato ammesso dalla piattaforma. Richiesta: il profilo non e stato ancora deciso.')
-param memory string
-
-@minValue(1)
-@description('Numero massimo di repliche. Richiesto per esplicitare il limite di costo/capacita.')
-param maxReplicas int
-
-@minValue(0)
-@description('Attesa prima del probe liveness.')
-param livenessInitialDelaySeconds int
-
-@minValue(1)
-@description('Intervallo del probe liveness in secondi.')
-param livenessPeriodSeconds int
-
-@minValue(1)
-@description('Timeout del probe liveness in secondi.')
-param livenessTimeoutSeconds int
-
-@minValue(1)
-@description('Numero di fallimenti del probe liveness prima dell esito negativo.')
-param livenessFailureThreshold int
-
-@minValue(0)
-@description('Attesa prima del probe readiness, da dimensionare rispetto al cold-start SQL.')
-param readinessInitialDelaySeconds int
-
-@minValue(1)
-@description('Intervallo del probe readiness in secondi.')
-param readinessPeriodSeconds int
-
-@minValue(1)
-@description('Timeout del probe readiness in secondi.')
-param readinessTimeoutSeconds int
-
-@minValue(1)
-@description('Numero di fallimenti del probe readiness prima dell esito negativo.')
-param readinessFailureThreshold int
-
 var tags = {
   application: 'roamly'
   environment: 'production'
@@ -127,15 +85,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
     template: {
       scale: {
         minReplicas: 0
-        maxReplicas: maxReplicas
+        maxReplicas: 1
       }
       containers: [
         {
           name: 'roamly-api'
           image: image
           resources: {
-            cpu: json(cpuCores)
-            memory: memory
+            cpu: json('0.25')
+            memory: '0.5Gi'
           }
           env: [
             {
@@ -169,16 +127,26 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           ]
           probes: [
             {
+              type: 'Startup'
+              httpGet: {
+                path: '/health/live'
+                port: 8080
+                scheme: 'HTTP'
+              }
+              periodSeconds: 5
+              timeoutSeconds: 2
+              failureThreshold: 24
+            }
+            {
               type: 'Liveness'
               httpGet: {
                 path: '/health/live'
                 port: 8080
                 scheme: 'HTTP'
               }
-              initialDelaySeconds: livenessInitialDelaySeconds
-              periodSeconds: livenessPeriodSeconds
-              timeoutSeconds: livenessTimeoutSeconds
-              failureThreshold: livenessFailureThreshold
+              periodSeconds: 10
+              timeoutSeconds: 3
+              failureThreshold: 3
             }
             {
               type: 'Readiness'
@@ -187,10 +155,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
                 port: 8080
                 scheme: 'HTTP'
               }
-              initialDelaySeconds: readinessInitialDelaySeconds
-              periodSeconds: readinessPeriodSeconds
-              timeoutSeconds: readinessTimeoutSeconds
-              failureThreshold: readinessFailureThreshold
+              periodSeconds: 5
+              timeoutSeconds: 5
+              failureThreshold: 3
             }
           ]
         }

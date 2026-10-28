@@ -290,7 +290,11 @@ app.UseAuthorization();
 app.UseMiddleware<CsrfProtectionMiddleware>();
 
 // Health check fuori da /api/v1, anonimi, esclusi da R45 (R62): non e' contratto pubblico.
-app.MapHealthChecks("/health/live").AllowAnonymous();
+app.MapHealthChecks("/health/live", new()
+{
+    // Nessun check esterno: il processo e' vivo se riesce a servire questa richiesta.
+    Predicate = _ => false,
+}).AllowAnonymous();
 app.MapHealthChecks("/health/ready", new()
 {
     Predicate = check => check.Tags.Contains(ObservabilityRegistration.ReadyTag),

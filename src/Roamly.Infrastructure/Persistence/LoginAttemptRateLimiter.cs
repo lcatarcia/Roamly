@@ -22,6 +22,7 @@ public sealed partial class LoginAttemptRateLimiter :
     private const int MaximumTrackedIpIdentities = 10_000;
     private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(5);
     private const string AccountCounterKind = "account";
+    private const string UnknownAccountCounterKind = "unknown-account";
     private const string FiveMinuteIpCounterKind = "ip-5m";
     private const string HourlyIpCounterKind = "ip-1h";
     private const string IpAdmissionCounterKind = "ip-admission";
@@ -90,8 +91,24 @@ public sealed partial class LoginAttemptRateLimiter :
     }
 
     /// <inheritdoc />
-    public async Task<LoginAttemptStartResult> BeginAccountAsync(
+    public Task<LoginAttemptStartResult> BeginAccountAsync(
         Guid identityUserId,
+        CancellationToken cancellationToken) =>
+        BeginAccountAttemptAsync(
+            AccountCounterKind,
+            BucketKey("account", identityUserId.ToString("D")),
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<LoginAttemptStartResult> BeginUnknownAccountAsync(CancellationToken cancellationToken) =>
+        BeginAccountAttemptAsync(
+            UnknownAccountCounterKind,
+            BucketKey("account-unknown", "shared"),
+            cancellationToken);
+
+    private async Task<LoginAttemptStartResult> BeginAccountAttemptAsync(
+        string counterKind,
+        string bucketKey,
         CancellationToken cancellationToken)
     {
         IDbContextTransaction? accountTransaction = null;
@@ -101,13 +118,11 @@ public sealed partial class LoginAttemptRateLimiter :
             accountTransaction = await _context.Database
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
                 .ConfigureAwait(false);
-
             var accountWindow = _options.AccountWindow;
             var accountStart = FixedWindowStart(now, accountWindow);
-            var accountKey = BucketKey("account", identityUserId.ToString("D"));
             var accountAttempts = await IncrementWindowAsync(
-                AccountCounterKind,
-                accountKey,
+                counterKind,
+                bucketKey,
                 accountStart,
                 accountWindow,
                 _options.MaxFailedAttemptsPerAccount,
@@ -124,7 +139,7 @@ public sealed partial class LoginAttemptRateLimiter :
             var reservation = new AccountAttemptReservation(
                 _context,
                 accountTransaction,
-                accountKey,
+                bucketKey,
                 accountStart,
                 _logger);
             accountTransaction = null;

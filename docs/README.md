@@ -17,6 +17,7 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | [`product/ROADMAP.md`](product/ROADMAP.md) | MVP 1.0, fasi con criteri di uscita, anti-scope, sequenza di lavoro |
 | [`product/DECISION-MAP-PRE-PUBBLICAZIONE.md`](product/DECISION-MAP-PRE-PUBBLICAZIONE.md) | Decisioni aperte per la pubblicazione generale e la deroga alpha privata dopo la Phase 2 |
 | [`product/AZURE-MAPS-RESEARCH.md`](product/AZURE-MAPS-RESEARCH.md) | Quote gratuite, costi, autenticazione, privacy e limiti di Azure Maps; nessuna integrazione o risorsa attivata |
+| [`product/AZURE-DEPLOYMENT-COST-ESTIMATE.md`](product/AZURE-DEPLOYMENT-COST-ESTIMATE.md) | Stima incrementale dei costi per pubblicare Roamly su Azure; nessun provisioning o rilascio autorizzato |
 | [`product/GEMINI-PLATFORM-DUE-DILIGENCE.md`](product/GEMINI-PLATFORM-DUE-DILIGENCE.md) | Due diligence tecnica e privacy documentale su Gemini UE; nessuna configurazione o invio dati |
 | [`product/UX.md`](product/UX.md) | Direzione UX, dashboard, design system, i18n, offline |
 

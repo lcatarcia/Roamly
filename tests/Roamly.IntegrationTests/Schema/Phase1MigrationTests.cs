@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Roamly.Domain.Entities;
 using Roamly.Domain.Enums;
 using Roamly.Infrastructure.Identity;
 using Roamly.IntegrationTests.Infrastructure;
 using Roamly.Infrastructure.Persistence;
+using System.Text.RegularExpressions;
 
 namespace Roamly.IntegrationTests.Schema;
 
@@ -187,7 +190,14 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
                     VALUES ({provisionedUserId}, {provisionedClaimType}, N'true');
                     """,
                     TestContext.Current.CancellationToken);
-                await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+                var script = context.GetService<IMigrator>().GenerateScript(
+                    migrations[backfillIndex - 1],
+                    migrations[backfillIndex],
+                    MigrationsSqlGenerationOptions.Idempotent);
+                await ExecuteSqlBatchesAsync(
+                    context,
+                    script,
+                    TestContext.Current.CancellationToken);
 
                 var provisionedUser = await context.Users.SingleAsync(
                     user => user.Id == provisionedUserId,
@@ -453,6 +463,30 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
     {
         await using var context = ContextOn(database);
         return [.. await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)];
+    }
+
+    private static async Task ExecuteSqlBatchesAsync(
+        RoamlyDbContext context,
+        string script,
+        CancellationToken cancellationToken)
+    {
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            var batches = Regex.Split(
+                script,
+                @"^\s*GO\s*(?:--.*)?$",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            foreach (var batch in batches.Where(batch => !string.IsNullOrWhiteSpace(batch)))
+            {
+                await context.Database.ExecuteSqlRawAsync(batch, cancellationToken);
+            }
+        }
+        finally
+        {
+            await context.Database.CloseConnectionAsync();
+        }
     }
 
     /// <summary>

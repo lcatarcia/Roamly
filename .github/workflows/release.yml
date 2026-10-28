@@ -1,0 +1,183 @@
+name: Release Azure
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Modalita release oppure rollback applicativo
+        type: choice
+        required: true
+        default: release
+        options:
+          - release
+          - rollback
+      rollback_digest:
+        description: Digest sha256 della precedente immagine sana (solo rollback)
+        type: string
+        required: false
+  push:
+    branches:
+      - alpha-pr-stack-source
+    paths:
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: azure-release
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-roamly-dev
+  ACR_NAME: acrroamlywse7wit7fzpja
+  ACR_LOGIN_SERVER: acrroamlywse7wit7fzpja.azurecr.io
+
+jobs:
+  release:
+    name: Build, Push e Deploy su Azure Container Apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: azure-release
+    steps:
+      - name: Checkout codice
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Login Azure OIDC
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Risoluzione o build/push immagine Docker
+        id: image
+        shell: bash
+        env:
+          RELEASE_MODE: ${{ inputs.mode || 'release' }}
+          ROLLBACK_DIGEST: ${{ inputs.rollback_digest || '' }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image_repository="${GITHUB_REPOSITORY##*/}"
+          image_repository="${image_repository,,}"
+
+          if [[ "$RELEASE_MODE" == "rollback" ]]; then
+            if [[ ! "$ROLLBACK_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::La modalita rollback richiede un digest sha256 valido."
+              exit 1
+            fi
+            image_reference="${ACR_LOGIN_SERVER}/${image_repository}@${ROLLBACK_DIGEST}"
+            printf 'reference=%s\n' "$image_reference" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          image_tag="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"
+          image_tagged="${ACR_LOGIN_SERVER}/${image_repository}:${image_tag}"
+
+          az acr login --name "$ACR_NAME"
+          docker build --file Dockerfile --tag "$image_tagged" .
+          push_output="$(docker push "$image_tagged" 2>&1)" || {
+            printf '%s\n' "$push_output"
+            exit 1
+          }
+          printf '%s\n' "$push_output"
+
+          image_digest="$(printf '%s\n' "$push_output" | sed -nE 's/.*digest: (sha256:[0-9a-f]{64}).*/\1/p' | tail -n 1)"
+          if [[ ! "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Docker non ha restituito un digest OCI valido."
+            exit 1
+          fi
+
+          image_reference="${ACR_LOGIN_SERVER}/${image_repository}@${image_digest}"
+          printf 'reference=%s\n' "$image_reference" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Container App con Bicep
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RELEASE_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          set -euo pipefail
+          container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-prod"
+          runtime_identity_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-roamly-runtime-prod"
+
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "roamly-release-${RUN_ID}-${RUN_ATTEMPT}" \
+            --template-file infra/container-app.bicep \
+            --parameters \
+              containerAppName=ca-roamly-prod \
+              containerAppsEnvironmentResourceId="$container_apps_environment_id" \
+              runtimeIdentityResourceId="$runtime_identity_id" \
+              registryServer="$ACR_LOGIN_SERVER" \
+              image="$RELEASE_IMAGE" \
+              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
+              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
+              journalBlobContainerName=roamly-journal-images \
+              journalBlobAccountConfigurationVerified=true
+
+      - name: Verifica salute post-deploy (/health/live e /health/ready)
+        shell: bash
+        timeout-minutes: 7
+        env:
+          RELEASE_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          set -euo pipefail
+          fqdn=""
+          for attempt in $(seq 1 6); do
+            fqdn="$(az containerapp show \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --name ca-roamly-prod \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv 2>/dev/null | tr -d '\r' || true)"
+            if [[ -n "$fqdn" && "$fqdn" != "null" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ -z "$fqdn" || "$fqdn" == "null" ]]; then
+            echo "::error::FQDN della Container App non disponibile."
+            exit 1
+          fi
+
+          base_url="https://${fqdn}"
+          echo "Container App URL: ${base_url}"
+
+          live_ok="false"
+          ready_ok="false"
+          for attempt in $(seq 1 12); do
+            live_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 15 "${base_url}/health/live" || true)"
+            ready_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 30 "${base_url}/health/ready" || true)"
+            echo "Tentativo ${attempt}/12: /health/live=${live_code}, /health/ready=${ready_code}"
+            if [[ "$live_code" == "200" && "$ready_code" == "200" ]]; then
+              live_ok="true"
+              ready_ok="true"
+              break
+            fi
+            sleep 10
+          done
+
+          {
+            printf '## Release Azure completata\n\n'
+            printf '- **URL**: `%s`\n' "$base_url"
+            printf '- **Immagine**: `%s`\n' "$RELEASE_IMAGE"
+            printf '- **Health**: `/health/live`=%s, `/health/ready`=%s\n' "$live_ok" "$ready_ok"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$live_ok" != "true" || "$ready_ok" != "true" ]]; then
+            echo "::error::Health check post-deploy fallito su ${base_url}."
+            exit 1
+          fi

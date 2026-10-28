@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -207,6 +208,37 @@ public sealed class ProvisionedUserLoginApiTests(SqlServerFixture sqlServer) : I
     }
 
     [Fact]
+    public async Task provisioning_at_account_limit_is_rejected_before_reading_credentials()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        for (var index = 0; index < 3; index++)
+        {
+            var account = new ApplicationUser
+            {
+                UserName = $"existing-{index}@example.test",
+                Email = $"existing-{index}@example.test",
+                EmailConfirmed = true,
+                CreatedAtUtc = ProvisionedAtUtc.UtcDateTime,
+            };
+            var result = await userManager.CreateAsync(account, Password);
+            Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(error => error.Description)));
+        }
+
+        _console.SetInput(Email, Password, Password);
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            OneShotJobDispatcher.RunIfRequestedAsync(
+                ["--job", "provision-user"],
+                _factory.Services,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("Limite massimo di 3 account", exception.Message);
+        Assert.Equal(0, _console.EmailReadCount);
+        Assert.Equal(0, _console.SecretReadCount);
+        Assert.Equal(3, await userManager.Users.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task provisioning_requires_interactive_input_and_does_not_accept_password_arguments()
     {
         _console.IsInteractive = false;
@@ -252,9 +284,21 @@ public sealed class ProvisionedUserLoginApiTests(SqlServerFixture sqlServer) : I
 
         public IReadOnlyList<string> Output => _output;
 
-        public string? ReadEmail() => _inputs.Dequeue();
+        public int EmailReadCount { get; private set; }
 
-        public string ReadSecret(string prompt) => _inputs.Dequeue();
+        public int SecretReadCount { get; private set; }
+
+        public string? ReadEmail()
+        {
+            EmailReadCount++;
+            return _inputs.Dequeue();
+        }
+
+        public string ReadSecret(string prompt)
+        {
+            SecretReadCount++;
+            return _inputs.Dequeue();
+        }
 
         public void WriteLine(string message) => _output.Add(message);
 
@@ -262,6 +306,8 @@ public sealed class ProvisionedUserLoginApiTests(SqlServerFixture sqlServer) : I
         {
             _inputs = new Queue<string>(inputs);
             _output.Clear();
+            EmailReadCount = 0;
+            SecretReadCount = 0;
         }
     }
 

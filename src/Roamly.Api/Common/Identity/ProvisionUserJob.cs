@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,12 @@ public sealed class ProvisionUserJob(
     TimeProvider clock,
     IProvisioningConsole console)
 {
+    private const int MaximumAccounts = 3;
+
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         EnsureInteractive();
+        await EnsureCapacityAvailableAsync(cancellationToken).ConfigureAwait(false);
         var email = ReadEmail();
         var password = ReadConfirmedPassword();
         await CreateUserAsync(email, password, cancellationToken).ConfigureAwait(false);
@@ -57,12 +61,23 @@ public sealed class ProvisionUserJob(
     private async Task CreateUserAsync(string email, string password, CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database
-            .BeginTransactionAsync(cancellationToken)
+            .BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
             .ConfigureAwait(false);
+        await EnsureCapacityAvailableAsync(cancellationToken).ConfigureAwait(false);
         var user = CreateUnconfirmedUser(email);
         await CreateIdentityUserAsync(user, password).ConfigureAwait(false);
         await MarkAsProvisionedAsync(user).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task EnsureCapacityAvailableAsync(CancellationToken cancellationToken)
+    {
+        var accountCount = await dbContext.Users.CountAsync(cancellationToken).ConfigureAwait(false);
+        if (accountCount >= MaximumAccounts)
+        {
+            throw new InvalidOperationException(
+                $"Limite massimo di {MaximumAccounts} account raggiunto.");
+        }
     }
 
     private ApplicationUser CreateUnconfirmedUser(string email) => new()

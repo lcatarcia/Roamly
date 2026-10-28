@@ -35,6 +35,11 @@ public interface ILoginAttemptRateLimiter
     Task<LoginAttemptStartResult> BeginAccountAsync(
         Guid identityUserId,
         CancellationToken cancellationToken);
+
+    /// <summary>Applica il limite condiviso a ogni username Identity inesistente.</summary>
+    /// <param name="cancellationToken">Token di annullamento.</param>
+    Task<LoginAttemptStartResult> BeginUnknownAccountAsync(
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Manutenzione dei contatori scaduti nel job amministrativo one-shot esistente.</summary>
@@ -46,7 +51,7 @@ public interface ILoginAttemptCounterMaintenance
 
 /// <summary>Esito e prenotazione di un tentativo login.</summary>
 /// <param name="Status">Esito del controllo.</param>
-/// <param name="Reservation">Prenotazione presente quando un account esistente è ammesso.</param>
+/// <param name="Reservation">Prenotazione presente quando il bucket di login è ammesso.</param>
 public sealed record LoginAttemptStartResult(
     LoginAttemptLimitStatus Status,
     ILoginAttemptReservation? Reservation = null);
