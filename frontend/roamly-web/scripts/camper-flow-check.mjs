@@ -31,11 +31,23 @@ async function main() {
 
   try {
     const page = await browser.newPage({ ignoreHTTPSErrors: true })
+    await page.setViewportSize({ width: 1440, height: 900 })
     const observed = await mockApi(page)
     await page.goto(BASE_URL, { waitUntil: 'networkidle' })
 
     await page.getByRole('link', { name: 'Profilo tecnico' }).first().click()
     await page.getByRole('heading', { name: 'Profilo tecnico del camper' }).waitFor()
+    const profileWidth = await page.locator('.max-w-6xl').evaluate((element) =>
+      element.getBoundingClientRect().width,
+    )
+    assert.ok(profileWidth > 1000, `Expected a wide desktop profile, got ${profileWidth}px`)
+    await page.setViewportSize({ width: 390, height: 844 })
+    const profileFitsMobile = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    )
+    assert.ok(profileFitsMobile, 'Profile page should not overflow a mobile viewport')
+
+    await page.setViewportSize({ width: 1440, height: 900 })
     await page.getByLabel('Marca').fill('Laika')
     await page.getByLabel('Modello').fill('Kreos')
     await page.getByRole('button', { name: 'Salva profilo' }).click()
@@ -43,6 +55,17 @@ async function main() {
 
     await page.getByRole('link', { name: 'Torna alla dashboard' }).click()
     await page.getByRole('heading', { name: 'Il Grigio' }).waitFor()
+    const dashboardWidth = await page.locator('.max-w-7xl').evaluate((element) =>
+      element.getBoundingClientRect().width,
+    )
+    assert.ok(dashboardWidth > 1100, `Expected a wide desktop dashboard, got ${dashboardWidth}px`)
+    await page.setViewportSize({ width: 390, height: 844 })
+    const dashboardFitsMobile = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    )
+    assert.ok(dashboardFitsMobile, 'Dashboard should not overflow a mobile viewport')
+    await page.setViewportSize({ width: 1440, height: 900 })
+
     const equipmentPanel = page.getByRole('region', { name: 'Equipaggiamento' })
     await equipmentPanel.getByLabel('Nome', { exact: true }).fill('Pannello solare')
     await equipmentPanel.getByLabel('Categoria', { exact: true }).selectOption('0')

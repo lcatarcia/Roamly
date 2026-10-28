@@ -163,7 +163,7 @@ function CreateCamperPage() {
 function CamperProfilePage() {
   const { camperId = '' } = useParams()
   return (
-    <PageContainer className="max-w-4xl justify-start">
+    <PageContainer size="wide" className="justify-start">
       <BackToCampers />
       <Link
         className="self-start text-sm text-muted-foreground underline underline-offset-4"
@@ -206,7 +206,7 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
   const description = [camper.brand, camper.model, camper.year].filter(Boolean).join(' · ')
 
   return (
-    <PageContainer className="max-w-5xl justify-start">
+    <PageContainer size="dashboard" className="justify-start">
       <BackToCampers />
       <Link
         className="self-start text-sm text-muted-foreground underline underline-offset-4"
@@ -247,7 +247,7 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
             {t('neutral.camper.dashboard.noMaintenance')}
           </p>
         ) : (
-          <ul className="grid gap-3 lg:grid-cols-2">
+          <ul className="grid min-w-0 gap-3 lg:grid-cols-2">
             {maintenance.map((item) => (
               <MaintenanceItemCard key={item.id} camperId={camper.id} item={item} />
             ))}
@@ -267,7 +267,7 @@ function MaintenanceItemCard({
   item: CamperDashboardResponse['maintenance'][number]
 }) {
   return (
-    <li className="rounded-xl border border-border bg-card p-5">
+    <li className="min-w-0 rounded-xl border border-border bg-card p-5">
       <h3 className="font-semibold">{item.name}</h3>
       {item.hasServiceHistory ? (
         <p className="mt-1 text-sm text-muted-foreground">
