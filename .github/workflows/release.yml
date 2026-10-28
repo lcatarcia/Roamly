@@ -20,6 +20,8 @@ on:
       - alpha-pr-stack-source
     paths:
       - '.github/workflows/release.yml'
+      - 'infra/container-app.bicep'
+      - 'Dockerfile'
 
 permissions:
   contents: read
