@@ -8,7 +8,7 @@ interface PageContainerProps {
 
 /** Contenitore di pagina: larghezza massima leggibile, respiro verticale
  * generoso (correttivo (4) di R11: la densita' non e' uniforme). */
-export function PageContainer({ children, className, size = 'form' }: PageContainerProps) {
+export function PageContainer({ children, className, size = 'wide' }: PageContainerProps) {
   const maxWidthClass = {
     form: 'max-w-md',
     wide: 'max-w-6xl',

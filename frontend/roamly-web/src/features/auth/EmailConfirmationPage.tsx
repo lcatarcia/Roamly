@@ -37,7 +37,7 @@ export function EmailConfirmationPage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer size="form">
       <div>
         <h1 className="page-title">{t('neutral.emailConfirmation.title')}</h1>
         <p className="text-sm text-muted-foreground">

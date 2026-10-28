@@ -88,7 +88,7 @@ export function RestrictedSessionPage() {
   })
 
   return (
-    <PageContainer className="max-w-xl justify-start">
+    <PageContainer size="wide" className="justify-start">
       <div>
         <h1 className="page-title">{t('neutral.account.limited.title')}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -212,7 +212,7 @@ function NormalPrivacyPage({ session }: { session: NormalAccountSession }) {
     deletionQuery.isSuccess && deletionQuery.data === null && previewQuery.isSuccess
 
   return (
-    <PageContainer className="max-w-2xl justify-start">
+    <PageContainer size="wide" className="justify-start">
       <header>
         <Link className="text-sm text-muted-foreground underline underline-offset-4" to="/">
           {t('neutral.account.backToCampers')}

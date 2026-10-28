@@ -55,7 +55,7 @@ async function main() {
 
     await page.getByRole('link', { name: 'Torna alla dashboard' }).click()
     await page.getByRole('heading', { name: 'Il Grigio' }).waitFor()
-    const dashboardWidth = await page.locator('.max-w-7xl').evaluate((element) =>
+    const dashboardWidth = await page.locator('.max-w-7xl.min-w-0').evaluate((element) =>
       element.getBoundingClientRect().width,
     )
     assert.ok(dashboardWidth > 1100, `Expected a wide desktop dashboard, got ${dashboardWidth}px`)

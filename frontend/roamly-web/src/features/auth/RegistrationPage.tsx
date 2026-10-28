@@ -37,7 +37,7 @@ export function RegistrationPage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer size="form">
       <div>
         <h1 className="page-title">{t('neutral.registration.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('neutral.registration.description')}</p>
@@ -102,7 +102,7 @@ export function RegistrationPage() {
 
 function RegistrationAcceptedPage() {
   return (
-    <PageContainer>
+    <PageContainer size="form">
       <section aria-labelledby="registration-accepted-title">
         <h1 id="registration-accepted-title" className="page-title">
           {t('neutral.registration.acceptedTitle')}

@@ -47,7 +47,7 @@ export function ForcedPasswordChangePage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer size="form">
       <div>
         <h1 className="page-title">{t('neutral.passwordChange.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('neutral.passwordChange.description')}</p>

@@ -96,7 +96,7 @@ function CamperSelectionPage() {
   }
 
   return (
-    <PageContainer className="max-w-3xl justify-start">
+    <PageContainer size="wide" className="justify-start">
       <section className="rounded-xl border border-border bg-card p-6">
         <div className="mb-5">
           <h1 className="page-title">{t('neutral.camper.selection.title')}</h1>
@@ -149,7 +149,7 @@ function CamperSelectionPage() {
 
 function CreateCamperPage() {
   return (
-    <PageContainer className="max-w-xl justify-start">
+    <PageContainer size="form" className="justify-start">
       <p>
         <Link className="text-sm text-muted-foreground underline underline-offset-4" to="/campers">
           {t('neutral.camper.dashboard.allCampers')}
@@ -191,7 +191,7 @@ function CamperDashboardPage() {
 
   if (dashboardQuery.isError) {
     return (
-      <PageContainer className="max-w-5xl justify-start">
+      <PageContainer size="wide" className="justify-start">
         <FlowError message={t('neutral.camper.dashboard.error')} />
         <BackToCampers />
       </PageContainer>

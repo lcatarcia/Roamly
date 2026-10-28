@@ -58,7 +58,7 @@ export function TripsPage() {
   const trips = tripsQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
-    <PageContainer className="max-w-5xl justify-start">
+    <PageContainer size="dashboard" className="justify-start">
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           {t('narrative.trips.eyebrow')}
@@ -154,7 +154,7 @@ export function CreateTripPage() {
   }
   if (campersQuery.isError) {
     return (
-      <PageContainer className="max-w-xl justify-start">
+      <PageContainer size="form" className="justify-start">
         <BackToTrips />
         <FlowError
           message={t('neutral.trips.campersError')}
@@ -165,7 +165,7 @@ export function CreateTripPage() {
   }
 
   return (
-    <PageContainer className="max-w-xl justify-start">
+    <PageContainer size="form" className="justify-start">
       <BackToTrips />
       <header>
         <h1 className="page-title">{t('neutral.trips.createTitle')}</h1>
@@ -294,7 +294,7 @@ export function TripJournalPage() {
   }
   if (tripQuery.isError) {
     return (
-      <PageContainer className="max-w-5xl justify-start">
+      <PageContainer size="dashboard" className="justify-start">
         <BackToTrips />
         <FlowError
           message={t('neutral.trips.detailError')}
@@ -306,7 +306,7 @@ export function TripJournalPage() {
 
   const { trip, etag } = tripQuery.data
   return (
-    <PageContainer className="max-w-5xl justify-start">
+    <PageContainer size="dashboard" className="justify-start">
       <BackToTrips />
       <TripHeader trip={trip} />
       {feedback && <p role="status" className="text-sm font-medium">{feedback}</p>}

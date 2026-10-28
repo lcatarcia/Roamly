@@ -70,7 +70,7 @@ export function LoginPage() {
   if (currentUser?.mode === 'normal') {
     return (
       <>
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">{t('neutral.login.signedInAs')}</p>
             <p className="truncate text-sm font-semibold">
@@ -94,7 +94,7 @@ export function LoginPage() {
         </div>
         <TripNavigation />
         {logoutMutation.isError && (
-          <p role="alert" className="mx-auto max-w-5xl px-4 text-sm text-danger-text sm:px-6">
+          <p role="alert" className="mx-auto max-w-7xl px-4 text-sm text-danger-text sm:px-6">
             {t('neutral.login.signOutError')}
           </p>
         )}
@@ -106,7 +106,7 @@ export function LoginPage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer size="form">
       <div>
         <h1 className="page-title">{t('neutral.login.title')}</h1>
         <p className="text-sm text-muted-foreground">{t('neutral.login.description')}</p>
