@@ -133,7 +133,7 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01' = {
 }
 
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: 'cae-roamly-prod'
+  name: 'cae-roamly-live'
   location: location
   tags: tags
   properties: {

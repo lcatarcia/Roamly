@@ -111,7 +111,7 @@ jobs:
           RELEASE_IMAGE: ${{ steps.image.outputs.reference }}
         run: |
           set -euo pipefail
-          container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-prod"
+          container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
           runtime_identity_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-roamly-runtime-prod"
 
           az deployment group create \
