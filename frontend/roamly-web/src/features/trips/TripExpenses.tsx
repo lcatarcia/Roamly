@@ -142,8 +142,8 @@ export function TripExpenses({ camperId, tripId, tripCancelled }: TripExpensesPr
   }
 
   return (
-    <section aria-labelledby="expenses-heading" className="space-y-5 border-b border-border py-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section aria-labelledby="expenses-heading" className="space-y-5 rounded-3xl border border-border bg-card p-6 shadow-xs">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
         <div>
           <h2 id="expenses-heading" className="text-xl font-semibold">{t('neutral.expenses.title')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t('neutral.expenses.description')}</p>
@@ -377,7 +377,7 @@ function ExpenseForm({
           <FieldContent>
             <select
               id={expense ? `expense-category-${expense.id}` : 'expense-category'}
-              className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs"
               value={category}
               onChange={(event) => setCategory(Number(event.target.value))}
             >

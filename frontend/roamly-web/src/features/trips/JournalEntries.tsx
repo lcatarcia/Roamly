@@ -139,8 +139,8 @@ export function JournalEntries({ tripId, etag, onEtagChanged, onReload }: Journa
   }
 
   return (
-    <section aria-labelledby="journal-heading" className="space-y-5 pt-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section aria-labelledby="journal-heading" className="space-y-5 rounded-3xl border border-border bg-card p-6 shadow-xs">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
         <div>
           <h2 id="journal-heading" className="text-xl font-semibold">{t('narrative.trips.journalTitle')}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t('narrative.trips.journalDescription')}</p>
@@ -324,7 +324,7 @@ function JournalEntryForm({
               id={entry ? `entry-body-${entry.id}` : 'entry-body'}
               required
               rows={4}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+              className="w-full rounded-xl border border-input bg-card px-3.5 py-2.5 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
               value={body}
               onChange={(event) => setBody(event.target.value)}
             />

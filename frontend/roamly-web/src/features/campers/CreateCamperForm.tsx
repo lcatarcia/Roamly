@@ -230,7 +230,7 @@ function VehicleKindField({
           disabled={disabled}
           aria-invalid={invalid}
           aria-describedby={invalid ? 'camper-vehicle-kind-error' : undefined}
-          className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
+          className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive"
           value={value}
           onChange={(event) => onChange(event.target.value as VehicleKind)}
         >

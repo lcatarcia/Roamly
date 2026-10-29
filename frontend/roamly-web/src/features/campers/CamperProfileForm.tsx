@@ -161,16 +161,19 @@ function CamperProfileEditor({
 
   return (
     <div className="space-y-6">
-    <section className="rounded-xl border border-border bg-card p-6">
-      <header className="mb-5">
-        <h1 className="page-title">{t('neutral.camper.profile.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('neutral.camper.profile.description')}</p>
-        <p className="mt-2 text-sm text-muted-foreground">{t('neutral.camper.profile.groupsNote')}</p>
+    <section className="rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+      <header className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Scheda tecnica e omologazione
+        </p>
+        <h1 className="page-title mt-1">{t('neutral.camper.profile.title')}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t('neutral.camper.profile.description')}</p>
+        <p className="mt-2 rounded-xl border border-border bg-background px-3.5 py-2 text-xs text-muted-foreground">{t('neutral.camper.profile.groupsNote')}</p>
       </header>
       <form onSubmit={handleSubmit} noValidate>
         <FieldGroup>
-          <fieldset className="grid gap-4 rounded-lg border border-border p-4 sm:grid-cols-2">
-            <legend className="px-1 text-sm font-semibold">{t('neutral.camper.profile.identity')}</legend>
+          <fieldset className="grid gap-4 rounded-2xl border border-border bg-background p-5 sm:grid-cols-3">
+            <legend className="px-2 text-xs font-bold uppercase tracking-wider text-foreground">{t('neutral.camper.profile.identity')}</legend>
             <ProfileField fieldKey="name" label={t('neutral.camper.profile.name')} value={values.name}
               required invalid={nameInvalid} onChange={updateField} />
             <ProfileField fieldKey="brand" label={t('neutral.camper.profile.brand')} value={values.brand}
@@ -192,8 +195,8 @@ function CamperProfileEditor({
           <ProfileFieldset title={t('neutral.camper.profile.capacities')} fields={CAPACITIES}
             values={values} onChange={updateField} />
 
-          <fieldset className="grid gap-4 rounded-lg border border-border p-4 sm:grid-cols-2">
-            <legend className="px-1 text-sm font-semibold">{t('neutral.camper.profile.fuel')}</legend>
+          <fieldset className="grid gap-4 rounded-2xl border border-border bg-background p-5 sm:grid-cols-2">
+            <legend className="px-2 text-xs font-bold uppercase tracking-wider text-foreground">{t('neutral.camper.profile.fuel')}</legend>
             <SelectProfileField fieldKey="fuelKind" label={t('neutral.camper.profile.fuelKind')}
               value={values.fuelKind} options={fuelOptions()} onChange={updateField} optional />
             <ProfileField fieldKey="averageConsumptionLPer100Km"
@@ -201,16 +204,18 @@ function CamperProfileEditor({
               type="number" step="0.1" onChange={updateField} />
           </fieldset>
 
-          <Button type="submit" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? t('neutral.camper.profile.saving') : t('neutral.camper.profile.save')}
-          </Button>
+          <div className="flex justify-end pt-2">
+            <Button type="submit" size="lg" disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? t('neutral.camper.profile.saving') : t('neutral.camper.profile.save')}
+            </Button>
+          </div>
         </FieldGroup>
       </form>
       {saveMutation.isSuccess && (
-        <p role="status" className="mt-4 text-sm text-foreground">{t('neutral.camper.profile.saved')}</p>
+        <p role="status" className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground">{t('neutral.camper.profile.saved')}</p>
       )}
       {saveMutation.isError && (
-        <p role="alert" className="mt-4 rounded-lg bg-background px-2 py-1 text-sm text-danger-text">
+        <p role="alert" className="mt-4 rounded-xl bg-background px-3 py-2 text-sm text-danger-text">
           {saveErrorMessage(saveMutation.error)}
         </p>
       )}
@@ -261,8 +266,8 @@ function ProfileFieldset({
   unit?: string
 }) {
   return (
-    <fieldset className="grid gap-4 rounded-lg border border-border p-4 sm:grid-cols-2">
-      <legend className="px-1 text-sm font-semibold">{title}{unit ? ` · ${unit}` : ''}</legend>
+    <fieldset className="grid gap-4 rounded-2xl border border-border bg-background p-5 sm:grid-cols-2">
+      <legend className="px-2 text-xs font-bold uppercase tracking-wider text-foreground">{title}{unit ? ` · ${unit}` : ''}</legend>
       {fields.map((field) => (
         <ProfileField key={field.key} fieldKey={field.key} label={field.label} value={values[field.key]}
           type="number" onChange={onChange} />
@@ -327,7 +332,7 @@ function SelectProfileField({
       <FieldContent>
         <select id={id} name={fieldKey} value={value}
           required={!optional}
-          className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           onChange={(event) => onChange(fieldKey, event.target.value)}>
           {optional && <option value="">{t('neutral.camper.profile.notSpecified')}</option>}
           {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

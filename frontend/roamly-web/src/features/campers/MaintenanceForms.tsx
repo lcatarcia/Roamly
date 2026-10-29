@@ -37,6 +37,7 @@ const CATEGORIES = [
 /** Form essenziale per aggiungere una ricorrenza senza inventare uno storico. */
 export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
   const client = useQueryClient()
+  const [isOpen, setIsOpen] = useState(false)
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
   const [intervalKm, setIntervalKm] = useState('')
@@ -52,6 +53,7 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
       setIntervalKm('')
       setIntervalMonths('')
       setSubmitted(false)
+      setIsOpen(false)
       await client.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY })
     },
   })
@@ -78,39 +80,60 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
   }
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5" aria-labelledby="maintenance-create-heading">
-      <h3 id="maintenance-create-heading" className="font-semibold">
-        {t('neutral.camper.maintenance.createTitle')}
-      </h3>
-      <form className="mt-4" onSubmit={submit} noValidate>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="maintenance-name">{t('neutral.camper.maintenance.name')}</FieldLabel>
-            <FieldContent>
-              <Input id="maintenance-name" maxLength={80} required disabled={mutation.isPending} value={name} onChange={(event) => setName(event.target.value)} />
-              {submitted && !name.trim() && <FieldError>{t('neutral.camper.maintenance.nameRequired')}</FieldError>}
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="maintenance-category">{t('neutral.camper.maintenance.categoryLabel')}</FieldLabel>
-            <FieldContent>
-              <select
-                id="maintenance-category"
-                className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                disabled={mutation.isPending}
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                required
-              >
-                <option value="">—</option>
-                {CATEGORIES.map((value) => (
-                  <option key={value} value={value}>{maintenanceCategoryLabel(value)}</option>
-                ))}
-              </select>
-              {submitted && !category && <FieldError>{t('neutral.camper.maintenance.categoryRequired')}</FieldError>}
-            </FieldContent>
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-2xs" aria-labelledby="maintenance-create-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 id="maintenance-create-heading" className="text-base font-semibold">
+            {t('neutral.camper.maintenance.createTitle')}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Imposta una scadenza chilometrica o temporale per tagliandi, revisioni o controlli impianti.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={isOpen ? 'outline' : 'default'}
+          size="sm"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((current) => !current)}
+        >
+          {isOpen ? 'Chiudi modulo' : `+ ${t('neutral.camper.maintenance.create')}`}
+        </Button>
+      </div>
+      {mutation.isSuccess && (
+        <p role="status" className="mt-3 text-sm text-foreground">
+          {t('neutral.camper.maintenance.created')}
+        </p>
+      )}
+      {isOpen && (
+        <form className="mt-4 border-t border-border pt-4" onSubmit={submit} noValidate>
+          <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="maintenance-name">{t('neutral.camper.maintenance.name')}</FieldLabel>
+              <FieldContent>
+                <Input id="maintenance-name" maxLength={80} required disabled={mutation.isPending} value={name} onChange={(event) => setName(event.target.value)} />
+                {submitted && !name.trim() && <FieldError>{t('neutral.camper.maintenance.nameRequired')}</FieldError>}
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="maintenance-category">{t('neutral.camper.maintenance.categoryLabel')}</FieldLabel>
+              <FieldContent>
+                <select
+                  id="maintenance-category"
+                  className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  disabled={mutation.isPending}
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                  required
+                >
+                  <option value="">—</option>
+                  {CATEGORIES.map((value) => (
+                    <option key={value} value={value}>{maintenanceCategoryLabel(value)}</option>
+                  ))}
+                </select>
+                {submitted && !category && <FieldError>{t('neutral.camper.maintenance.categoryRequired')}</FieldError>}
+              </FieldContent>
+            </Field>
             <Field>
               <FieldLabel htmlFor="maintenance-interval-km">{t('neutral.camper.maintenance.intervalKm')}</FieldLabel>
               <FieldContent>
@@ -123,15 +146,16 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
                 <Input id="maintenance-interval-months" type="number" min="1" max="32767" step="1" disabled={mutation.isPending} value={intervalMonths} onChange={(event) => setIntervalMonths(event.target.value)} />
               </FieldContent>
             </Field>
-          </div>
-          {submitted && recurrenceInvalid && <p className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.recurrenceRequired')}</p>}
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? t('neutral.camper.maintenance.creating') : t('neutral.camper.maintenance.create')}
-          </Button>
-          {mutation.isError && <p role="alert" className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{maintenanceError(mutation.error)}</p>}
-          {mutation.isSuccess && <p role="status" className="text-sm">{t('neutral.camper.maintenance.created')}</p>}
-        </FieldGroup>
-      </form>
+            <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+              {submitted && recurrenceInvalid && <p className="w-full rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.recurrenceRequired')}</p>}
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? t('neutral.camper.maintenance.creating') : t('neutral.camper.maintenance.create')}
+              </Button>
+              {mutation.isError && <p role="alert" className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{maintenanceError(mutation.error)}</p>}
+            </div>
+          </FieldGroup>
+        </form>
+      )}
     </section>
   )
 }
@@ -145,6 +169,7 @@ export function RecordMaintenanceLogForm({
   maintenanceItemId: string
 }) {
   const client = useQueryClient()
+  const [isOpen, setIsOpen] = useState(false)
   const [performedOnUtc, setPerformedOnUtc] = useState('')
   const [odometerKm, setOdometerKm] = useState('')
   const [amount, setAmount] = useState('')
@@ -164,6 +189,7 @@ export function RecordMaintenanceLogForm({
       setWorkshop('')
       setNotes('')
       setSubmitted(false)
+      setIsOpen(false)
       await Promise.all([
         client.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY }),
         client.invalidateQueries({ queryKey: maintenanceLogsQueryKey(camperId, maintenanceItemId) }),
@@ -196,70 +222,92 @@ export function RecordMaintenanceLogForm({
   }
 
   return (
-    <form className="mt-4 border-t border-border pt-4" onSubmit={submit} noValidate>
-      <h4 className="mb-3 text-sm font-semibold">{t('neutral.camper.maintenance.recordTitle')}</h4>
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor={`service-date-${maintenanceItemId}`}>{t('neutral.camper.maintenance.performedOn')}</FieldLabel>
-          <FieldContent>
-            <Input
-              id={`service-date-${maintenanceItemId}`}
-              type="date"
-              required
-              disabled={mutation.isPending}
-              value={performedOnUtc}
-              onChange={(event) => setPerformedOnUtc(event.target.value)}
-            />
-            {submitted && !performedOnUtc && <FieldError>{t('neutral.camper.maintenance.dateRequired')}</FieldError>}
-          </FieldContent>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor={`service-km-${maintenanceItemId}`}>{t('neutral.camper.maintenance.odometerKm')}</FieldLabel>
-          <FieldContent>
-            <Input id={`service-km-${maintenanceItemId}`} type="number" min="0" step="1" disabled={mutation.isPending} value={odometerKm} onChange={(event) => setOdometerKm(event.target.value)} />
-          </FieldContent>
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field>
-            <FieldLabel htmlFor={`service-cost-${maintenanceItemId}`}>{t('neutral.camper.maintenance.costAmount')}</FieldLabel>
-            <FieldContent>
-              <Input id={`service-cost-${maintenanceItemId}`} type="number" step="0.0001" disabled={mutation.isPending} value={amount} onChange={(event) => setAmount(event.target.value)} />
-            </FieldContent>
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`service-currency-${maintenanceItemId}`}>{t('neutral.camper.maintenance.costCurrency')}</FieldLabel>
-            <FieldContent>
-              <Input id={`service-currency-${maintenanceItemId}`} maxLength={3} autoCapitalize="characters" disabled={mutation.isPending} value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
-            </FieldContent>
-          </Field>
-        </div>
-        {submitted && costIncomplete && <p className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.costPairRequired')}</p>}
-        <Field>
-          <FieldLabel htmlFor={`service-workshop-${maintenanceItemId}`}>{t('neutral.camper.maintenance.workshop')}</FieldLabel>
-          <FieldContent>
-            <Input id={`service-workshop-${maintenanceItemId}`} maxLength={80} disabled={mutation.isPending} value={workshop} onChange={(event) => setWorkshop(event.target.value)} />
-          </FieldContent>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor={`service-notes-${maintenanceItemId}`}>{t('neutral.camper.maintenance.notes')}</FieldLabel>
-          <FieldContent>
-            <textarea
-              id={`service-notes-${maintenanceItemId}`}
-              maxLength={1000}
-              className="min-h-20 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-              disabled={mutation.isPending}
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-            />
-          </FieldContent>
-        </Field>
-        <Button type="submit" variant="outline" disabled={mutation.isPending}>
-          {mutation.isPending ? t('neutral.camper.maintenance.recording') : t('neutral.camper.maintenance.record')}
+    <div className="w-full">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((current) => !current)}
+        >
+          {isOpen ? 'Chiudi registrazione' : `+ ${t('neutral.camper.maintenance.recordTitle')}`}
         </Button>
-        {mutation.isError && <p role="alert" className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{maintenanceError(mutation.error)}</p>}
-        {mutation.isSuccess && <p role="status" className="text-sm">{t('neutral.camper.maintenance.recorded')}</p>}
-      </FieldGroup>
-    </form>
+        {mutation.isSuccess && (
+          <p role="status" className="text-xs font-medium text-foreground">
+            {t('neutral.camper.maintenance.recorded')}
+          </p>
+        )}
+      </div>
+
+      {isOpen && (
+        <form className="mt-3 rounded-xl border border-border bg-background p-4" onSubmit={submit} noValidate>
+          <h4 className="mb-3 text-sm font-semibold">{t('neutral.camper.maintenance.recordTitle')}</h4>
+          <FieldGroup>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor={`service-date-${maintenanceItemId}`}>{t('neutral.camper.maintenance.performedOn')}</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id={`service-date-${maintenanceItemId}`}
+                    type="date"
+                    required
+                    disabled={mutation.isPending}
+                    value={performedOnUtc}
+                    onChange={(event) => setPerformedOnUtc(event.target.value)}
+                  />
+                  {submitted && !performedOnUtc && <FieldError>{t('neutral.camper.maintenance.dateRequired')}</FieldError>}
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`service-km-${maintenanceItemId}`}>{t('neutral.camper.maintenance.odometerKm')}</FieldLabel>
+                <FieldContent>
+                  <Input id={`service-km-${maintenanceItemId}`} type="number" min="0" step="1" disabled={mutation.isPending} value={odometerKm} onChange={(event) => setOdometerKm(event.target.value)} />
+                </FieldContent>
+              </Field>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor={`service-cost-${maintenanceItemId}`}>{t('neutral.camper.maintenance.costAmount')}</FieldLabel>
+                <FieldContent>
+                  <Input id={`service-cost-${maintenanceItemId}`} type="number" step="0.0001" disabled={mutation.isPending} value={amount} onChange={(event) => setAmount(event.target.value)} />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`service-currency-${maintenanceItemId}`}>{t('neutral.camper.maintenance.costCurrency')}</FieldLabel>
+                <FieldContent>
+                  <Input id={`service-currency-${maintenanceItemId}`} maxLength={3} autoCapitalize="characters" disabled={mutation.isPending} value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
+                </FieldContent>
+              </Field>
+            </div>
+            {submitted && costIncomplete && <p className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.costPairRequired')}</p>}
+            <Field>
+              <FieldLabel htmlFor={`service-workshop-${maintenanceItemId}`}>{t('neutral.camper.maintenance.workshop')}</FieldLabel>
+              <FieldContent>
+                <Input id={`service-workshop-${maintenanceItemId}`} maxLength={80} disabled={mutation.isPending} value={workshop} onChange={(event) => setWorkshop(event.target.value)} />
+              </FieldContent>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`service-notes-${maintenanceItemId}`}>{t('neutral.camper.maintenance.notes')}</FieldLabel>
+              <FieldContent>
+                <textarea
+                  id={`service-notes-${maintenanceItemId}`}
+                  maxLength={1000}
+                  className="min-h-20 w-full rounded-xl border border-input bg-card px-3.5 py-2 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  disabled={mutation.isPending}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                />
+              </FieldContent>
+            </Field>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? t('neutral.camper.maintenance.recording') : t('neutral.camper.maintenance.record')}
+            </Button>
+            {mutation.isError && <p role="alert" className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{maintenanceError(mutation.error)}</p>}
+          </FieldGroup>
+        </form>
+      )}
+    </div>
   )
 }
 
@@ -283,15 +331,15 @@ export function MaintenanceLogHistory({
   const logs = query.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
-    <div className="mt-4 border-t border-border pt-3">
-      <Button type="button" variant="ghost" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
+    <div className="w-full">
+      <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
         {expanded ? t('neutral.camper.maintenance.hideHistory') : t('neutral.camper.maintenance.showHistory')}
       </Button>
-      {expanded && query.isPending && <p role="status" className="text-sm text-muted-foreground">{t('neutral.camper.maintenance.historyLoading')}</p>}
-      {expanded && query.isError && <p role="alert" className="rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.historyError')}</p>}
-      {expanded && !query.isPending && logs.length === 0 && <p className="text-sm text-muted-foreground">{t('neutral.camper.maintenance.emptyHistory')}</p>}
+      {expanded && query.isPending && <p role="status" className="mt-2 text-sm text-muted-foreground">{t('neutral.camper.maintenance.historyLoading')}</p>}
+      {expanded && query.isError && <p role="alert" className="mt-2 rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.historyError')}</p>}
+      {expanded && !query.isPending && logs.length === 0 && <p className="mt-2 text-sm text-muted-foreground">{t('neutral.camper.maintenance.emptyHistory')}</p>}
       {expanded && logs.length > 0 && (
-        <ol className="mt-2 grid gap-3">
+        <ol className="mt-2 grid gap-2 rounded-xl border border-border bg-background p-3">
           {logs.map((log) => (
             <li key={log.id} className="text-sm">
               <p className="font-medium tabular-nums">
@@ -306,7 +354,7 @@ export function MaintenanceLogHistory({
         </ol>
       )}
       {expanded && query.hasNextPage && (
-        <Button className="mt-3" type="button" variant="outline" disabled={query.isFetchingNextPage} onClick={() => query.fetchNextPage()}>
+        <Button className="mt-3" type="button" variant="outline" size="sm" disabled={query.isFetchingNextPage} onClick={() => query.fetchNextPage()}>
           {query.isFetchingNextPage ? t('neutral.camper.maintenance.historyLoading') : t('neutral.camper.maintenance.loadMoreHistory')}
         </Button>
       )}

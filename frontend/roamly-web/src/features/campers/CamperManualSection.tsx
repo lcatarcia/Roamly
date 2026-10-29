@@ -151,6 +151,7 @@ export function CamperManualSection({
   onSaveManualOnly,
   isSavingProfile,
   profileSavedSuccess = false,
+  compactToolsByDefault = false,
 }: {
   camperId: string
   camperName: string
@@ -164,6 +165,7 @@ export function CamperManualSection({
   onSaveManualOnly?: () => void
   isSavingProfile: boolean
   profileSavedSuccess?: boolean
+  compactToolsByDefault?: boolean
 }) {
   const [pdfBase64, setPdfBase64] = useState<string | null>(null)
   const [selectedFileName, setSelectedFileName] = useState<string>('')
@@ -173,6 +175,10 @@ export function CamperManualSection({
   const [displayMode, setDisplayMode] = useState<DisplayMode>('map')
   const [activeView, setActiveView] = useState<CamperManualView>('side')
   const [selectedId, setSelectedId] = useState<string>('')
+  const [showImportPanel, setShowImportPanel] = useState(
+    () => !compactToolsByDefault || manualMeasurements.length === 0,
+  )
+  const [showSurveyPanel, setShowSurveyPanel] = useState(() => !compactToolsByDefault)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newValue, setNewValue] = useState('')
@@ -302,50 +308,94 @@ export function CamperManualSection({
   return (
     <section
       aria-labelledby="camper-manual-heading"
-      className="mt-6 space-y-6 rounded-xl border border-border bg-card p-6"
+      className="space-y-6 rounded-3xl border border-border bg-card p-6 shadow-xs"
     >
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Documentazione tecnica e atlante dimensionale
-          </p>
+      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Documentazione tecnica e atlante dimensionale
+            </p>
+            {manualSourceName && (
+              <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-semibold text-secondary-foreground">
+                Fonte: {manualSourceName}
+              </span>
+            )}
+          </div>
           <h2 id="camper-manual-heading" className="text-xl font-semibold">
             Manuale PDF, link esterno e mappa delle misure
           </h2>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Importa specifiche tecniche e quote da un manuale PDF o da una scheda online (HTTPS), oppure consulta e aggiorna in un unico posto tutte le misure esterne e interne di {camperName || 'questo camper'}.
+            Consulta in un colpo d&apos;occhio tutte le quote esterne e interne di {camperName || 'questo camper'}, oppure importa specifiche da un manuale PDF o link esterno.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Modalità di consultazione misure">
-          <button
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1.5 rounded-full bg-background p-1 border border-border" role="group" aria-label="Modalità di consultazione misure">
+            <button
+              type="button"
+              className={toggleChipClass(displayMode === 'map')}
+              aria-pressed={displayMode === 'map'}
+              onClick={() => setDisplayMode('map')}
+            >
+              Mappa interattiva
+            </button>
+            <button
+              type="button"
+              className={toggleChipClass(displayMode === 'list')}
+              aria-pressed={displayMode === 'list'}
+              onClick={() => setDisplayMode('list')}
+            >
+              Elenco ({effectiveMeasurements.length})
+            </button>
+            <button
+              type="button"
+              className={toggleChipClass(displayMode === 'zones')}
+              aria-pressed={displayMode === 'zones'}
+              onClick={() => setDisplayMode('zones')}
+            >
+              Per zona
+            </button>
+          </div>
+          <Button
             type="button"
-            className={toggleChipClass(displayMode === 'map')}
-            aria-pressed={displayMode === 'map'}
-            onClick={() => setDisplayMode('map')}
+            variant="outline"
+            size="sm"
+            aria-expanded={showImportPanel}
+            onClick={() => setShowImportPanel((current) => !current)}
           >
-            Mappa interattiva
-          </button>
-          <button
+            {showImportPanel ? 'Nascondi importatore PDF/link' : 'Importa da PDF o link'}
+          </Button>
+          <Button
             type="button"
-            className={toggleChipClass(displayMode === 'list')}
-            aria-pressed={displayMode === 'list'}
-            onClick={() => setDisplayMode('list')}
+            variant="outline"
+            size="sm"
+            aria-expanded={showSurveyPanel}
+            onClick={() => setShowSurveyPanel((current) => !current)}
           >
-            Elenco misure ({effectiveMeasurements.length})
-          </button>
-          <button
-            type="button"
-            className={toggleChipClass(displayMode === 'zones')}
-            aria-pressed={displayMode === 'zones'}
-            onClick={() => setDisplayMode('zones')}
-          >
-            Esplora per zona
-          </button>
+            {showSurveyPanel ? 'Nascondi scheda rilievo' : '+ Aggiungi misura'}
+          </Button>
+          {onSaveManualOnly && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={isSavingProfile}
+              onClick={onSaveManualOnly}
+            >
+              {isSavingProfile ? 'Salvataggio…' : 'Salva misure e manuale'}
+            </Button>
+          )}
         </div>
       </header>
 
+      {profileSavedSuccess && (
+        <p role="status" className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground">
+          Misure e riferimenti del manuale salvati nel profilo del camper.
+        </p>
+      )}
+
       {/* Blocco 1: Importazione da PDF o Link esterno */}
-      <div className="space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
+      {showImportPanel && (
+      <div className="space-y-4 rounded-2xl border border-border bg-background p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="font-semibold">Importa specifiche e misure da PDF o link</h3>
@@ -354,7 +404,7 @@ export function CamperManualSection({
             </p>
           </div>
           {manualSourceName && (
-            <span className="rounded-lg border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground">
+            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
               Fonte attiva: {manualSourceName}
             </span>
           )}
@@ -409,13 +459,14 @@ export function CamperManualSection({
             >
               {parseMutation.isPending ? 'Analisi del documento in corso…' : 'Estrai bozza da manuale / link'}
             </Button>
-            <button
+            <Button
               type="button"
-              className="rounded-lg border border-border-strong bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              variant="outline"
+              size="sm"
               onClick={() => setShowRawText((current) => !current)}
             >
               {showRawText ? 'Nascondi testo manuale' : 'Incolla testo scheda tecnica'}
-            </button>
+            </Button>
           </div>
           {manualSourceUrl.trim().startsWith('https://') && (
             <a
@@ -440,7 +491,7 @@ export function CamperManualSection({
                 rows={4}
                 value={rawText}
                 placeholder="Incolla qui tabelle o righe tecniche (es. Lunghezza fuori tutto 5.413 mm, Acque chiare 100 L, Letto posteriore 196 x 145 cm...)"
-                className="w-full rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none"
+                className="w-full rounded-xl border border-input bg-card p-3 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:outline-none"
                 onChange={(event) => setRawText(event.target.value)}
               />
             </FieldContent>
@@ -454,7 +505,7 @@ export function CamperManualSection({
         )}
 
         {parsedDraft && (
-          <div className="space-y-4 rounded-lg border border-border-strong bg-background p-4">
+          <div className="space-y-4 rounded-xl border border-border-strong bg-background p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-highlight-text">
@@ -467,6 +518,7 @@ export function CamperManualSection({
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
+                  variant="outline"
                   disabled={isSavingProfile}
                   onClick={() => {
                     onApplyParsedDraft(parsedDraft, false)
@@ -519,6 +571,7 @@ export function CamperManualSection({
           </div>
         )}
       </div>
+      )}
 
       {/* Blocco 2: Mappa interattiva / Elenco / Zone */}
       {selectedMeasurement && displayMode === 'map' && (
@@ -637,7 +690,8 @@ export function CamperManualSection({
       )}
 
       {/* Blocco 3: Aggiunta rapida misure e Scheda di rilievo sul veicolo */}
-      <div className="space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
+      {showSurveyPanel && (
+      <div className="space-y-4 rounded-2xl border border-border bg-background p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold">Scheda di rilievo sul veicolo e quote personalizzate</h3>
@@ -649,13 +703,15 @@ export function CamperManualSection({
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => setShowAddForm((current) => !current)}
             >
-              {showAddForm ? 'Chiudi modulo misura' : 'Aggiungi misura'}
+              {showAddForm ? 'Chiudi modulo misura' : 'Aggiungi misura personalizzata'}
             </Button>
             {onSaveManualOnly && (
               <Button
                 type="button"
+                size="sm"
                 disabled={isSavingProfile}
                 onClick={onSaveManualOnly}
               >
@@ -664,18 +720,13 @@ export function CamperManualSection({
             )}
           </div>
         </div>
-        {profileSavedSuccess && (
-          <p role="status" className="text-sm text-foreground">
-            Misure e riferimenti del manuale salvati nel profilo del camper.
-          </p>
-        )}
 
         <div className="flex flex-wrap gap-2" aria-label="Preset scheda di rilievo">
           {MEASUREMENT_PRESETS.map((preset) => (
             <button
               key={preset.id}
               type="button"
-              className="rounded-lg border border-border-strong bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              className="cursor-pointer rounded-full border border-border-strong bg-secondary px-3 py-1.5 text-xs font-semibold text-secondary-foreground transition-colors hover:bg-muted"
               onClick={() => handlePresetSelect(preset)}
             >
               + {preset.name}
@@ -684,7 +735,7 @@ export function CamperManualSection({
         </div>
 
         {showAddForm && (
-          <div className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-3">
+          <div className="grid gap-3.5 rounded-2xl border border-border bg-card p-4 sm:grid-cols-3">
             <Field>
               <FieldLabel htmlFor="new-measurement-name">Elemento / Misura</FieldLabel>
               <FieldContent>
@@ -713,7 +764,7 @@ export function CamperManualSection({
                 <select
                   id="new-measurement-zone"
                   value={newZone}
-                  className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground"
+                  className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs"
                   onChange={(e) => setNewZone(e.target.value)}
                 >
                   {ZONES.map((zone) => (
@@ -728,7 +779,7 @@ export function CamperManualSection({
                 <select
                   id="new-measurement-view"
                   value={newView}
-                  className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground"
+                  className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs"
                   onChange={(e) => setNewView(e.target.value as CamperManualView)}
                 >
                   {MAP_VIEWS.map((view) => (
@@ -795,6 +846,7 @@ export function CamperManualSection({
           </div>
         )}
       </div>
+      )}
     </section>
   )
 }
@@ -1214,11 +1266,11 @@ function slugify(value: string): string {
 
 function toggleChipClass(selected: boolean): string {
   return [
-    'inline-flex items-center rounded-lg border px-3 py-2 text-sm transition-colors',
+    'inline-flex cursor-pointer items-center rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
     'focus-visible:outline-2 focus-visible:outline-ring',
     selected
-      ? 'border-foreground bg-foreground text-background'
-      : 'border-border-strong bg-card text-foreground hover:bg-muted',
+      ? 'border-primary bg-primary text-primary-foreground shadow-2xs'
+      : 'border-transparent bg-secondary text-secondary-foreground hover:bg-muted',
   ].join(' ')
 }
 
@@ -1421,6 +1473,7 @@ function CamperDashboardManualEditor({
       }
       isSavingProfile={saveMutation.isPending}
       profileSavedSuccess={saveMutation.isSuccess}
+      compactToolsByDefault
     />
   )
 }

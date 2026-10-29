@@ -149,72 +149,94 @@ export function EquipmentInventory({ camperId }: { camperId: string }) {
   }
 
   return (
-    <section className="grid gap-5" aria-labelledby="equipment-heading">
-      <header>
-        <h2 id="equipment-heading" className="text-lg font-semibold">{t('neutral.camper.equipment.title')}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t('neutral.camper.equipment.description')}</p>
+    <section className="grid gap-5 rounded-3xl border border-border bg-card p-6 shadow-xs" aria-labelledby="equipment-heading">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Dotazione e impianti di bordo
+          </p>
+          <h2 id="equipment-heading" className="text-xl font-semibold">{t('neutral.camper.equipment.title')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t('neutral.camper.equipment.description')}</p>
+        </div>
+        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+          {equipment.length} {equipment.length === 1 ? 'accessorio' : 'accessori'}
+        </span>
       </header>
 
-      <ul className="grid gap-3 sm:grid-cols-2" aria-label={t('neutral.camper.equipment.title')}>
-        {equipment.map((item) => (
-          <li key={item.id} className="rounded-xl border border-border bg-card p-4">
-            <h3 className="font-semibold">{item.name}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {categoryLabel(item.category)}
-              {item.installedOnUtc ? ` · ${formatInstalledDate(item.installedOnUtc)}` : ''}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(19rem,0.75fr)] lg:items-start">
+        <div className="space-y-4">
+          {equipment.length > 0 && (
+            <ul className="grid gap-3 sm:grid-cols-2" aria-label={t('neutral.camper.equipment.title')}>
+              {equipment.map((item) => (
+                <li key={item.id} className="flex flex-col justify-between rounded-2xl border border-border bg-background p-4">
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-foreground">{item.name}</h3>
+                      <span className="shrink-0 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground">
+                        {categoryLabel(item.category)}
+                      </span>
+                    </div>
+                    {item.installedOnUtc && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Installato il {formatInstalledDate(item.installedOnUtc)}
+                      </p>
+                    )}
+                    {item.notes && <p className="mt-2 text-sm text-muted-foreground">{item.notes}</p>}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void beginEdit(item)}>
+                      {t('neutral.camper.equipment.edit')}
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" disabled={deleteMutation.isPending}
+                      aria-label={`${t('neutral.camper.equipment.remove')} ${item.name}`}
+                      onClick={() => void removeItem(item)}>
+                      {t('neutral.camper.equipment.remove')}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {equipment.length === 0 && (
+            <p className="rounded-2xl border border-border bg-background p-6 text-sm text-muted-foreground">
+              {t('neutral.camper.equipment.empty')}
             </p>
-            {item.notes && <p className="mt-2 text-sm">{item.notes}</p>}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void beginEdit(item)}>
-                {t('neutral.camper.equipment.edit')}
-              </Button>
-              <Button type="button" variant="outline" disabled={deleteMutation.isPending}
-                aria-label={`${t('neutral.camper.equipment.remove')} ${item.name}`}
-                onClick={() => void removeItem(item)}>
-                {t('neutral.camper.equipment.remove')}
-              </Button>
+          )}
+
+          {equipmentQuery.hasNextPage && (
+            <Button type="button" variant="outline" disabled={equipmentQuery.isFetchingNextPage}
+              onClick={() => void equipmentQuery.fetchNextPage()}>
+              {equipmentQuery.isFetchingNextPage
+                ? t('neutral.camper.equipment.loadingMore')
+                : t('neutral.camper.equipment.loadMore')}
+            </Button>
+          )}
+
+          {editing && (
+            <div className="rounded-2xl border border-border-strong bg-background p-5">
+              <h3 className="mb-4 font-semibold">{t('neutral.camper.equipment.editTitle')}</h3>
+              <EquipmentForm values={editValues} onChange={setEditValues} onSubmit={submitEdit}
+                pending={updateMutation.isPending} submitLabel={t('neutral.camper.equipment.save')}
+                onCancel={() => setEditing(null)} idPrefix="edit" />
             </div>
-          </li>
-        ))}
-      </ul>
-
-      {equipment.length === 0 && (
-        <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-          {t('neutral.camper.equipment.empty')}
-        </p>
-      )}
-      {equipmentQuery.hasNextPage && (
-        <Button type="button" variant="outline" disabled={equipmentQuery.isFetchingNextPage}
-          onClick={() => void equipmentQuery.fetchNextPage()}>
-          {equipmentQuery.isFetchingNextPage
-            ? t('neutral.camper.equipment.loadingMore')
-            : t('neutral.camper.equipment.loadMore')}
-        </Button>
-      )}
-
-      {editing && (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="mb-4 font-semibold">{t('neutral.camper.equipment.editTitle')}</h3>
-          <EquipmentForm values={editValues} onChange={setEditValues} onSubmit={submitEdit}
-            pending={updateMutation.isPending} submitLabel={t('neutral.camper.equipment.save')}
-            onCancel={() => setEditing(null)} idPrefix="edit" />
+          )}
         </div>
-      )}
 
-      <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="mb-4 font-semibold">{t('neutral.camper.equipment.addTitle')}</h3>
-        <EquipmentForm values={newEquipment} onChange={setNewEquipment} onSubmit={submitCreate}
-          pending={createMutation.isPending} submitLabel={t('neutral.camper.equipment.add')} idPrefix="new" />
+        <div className="rounded-2xl border border-border bg-background p-5">
+          <h3 className="mb-4 text-base font-semibold">{t('neutral.camper.equipment.addTitle')}</h3>
+          <EquipmentForm values={newEquipment} onChange={setNewEquipment} onSubmit={submitCreate}
+            pending={createMutation.isPending} submitLabel={t('neutral.camper.equipment.add')} idPrefix="new" />
+          {createMutation.isSuccess && (
+            <p role="status" className="mt-3 text-sm text-foreground">{t('neutral.camper.equipment.added')}</p>
+          )}
+          {(createMutation.isError || updateMutation.isError || deleteMutation.isError || actionError) && (
+            <p role="alert" className="mt-3 rounded-lg bg-background px-2 py-1 text-sm text-danger-text">
+              {actionError ?? equipmentError(createMutation.error ?? updateMutation.error ?? deleteMutation.error)}
+            </p>
+          )}
+        </div>
       </div>
-
-      {createMutation.isSuccess && (
-        <p role="status" className="text-sm">{t('neutral.camper.equipment.added')}</p>
-      )}
-      {(createMutation.isError || updateMutation.isError || deleteMutation.isError || actionError) && (
-        <p role="alert" className="text-sm text-danger-text">
-          {actionError ?? equipmentError(createMutation.error ?? updateMutation.error ?? deleteMutation.error)}
-        </p>
-      )}
     </section>
   )
 }
@@ -242,7 +264,7 @@ function EquipmentForm({
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <FieldGroup className="grid gap-4 sm:grid-cols-2">
+      <FieldGroup className="grid gap-3.5 sm:grid-cols-2">
         <Field>
           <FieldLabel htmlFor={`${idPrefix}-equipment-name`}>{t('neutral.camper.equipment.name')}</FieldLabel>
           <FieldContent>
@@ -254,7 +276,7 @@ function EquipmentForm({
           <FieldLabel htmlFor={`${idPrefix}-equipment-category`}>{t('neutral.camper.equipment.category')}</FieldLabel>
           <FieldContent>
             <select id={`${idPrefix}-equipment-category`} value={values.category} required
-              className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               onChange={(event) => setField('category', event.target.value)}>
               <option value="">—</option>
               {categoryOptions().map((option) => (

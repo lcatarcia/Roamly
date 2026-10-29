@@ -228,8 +228,8 @@ export function TripChecklists({ tripId, etag, onEtagChanged }: TripChecklistsPr
   }
 
   return (
-    <section aria-labelledby="checklists-heading" className="space-y-5 border-b border-border py-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section aria-labelledby="checklists-heading" className="space-y-5 rounded-3xl border border-border bg-card p-6 shadow-xs">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
         <div>
           <h2 id="checklists-heading" className="text-xl font-semibold">
             {t('neutral.checklists.title')}

@@ -58,34 +58,41 @@ export function TripsPage() {
   const trips = tripsQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
-    <PageContainer size="dashboard" className="justify-start">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {t('narrative.trips.eyebrow')}
-        </p>
-        <h1 className="page-title mt-2">{t('narrative.trips.title')}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t('narrative.trips.description')}</p>
+    <PageContainer size="dashboard" className="justify-start gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-4 rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+        <div>
+          <p className="inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-secondary-foreground">
+            {t('narrative.trips.eyebrow')}
+          </p>
+          <h1 className="page-title mt-3">{t('narrative.trips.title')}</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t('narrative.trips.description')}</p>
+        </div>
+        {trips.length > 0 && (
+          <Button render={<Link to="/trips/new" />}>{t('neutral.trips.create')}</Button>
+        )}
       </header>
       {tripsQuery.isPending ? (
         <FlowMessage message={t('neutral.trips.loading')} />
       ) : tripsQuery.isError ? (
         <FlowError message={t('neutral.trips.loadError')} onRetry={() => void tripsQuery.refetch()} />
       ) : trips.length === 0 ? (
-        <section className="space-y-4">
+        <section className="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-xs">
           <p className="max-w-xl text-sm text-muted-foreground">{t('narrative.trips.empty')}</p>
           <Button render={<Link to="/trips/new" />}>{t('neutral.trips.create')}</Button>
         </section>
       ) : (
         <>
-          <ul aria-label={t('narrative.trips.title')} className="divide-y divide-border">
+          <ul aria-label={t('narrative.trips.title')} className="grid gap-4 sm:grid-cols-2">
             {trips.map((trip) => (
-              <li key={trip.id} className="py-4 first:pt-0">
+              <li key={trip.id}>
                 <Link
-                  className="flex min-h-12 items-center justify-between gap-4 rounded-lg px-2 py-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                  className="flex min-h-20 items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-2xs transition-colors hover:border-ring hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"
                   to={`/trips/${trip.id}`}
                 >
-                  <span className="font-semibold">{trip.name}</span>
-                  <span className="text-sm text-muted-foreground">{tripStatus(trip.status)}</span>
+                  <span className="text-lg font-semibold text-foreground">{trip.name}</span>
+                  <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+                    {tripStatus(trip.status)}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -101,7 +108,6 @@ export function TripsPage() {
                 : t('neutral.trips.loadMore')}
             </Button>
           )}
-          <Button render={<Link to="/trips/new" />}>{t('neutral.trips.create')}</Button>
         </>
       )}
     </PageContainer>
@@ -167,81 +173,83 @@ export function CreateTripPage() {
   return (
     <PageContainer size="form" className="justify-start">
       <BackToTrips />
-      <header>
-        <h1 className="page-title">{t('neutral.trips.createTitle')}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{t('narrative.trips.createDescription')}</p>
-      </header>
-      {campers.length === 0 ? (
-        <section className="space-y-3">
-          <p className="text-sm text-muted-foreground">{t('neutral.trips.noCampers')}</p>
-          <Button render={<Link to="/campers/new" />}>{t('neutral.camper.selection.addCamper')}</Button>
-        </section>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="trip-camper">{t('neutral.trips.camper')}</FieldLabel>
-              <FieldContent>
-                <select
-                  id="trip-camper"
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm"
-                  required
-                  value={camperId}
-                  onChange={(event) => setCamperId(event.target.value)}
+      <div className="rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+        <header className="mb-6">
+          <h1 className="page-title">{t('neutral.trips.createTitle')}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{t('narrative.trips.createDescription')}</p>
+        </header>
+        {campers.length === 0 ? (
+          <section className="space-y-3">
+            <p className="text-sm text-muted-foreground">{t('neutral.trips.noCampers')}</p>
+            <Button render={<Link to="/campers/new" />}>{t('neutral.camper.selection.addCamper')}</Button>
+          </section>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="trip-camper">{t('neutral.trips.camper')}</FieldLabel>
+                <FieldContent>
+                  <select
+                    id="trip-camper"
+                    className="h-11 w-full cursor-pointer rounded-xl border border-input bg-card px-3.5 text-sm text-foreground shadow-2xs"
+                    required
+                    value={camperId}
+                    onChange={(event) => setCamperId(event.target.value)}
+                  >
+                    <option value="">{t('neutral.trips.chooseCamper')}</option>
+                    {campers.map((camper) => (
+                      <option key={camper.id} value={camper.id}>{camper.name}</option>
+                    ))}
+                  </select>
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="trip-name">{t('neutral.trips.name')}</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="trip-name"
+                    maxLength={80}
+                    required
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </FieldContent>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="trip-first-stop">{t('neutral.trips.firstStop')}</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="trip-first-stop"
+                    maxLength={80}
+                    required
+                    value={firstStop}
+                    onChange={(event) => setFirstStop(event.target.value)}
+                  />
+                </FieldContent>
+              </Field>
+              {campersQuery.hasNextPage && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void campersQuery.fetchNextPage()}
+                  disabled={campersQuery.isFetchingNextPage}
                 >
-                  <option value="">{t('neutral.trips.chooseCamper')}</option>
-                  {campers.map((camper) => (
-                    <option key={camper.id} value={camper.id}>{camper.name}</option>
-                  ))}
-                </select>
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="trip-name">{t('neutral.trips.name')}</FieldLabel>
-              <FieldContent>
-                <Input
-                  id="trip-name"
-                  maxLength={80}
-                  required
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </FieldContent>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="trip-first-stop">{t('neutral.trips.firstStop')}</FieldLabel>
-              <FieldContent>
-                <Input
-                  id="trip-first-stop"
-                  maxLength={80}
-                  required
-                  value={firstStop}
-                  onChange={(event) => setFirstStop(event.target.value)}
-                />
-              </FieldContent>
-            </Field>
-            {campersQuery.hasNextPage && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void campersQuery.fetchNextPage()}
-                disabled={campersQuery.isFetchingNextPage}
-              >
-                {t('neutral.trips.loadMoreCampers')}
+                  {t('neutral.trips.loadMoreCampers')}
+                </Button>
+              )}
+              {validationError && <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{validationError}</p>}
+              {createMutation.isError && (
+                <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{t('neutral.trips.createError')}</p>
+              )}
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending
+                  ? t('neutral.trips.creating')
+                  : t('neutral.trips.save')}
               </Button>
-            )}
-            {validationError && <p role="alert" className="text-sm text-danger-text">{validationError}</p>}
-            {createMutation.isError && (
-              <p role="alert" className="text-sm text-danger-text">{t('neutral.trips.createError')}</p>
-            )}
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending
-                ? t('neutral.trips.creating')
-                : t('neutral.trips.save')}
-            </Button>
-          </FieldGroup>
-        </form>
-      )}
+            </FieldGroup>
+          </form>
+        )}
+      </div>
     </PageContainer>
   )
 }
@@ -379,44 +387,51 @@ export function TripJournalPage() {
 
 function TripHeader({ trip }: { trip: TripDetails }) {
   return (
-    <header className="space-y-4 border-b border-border pb-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {t('narrative.trips.journalEyebrow')}
-        </p>
-        <h1 className="page-title mt-2">{trip.name}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{tripStatus(trip.status)}</p>
+    <header className="space-y-5 rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="inline-flex items-center rounded-full bg-secondary px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-secondary-foreground">
+            {t('narrative.trips.journalEyebrow')}
+          </p>
+          <h1 className="page-title mt-3">{trip.name}</h1>
+        </div>
+        <span className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground shadow-2xs">
+          {tripStatus(trip.status)}
+        </span>
       </div>
       {(trip.estimatedDistanceKm !== null || trip.estimatedDurationMinutes !== null) && (
-        <section aria-labelledby="trip-estimate-heading">
-          <h2 id="trip-estimate-heading" className="text-sm font-semibold">
+        <section aria-labelledby="trip-estimate-heading" className="rounded-2xl border border-border bg-background p-4">
+          <h2 id="trip-estimate-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {t('neutral.trips.manualEstimate')}
           </h2>
-          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <dl className="mt-2 flex flex-wrap gap-x-8 gap-y-2 text-sm">
             {trip.estimatedDistanceKm !== null && (
               <div>
-                <dt className="text-muted-foreground">{t('neutral.trips.totalDistance')}</dt>
-                <dd className="tabular-nums">{formatEstimatedDistance(trip.estimatedDistanceKm)}</dd>
+                <dt className="text-xs text-muted-foreground">{t('neutral.trips.totalDistance')}</dt>
+                <dd className="text-base font-bold tabular-nums">{formatEstimatedDistance(trip.estimatedDistanceKm)}</dd>
               </div>
             )}
             {trip.estimatedDurationMinutes !== null && (
               <div>
-                <dt className="text-muted-foreground">{t('neutral.trips.totalDuration')}</dt>
-                <dd className="tabular-nums">{formatEstimatedDuration(trip.estimatedDurationMinutes)}</dd>
+                <dt className="text-xs text-muted-foreground">{t('neutral.trips.totalDuration')}</dt>
+                <dd className="text-base font-bold tabular-nums">{formatEstimatedDuration(trip.estimatedDurationMinutes)}</dd>
               </div>
             )}
           </dl>
         </section>
       )}
       <TripFuelEstimate trip={trip} />
-      <section aria-labelledby="trip-stops-heading">
-        <h2 id="trip-stops-heading" className="text-sm font-semibold">
+      <section aria-labelledby="trip-stops-heading" className="rounded-2xl border border-border bg-background p-4">
+        <h2 id="trip-stops-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t('neutral.trips.stops')}
         </h2>
-        <ol className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+        <ol className="mt-3 flex flex-wrap items-center gap-3">
           {trip.stops.map((stop) => (
-            <li key={stop.id} className="text-sm text-muted-foreground">
-              <span className="tabular-nums">{stop.sequenceNo + 1}.</span> {stop.name}
+            <li key={stop.id} className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-foreground shadow-2xs">
+              <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary text-xs font-bold tabular-nums text-primary-foreground">
+                {stop.sequenceNo + 1}.
+              </span>{' '}
+              <span>{stop.name}</span>
             </li>
           ))}
         </ol>
@@ -627,7 +642,7 @@ function TripEditor({
     position: stop.position,
     notes: stop.notes ?? '',
   })))
-  const savedFuelPrice = trip.fuelPricePerLiter
+  const savedFuelPrice = trip.fuelPricePerLiter ?? null
   const hasUnsupportedSavedFuelPrice = savedFuelPrice !== null
     && savedFuelPrice.amount > MAX_UI_FUEL_PRICE
   const canEditFuelPrice = isFuelEstimateEligible(trip.status) || hasUnsupportedSavedFuelPrice

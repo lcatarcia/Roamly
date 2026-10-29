@@ -16,11 +16,16 @@ import {
 } from '@/features/campers/MaintenanceForms'
 import {
   fetchCamperDashboard,
+  fetchCamperProfile,
   fetchCampers,
   type CamperDashboardAxisStatus,
   type CamperDashboardResponse,
 } from '@/lib/api'
-import { CAMPER_DASHBOARD_QUERY_KEY, CAMPERS_QUERY_KEY } from '@/features/campers/queryKeys'
+import {
+  CAMPER_DASHBOARD_QUERY_KEY,
+  CAMPERS_QUERY_KEY,
+  camperProfileQueryKey,
+} from '@/features/campers/queryKeys'
 
 const TripsPage = lazy(() => import('@/features/trips/TripsPages')
   .then((module) => ({ default: module.TripsPage })))
@@ -203,59 +208,243 @@ function CamperDashboardPage() {
 
 function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) {
   const { camper, odometer, maintenance } = dashboard
+  const profileQuery = useQuery({
+    queryKey: camperProfileQueryKey(camper.id),
+    queryFn: () => fetchCamperProfile(camper.id),
+    enabled: camper.id.length > 0,
+    retry: false,
+  })
+  const profile = profileQuery.data?.profile
   const description = [camper.brand, camper.model, camper.year].filter(Boolean).join(' · ')
 
   return (
-    <PageContainer size="dashboard" className="justify-start">
-      <BackToCampers />
-      <Link
-        className="self-start text-sm text-muted-foreground underline underline-offset-4"
-        to="/campers/new"
-      >
-        {t('neutral.camper.selection.addCamper')}
-      </Link>
-      <header className="rounded-xl border border-border bg-card p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {t('neutral.camper.dashboard.title')}
-        </p>
-        <h1 className="page-title mt-2">{camper.name}</h1>
-        <p className="text-sm text-muted-foreground">
-          {[vehicleKindLabel(camper.vehicleKind), description].filter(Boolean).join(' · ')}
-        </p>
-      </header>
-      <div className="flex flex-wrap gap-3">
-        <Link
-          className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
-          to={`/campers/${camper.id}/profile`}
-        >
-          {t('neutral.camper.profile.open')}
-        </Link>
+    <PageContainer size="dashboard" className="justify-start gap-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <BackToCampers />
+          <span className="text-muted-foreground">·</span>
+          <Link
+            className="text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            to="/campers/new"
+          >
+            {t('neutral.camper.selection.addCamper')}
+          </Link>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-full border border-border-strong bg-secondary px-4 text-sm font-semibold text-secondary-foreground shadow-2xs transition-colors hover:bg-muted"
+            to={`/campers/${camper.id}/profile`}
+          >
+            {t('neutral.camper.profile.open')}
+          </Link>
+          <Link
+            className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90"
+            to="/trips/new"
+          >
+            + Nuovo viaggio
+          </Link>
+        </div>
       </div>
 
-      <OdometerPanel odometer={odometer} />
+      <header className="overflow-hidden rounded-3xl border border-border bg-card shadow-xs">
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-center">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+                <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                {t('neutral.camper.dashboard.title')} · {vehicleKindLabel(camper.vehicleKind)}
+              </span>
+              {profile?.plateNumber && (
+                <span className="inline-flex items-center rounded-lg border border-border-strong bg-background px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider text-foreground">
+                  {profile.plateNumber}
+                </span>
+              )}
+            </div>
+
+            <div>
+              <h1 className="page-title">{camper.name}</h1>
+              {description && (
+                <p className="mt-1 text-base font-medium text-muted-foreground">
+                  {description}
+                </p>
+              )}
+            </div>
+
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-2xl border border-border bg-background p-3.5">
+                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lunghezza
+                </dt>
+                <dd className="mt-1 text-base font-bold text-foreground">
+                  {profile?.lengthMm ? `${formatKilometers(profile.lengthMm)} mm` : '—'}
+                </dd>
+                <dd className="mt-0.5 text-xs text-muted-foreground">
+                  {profile?.widthMm ? `Largh. ${formatKilometers(profile.widthMm)} mm` : 'Ingombro'}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-border bg-background p-3.5">
+                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Altezza
+                </dt>
+                <dd className="mt-1 text-base font-bold text-foreground">
+                  {profile?.heightMm ? `${formatKilometers(profile.heightMm)} mm` : '—'}
+                </dd>
+                <dd className="mt-0.5 text-xs text-muted-foreground">
+                  Fuori tutto
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-border bg-background p-3.5">
+                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Acqua chiara
+                </dt>
+                <dd className="mt-1 text-base font-bold text-foreground">
+                  {profile?.freshWaterL ? `${profile.freshWaterL} L` : '—'}
+                </dd>
+                <dd className="mt-0.5 text-xs text-muted-foreground">
+                  {profile?.greyWaterL ? `Grigie ${profile.greyWaterL} L` : 'Serbatoi'}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-border bg-background p-3.5">
+                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Autonomia
+                </dt>
+                <dd className="mt-1 text-base font-bold text-foreground">
+                  {profile?.fuelTankL ? `${profile.fuelTankL} L` : '—'}
+                </dd>
+                <dd className="mt-0.5 text-xs text-muted-foreground">
+                  {profile?.gasKg ? `Gas ${profile.gasKg} kg` : ' Impianto'}
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="space-y-4">
+            <CamperHeroIllustration />
+            <OdometerPanel odometer={odometer} />
+          </div>
+        </div>
+      </header>
+
       <CamperDashboardManualPanel camperId={camper.id} />
       <EquipmentInventory camperId={camper.id} />
 
-      <section aria-labelledby="maintenance-heading">
-        <div className="mb-4 flex items-end justify-between gap-4">
-          <h2 id="maintenance-heading" className="text-lg font-semibold">
-            {t('neutral.camper.dashboard.maintenance')}
-          </h2>
+      <section aria-labelledby="maintenance-heading" className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Cura del veicolo e scadenze
+            </p>
+            <h2 id="maintenance-heading" className="text-xl font-semibold">
+              {t('neutral.camper.dashboard.maintenance')}
+            </h2>
+          </div>
         </div>
         {maintenance.length === 0 ? (
-          <p className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+          <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
             {t('neutral.camper.dashboard.noMaintenance')}
           </p>
         ) : (
-          <ul className="grid min-w-0 gap-3 lg:grid-cols-2">
+          <ul className="grid min-w-0 gap-4 lg:grid-cols-2">
             {maintenance.map((item) => (
               <MaintenanceItemCard key={item.id} camperId={camper.id} item={item} />
             ))}
           </ul>
         )}
+        <CreateMaintenanceForm camperId={camper.id} />
       </section>
-      <CreateMaintenanceForm camperId={camper.id} />
     </PageContainer>
+  )
+}
+
+function CamperHeroIllustration() {
+  return (
+    <div
+      aria-hidden="true"
+      className="overflow-hidden rounded-2xl border border-border bg-muted p-4"
+    >
+      <svg viewBox="0 0 420 175" className="h-auto w-full">
+        {/* Sole caldo terracotta */}
+        <circle cx="342" cy="46" r="24" fill="var(--color-primary)" opacity="0.85" />
+        {/* Montagne e colline sullo sfondo */}
+        <path
+          d="M0 138 L78 72 L152 126 L236 58 L328 132 L420 88 L420 175 L0 175 Z"
+          fill="var(--color-surface-raised-2)"
+        />
+        <path
+          d="M0 148 Q110 112 220 138 T420 130 L420 175 L0 175 Z"
+          fill="var(--color-surface-raised)"
+        />
+        {/* Strada panoramica */}
+        <line
+          x1="24"
+          y1="152"
+          x2="396"
+          y2="152"
+          stroke="var(--color-border-strong)"
+          strokeWidth="2.5"
+          strokeDasharray="6 6"
+        />
+        {/* Silhouette editoriale del camper van */}
+        <g transform="translate(88, 56)">
+          <path
+            d="M14 82 V30 C14 16 25 6 40 6 H166 C182 6 196 14 206 28 L228 56 L244 62 C250 64 254 70 254 76 V82 Z"
+            fill="var(--color-card)"
+            stroke="var(--color-foreground)"
+            strokeWidth="3"
+            strokeLinejoin="round"
+          />
+          {/* Fascia terracotta laterale */}
+          <path d="M16 62 H252 V71 H16 Z" fill="var(--color-primary)" />
+          {/* Finestrini */}
+          <rect
+            x="34"
+            y="20"
+            width="54"
+            height="28"
+            rx="6"
+            fill="var(--color-surface-raised)"
+            stroke="var(--color-foreground)"
+            strokeWidth="2.5"
+          />
+          <rect
+            x="100"
+            y="20"
+            width="48"
+            height="28"
+            rx="6"
+            fill="var(--color-surface-raised)"
+            stroke="var(--color-foreground)"
+            strokeWidth="2.5"
+          />
+          <path
+            d="M162 20 H194 L214 48 H162 Z"
+            fill="var(--color-surface-raised)"
+            stroke="var(--color-foreground)"
+            strokeWidth="2.5"
+            strokeLinejoin="round"
+          />
+          {/* Ruote */}
+          <circle
+            cx="64"
+            cy="84"
+            r="16"
+            fill="var(--color-surface-raised-2)"
+            stroke="var(--color-foreground)"
+            strokeWidth="3"
+          />
+          <circle cx="64" cy="84" r="6" fill="var(--color-card)" />
+          <circle
+            cx="202"
+            cy="84"
+            r="16"
+            fill="var(--color-surface-raised-2)"
+            stroke="var(--color-foreground)"
+            strokeWidth="3"
+          />
+          <circle cx="202" cy="84" r="6" fill="var(--color-card)" />
+        </g>
+      </svg>
+    </div>
   )
 }
 
@@ -267,15 +456,21 @@ function MaintenanceItemCard({
   item: CamperDashboardResponse['maintenance'][number]
 }) {
   return (
-    <li className="min-w-0 rounded-xl border border-border bg-card p-5">
-      <h3 className="font-semibold">{item.name}</h3>
-      {item.hasServiceHistory ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('neutral.camper.dashboard.lastService')}: {formatDate(item.lastServiceOnUtc)}
-        </p>
-      ) : (
-        <p className="mt-1 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{t('neutral.camper.dashboard.neverServiced')}</span>{' '}
+    <li className="min-w-0 rounded-2xl border border-border bg-card p-5 shadow-2xs">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h3 className="text-base font-semibold">{item.name}</h3>
+        {item.hasServiceHistory ? (
+          <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+            {t('neutral.camper.dashboard.lastService')}: {formatDate(item.lastServiceOnUtc)}
+          </span>
+        ) : (
+          <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+            {t('neutral.camper.dashboard.neverServiced')}
+          </span>
+        )}
+      </div>
+      {!item.hasServiceHistory && (
+        <p className="mt-1 text-xs text-muted-foreground">
           {t('neutral.camper.dashboard.noReminderBeforeService')}
         </p>
       )}
@@ -293,8 +488,10 @@ function MaintenanceItemCard({
           detail={odometerDetail(item.odometerAxis.dueAtKm, item.odometerAxis.kmRemaining)}
         />
       </div>
-      <RecordMaintenanceLogForm camperId={camperId} maintenanceItemId={item.id} />
-      <MaintenanceLogHistory camperId={camperId} maintenanceItemId={item.id} />
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+        <RecordMaintenanceLogForm camperId={camperId} maintenanceItemId={item.id} />
+        <MaintenanceLogHistory camperId={camperId} maintenanceItemId={item.id} />
+      </div>
     </li>
   )
 }
@@ -305,26 +502,33 @@ function OdometerPanel({
   odometer: CamperDashboardResponse['odometer']
 }) {
   return (
-    <section className="rounded-xl border border-border bg-card p-6" aria-labelledby="odometer-heading">
-      <h2 id="odometer-heading" className="text-sm font-semibold">
-        {t('neutral.camper.dashboard.odometerTitle')}
-      </h2>
-      {odometer === null ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t('neutral.camper.dashboard.noOdometer')}
-        </p>
-      ) : (
-        <>
-          <p className="numeral-display mt-2">{formatKilometers(odometer.readingKm)} km</p>
-          <p className="text-sm text-muted-foreground">
+    <section
+      className="rounded-2xl border border-border bg-background p-4"
+      aria-labelledby="odometer-heading"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="odometer-heading" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {t('neutral.camper.dashboard.odometerTitle')}
+        </h2>
+        {odometer !== null && (
+          <span className="text-xs text-muted-foreground">
             {odometer.isStale
               ? t('neutral.camper.dashboard.lastDatedReading')
               : t('neutral.camper.dashboard.recentReading')}
             {' · '}
             {formatDate(odometer.takenOnUtc)}
-          </p>
+          </span>
+        )}
+      </div>
+      {odometer === null ? (
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          {t('neutral.camper.dashboard.noOdometer')}
+        </p>
+      ) : (
+        <>
+          <p className="numeral-display mt-1">{formatKilometers(odometer.readingKm)} km</p>
           {odometer.isStale && (
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-1.5 text-xs text-muted-foreground">
               {t('neutral.camper.dashboard.staleOdometer')}
             </p>
           )}

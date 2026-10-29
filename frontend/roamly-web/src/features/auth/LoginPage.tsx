@@ -70,35 +70,42 @@ export function LoginPage() {
   if (currentUser?.mode === 'normal') {
     return (
       <>
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{t('neutral.login.signedInAs')}</p>
-            <p className="truncate text-sm font-semibold">
-              {currentUser.displayName ?? currentUser.email}
-            </p>
-            <Link
-              className="text-sm text-muted-foreground underline underline-offset-4"
-              to="/account/privacy"
+        <div className="border-b border-border bg-muted/50">
+          <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t('neutral.login.signedInAs')}{' '}
+                <span className="font-semibold text-foreground">
+                  {currentUser.displayName ?? currentUser.email}
+                </span>
+              </p>
+              <Link
+                className="inline-flex items-center rounded-full bg-card px-3 py-1 text-xs font-semibold text-foreground shadow-2xs transition-colors hover:bg-secondary"
+                to="/account/privacy"
+              >
+                {t('neutral.account.privacy.link')}
+              </Link>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
             >
-              {t('neutral.account.privacy.link')}
-            </Link>
+              {logoutMutation.isPending ? t('neutral.login.signingOut') : t('neutral.login.signOut')}
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
-          >
-            {logoutMutation.isPending ? t('neutral.login.signingOut') : t('neutral.login.signOut')}
-          </Button>
         </div>
-        <TripNavigation />
+        <div className=" pt-3">
+          <TripNavigation />
+        </div>
         {logoutMutation.isError && (
-          <p role="alert" className="mx-auto max-w-7xl px-4 text-sm text-danger-text sm:px-6">
+          <p role="alert" className="mx-auto max-w-7xl px-4 text-sm text-danger-text sm:px-6 lg:px-8">
             {t('neutral.login.signOutError')}
           </p>
         )}
-        <div className="pb-20 md:pb-0">
+        <div className="pb-20 md:pb-8">
           <CamperRoutes />
         </div>
       </>
@@ -107,64 +114,68 @@ export function LoginPage() {
 
   return (
     <PageContainer size="form">
-      <div>
-        <h1 className="page-title">{t('neutral.login.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('neutral.login.description')}</p>
+      <div className="rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
+        <div className="mb-6 space-y-2">
+          <h1 className="page-title">{t('neutral.login.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('neutral.login.description')}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="login-email">{t('neutral.login.email')}</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="login-email"
+                  name="email"
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </FieldContent>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="login-password">{t('neutral.login.password')}</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="login-password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </FieldContent>
+            </Field>
+
+            {loginMutation.isError && (
+              <div className="rounded-xl border border-border bg-background p-3">
+                <FieldDescription role="alert" className="text-danger-text">
+                  {loginErrorMessage(loginMutation.error)}
+                </FieldDescription>
+              </div>
+            )}
+
+            <Button type="submit" size="lg" className="w-full" disabled={loginMutation.isPending}>
+              {loginMutation.isPending
+                ? t('neutral.login.submitting')
+                : t('neutral.login.submit')}
+            </Button>
+          </FieldGroup>
+        </form>
+        {import.meta.env.DEV && (
+          <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
+            {t('neutral.login.noAccount')}{' '}
+            <Link className="font-semibold underline underline-offset-4" to="/register">
+              {t('neutral.login.register')}
+            </Link>
+          </p>
+        )}
       </div>
-
-      <form onSubmit={handleSubmit} noValidate>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="login-email">{t('neutral.login.email')}</FieldLabel>
-            <FieldContent>
-              <Input
-                id="login-email"
-                name="email"
-                type="email"
-                autoComplete="username"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </FieldContent>
-          </Field>
-
-          <Field>
-            <FieldLabel htmlFor="login-password">{t('neutral.login.password')}</FieldLabel>
-            <FieldContent>
-              <Input
-                id="login-password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </FieldContent>
-          </Field>
-
-          {loginMutation.isError && (
-            <FieldDescription role="alert" className="text-danger-text">
-              {loginErrorMessage(loginMutation.error)}
-            </FieldDescription>
-          )}
-
-          <Button type="submit" disabled={loginMutation.isPending}>
-            {loginMutation.isPending
-              ? t('neutral.login.submitting')
-              : t('neutral.login.submit')}
-          </Button>
-        </FieldGroup>
-      </form>
-      {import.meta.env.DEV && (
-        <p className="text-sm text-muted-foreground">
-          {t('neutral.login.noAccount')}{' '}
-          <Link className="underline underline-offset-4" to="/register">
-            {t('neutral.login.register')}
-          </Link>
-        </p>
-      )}
     </PageContainer>
   )
 }
