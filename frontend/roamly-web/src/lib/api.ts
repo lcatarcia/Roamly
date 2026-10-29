@@ -203,6 +203,12 @@ export interface CreateCamperResponse {
 
 export type CamperManualView = 'side' | 'front' | 'top'
 
+export interface CamperManualViewImages {
+  side?: string | null
+  front?: string | null
+  top?: string | null
+}
+
 export interface CamperManualMeasurement {
   id: string
   name: string
@@ -266,6 +272,7 @@ export interface CamperProfile {
   manualSourceName?: string | null
   manualSourceUrl?: string | null
   manualMeasurements?: CamperManualMeasurement[] | null
+  manualViewImages?: CamperManualViewImages | null
 }
 
 export type CamperProfileInput = Omit<CamperProfile, 'id'>

@@ -24,7 +24,8 @@ public sealed record CamperProfileResponse(
     decimal? AverageConsumptionLPer100Km,
     string? ManualSourceName = null,
     string? ManualSourceUrl = null,
-    IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null)
+    IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null,
+    CamperManualViewImagesDto? ManualViewImages = null)
 {
     /// <summary>Proietta il mezzo senza esporre dati di ownership o RowVersion nel body.</summary>
     public static CamperProfileResponse From(Camper camper)
@@ -51,6 +52,7 @@ public sealed record CamperProfileResponse(
             camper.AverageConsumptionLPer100Km,
             camper.ManualSourceName,
             camper.ManualSourceUrl,
-            CamperManualMeasurementsSerializer.Deserialize(camper.ManualMeasurementsJson));
+            CamperManualMeasurementsSerializer.Deserialize(camper.ManualMeasurementsJson),
+            CamperManualMeasurementsSerializer.DeserializeViewImages(camper.ManualMeasurementsJson));
     }
 }

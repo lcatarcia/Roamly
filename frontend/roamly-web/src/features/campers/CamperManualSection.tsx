@@ -16,6 +16,7 @@ import {
   type CamperManualMeasurement,
   type CamperManualParseResponse,
   type CamperManualView,
+  type CamperManualViewImages,
   type CamperProfile,
   type CamperProfileInput,
 } from '@/lib/api'
@@ -145,8 +146,10 @@ export function CamperManualSection({
   manualSourceName,
   manualSourceUrl,
   manualMeasurements,
+  manualViewImages,
   onSourceChange,
   onMeasurementsChange,
+  onViewImagesChange,
   onApplyParsedDraft,
   onSaveManualOnly,
   isSavingProfile,
@@ -159,8 +162,10 @@ export function CamperManualSection({
   manualSourceName: string
   manualSourceUrl: string
   manualMeasurements: CamperManualMeasurement[]
+  manualViewImages?: CamperManualViewImages | null
   onSourceChange: (sourceName: string, sourceUrl: string) => void
   onMeasurementsChange: (measurements: CamperManualMeasurement[]) => void
+  onViewImagesChange?: (viewImages: CamperManualViewImages, saveImmediately: boolean) => void
   onApplyParsedDraft: (draft: CamperManualParseResponse, saveImmediately: boolean) => void
   onSaveManualOnly?: () => void
   isSavingProfile: boolean
@@ -301,6 +306,39 @@ export function CamperManualSection({
       item.id === selectedMeasurement.id ? { ...item, value: nextValue } : item,
     )
     onMeasurementsChange(next)
+  }
+
+  async function handleViewImageSelected(targetView: CamperManualView, file: File) {
+    if (!onViewImagesChange) {
+      return
+    }
+
+    const dataUrl = await resizeImageFileToDataUrl(file)
+    if (!dataUrl) {
+      return
+    }
+
+    const nextViewImages: CamperManualViewImages = {
+      side: manualViewImages?.side ?? null,
+      front: manualViewImages?.front ?? null,
+      top: manualViewImages?.top ?? null,
+      [targetView]: dataUrl,
+    }
+    onViewImagesChange(nextViewImages, true)
+  }
+
+  function handleResetViewImage(targetView: CamperManualView) {
+    if (!onViewImagesChange) {
+      return
+    }
+
+    const nextViewImages: CamperManualViewImages = {
+      side: manualViewImages?.side ?? null,
+      front: manualViewImages?.front ?? null,
+      top: manualViewImages?.top ?? null,
+      [targetView]: null,
+    }
+    onViewImagesChange(nextViewImages, true)
   }
 
   const canParse = Boolean(pdfBase64 || manualSourceUrl.trim() || rawText.trim())
@@ -614,6 +652,18 @@ export function CamperManualSection({
               measurements={effectiveMeasurements.filter((m) => m.view === activeView)}
               selectedId={selectedMeasurement.id}
               onSelect={handleSelectMeasurement}
+              customImageUrl={manualViewImages?.[activeView] ?? null}
+              onUploadImage={
+                onViewImagesChange
+                  ? (file) => {
+                      void handleViewImageSelected(activeView, file)
+                    }
+                  : undefined
+              }
+              onResetImage={
+                onViewImagesChange ? () => handleResetViewImage(activeView) : undefined
+              }
+              isSaving={isSavingProfile}
             />
 
             <MainDimensionCards dimensions={dimensions} />
@@ -660,6 +710,20 @@ export function CamperManualSection({
               measurements={effectiveMeasurements.filter((m) => m.view === selectedMeasurement.view)}
               selectedId={selectedMeasurement.id}
               onSelect={handleSelectMeasurement}
+              customImageUrl={manualViewImages?.[selectedMeasurement.view] ?? null}
+              onUploadImage={
+                onViewImagesChange
+                  ? (file) => {
+                      void handleViewImageSelected(selectedMeasurement.view, file)
+                    }
+                  : undefined
+              }
+              onResetImage={
+                onViewImagesChange
+                  ? () => handleResetViewImage(selectedMeasurement.view)
+                  : undefined
+              }
+              isSaving={isSavingProfile}
               compact
             />
             <MeasurementDetailCard
@@ -680,6 +744,18 @@ export function CamperManualSection({
           dimensions={dimensions}
           measurements={effectiveMeasurements}
           selectedMeasurement={selectedMeasurement}
+          manualViewImages={manualViewImages}
+          onUploadViewImage={
+            onViewImagesChange
+              ? (targetView, file) => {
+                  void handleViewImageSelected(targetView, file)
+                }
+              : undefined
+          }
+          onResetViewImage={
+            onViewImagesChange ? (targetView) => handleResetViewImage(targetView) : undefined
+          }
+          isSavingProfile={isSavingProfile}
           sourceName={manualSourceName || 'Profilo tecnico'}
           sourceUrl={manualSourceUrl}
           canDelete={manualMeasurements.some((m) => m.id === selectedMeasurement.id)}
@@ -856,6 +932,10 @@ function ZonesExplorer({
   dimensions,
   measurements,
   selectedMeasurement,
+  manualViewImages,
+  onUploadViewImage,
+  onResetViewImage,
+  isSavingProfile,
   sourceName,
   sourceUrl,
   canDelete,
@@ -867,6 +947,10 @@ function ZonesExplorer({
   dimensions: CamperDimensions
   measurements: CamperManualMeasurement[]
   selectedMeasurement: CamperManualMeasurement
+  manualViewImages?: CamperManualViewImages | null
+  onUploadViewImage?: (view: CamperManualView, file: File) => void
+  onResetViewImage?: (view: CamperManualView) => void
+  isSavingProfile?: boolean
   sourceName: string
   sourceUrl: string
   canDelete: boolean
@@ -916,6 +1000,16 @@ function ZonesExplorer({
           measurements={zoneMeasurements}
           selectedId={selectedMeasurement.id}
           onSelect={onSelect}
+          customImageUrl={manualViewImages?.[selectedMeasurement.view] ?? null}
+          onUploadImage={
+            onUploadViewImage
+              ? (file) => onUploadViewImage(selectedMeasurement.view, file)
+              : undefined
+          }
+          onResetImage={
+            onResetViewImage ? () => onResetViewImage(selectedMeasurement.view) : undefined
+          }
+          isSaving={isSavingProfile}
           compact
         />
         <MeasurementButtonList
@@ -943,6 +1037,10 @@ function CamperDiagram({
   measurements,
   selectedId,
   onSelect,
+  customImageUrl,
+  onUploadImage,
+  onResetImage,
+  isSaving = false,
   compact = false,
 }: {
   view: CamperManualView
@@ -950,6 +1048,10 @@ function CamperDiagram({
   measurements: CamperManualMeasurement[]
   selectedId: string
   onSelect: (measurement: CamperManualMeasurement) => void
+  customImageUrl?: string | null
+  onUploadImage?: (file: File) => void
+  onResetImage?: () => void
+  isSaving?: boolean
   compact?: boolean
 }) {
   const dimensionCaption = view === 'side'
@@ -958,8 +1060,63 @@ function CamperDiagram({
       ? `Larghezza ${shortDimension(dimensions.widthMm)} mm · altezza ${shortDimension(dimensions.heightMm)} mm`
       : `Lunghezza ${shortDimension(dimensions.lengthMm)} mm · larghezza ${shortDimension(dimensions.widthMm)} mm`
 
+  const fileInputId = `camper-view-image-${view}-${compact ? 'compact' : 'main'}`
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !onUploadImage) {
+      return
+    }
+    onUploadImage(file)
+  }
+
   return (
-    <div className={`overflow-hidden rounded-lg bg-muted ${compact ? 'p-2' : 'p-3 sm:p-5'}`}>
+    <div className={`space-y-3 overflow-hidden rounded-2xl border border-border bg-muted ${compact ? 'p-2.5' : 'p-3.5 sm:p-5'}`}>
+      {onUploadImage && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-semibold text-foreground">
+              {customImageUrl
+                ? `Immagine personalizzata · Vista ${viewLabel(view).toLowerCase()}`
+                : `Schema di default · Vista ${viewLabel(view).toLowerCase()}`}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              htmlFor={fileInputId}
+              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-3.5 text-xs font-semibold text-secondary-foreground shadow-2xs hover:bg-muted"
+            >
+              {isSaving
+                ? 'Salvataggio…'
+                : customImageUrl
+                  ? `Cambia immagine (${viewLabel(view).toLowerCase()})`
+                  : `Carica immagine (${viewLabel(view).toLowerCase()})`}
+            </label>
+            <input
+              id={fileInputId}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="sr-only"
+              disabled={isSaving}
+              aria-label={`Carica immagine personalizzata per la vista ${viewLabel(view).toLowerCase()}`}
+              onChange={handleFileChange}
+            />
+            {customImageUrl && onResetImage && (
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                disabled={isSaving}
+                onClick={onResetImage}
+              >
+                Ripristina default
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       <svg
         className="h-auto w-full"
         viewBox="0 0 600 310"
@@ -968,39 +1125,140 @@ function CamperDiagram({
       >
         <title>Schema illustrativo delle misure del camper</title>
         <desc>Seleziona un punto numerato per consultare la misura corrispondente.</desc>
-        <g className="text-foreground" stroke="currentColor" strokeWidth="3">
-          {view === 'side' && (
-            <>
-              <path
-                d="M54 226V142c0-25 18-45 43-50l43-9h221c24 0 44 10 61 29l48 52 58 13v49H54Z"
-                fill="var(--color-background)"
-              />
-              <path d="M384 90v72h81l-43-47c-11-13-23-21-38-25Z" fill="var(--color-surface-raised)" />
-              <rect x="266" y="104" width="66" height="122" rx="4" fill="var(--color-surface-raised)" />
-              <rect x="365" y="179" width="83" height="31" rx="3" fill="var(--color-surface-raised)" />
-              <circle cx="154" cy="226" r="29" fill="var(--color-surface-raised-2)" />
-              <circle cx="427" cy="226" r="29" fill="var(--color-surface-raised-2)" />
-            </>
-          )}
-          {view === 'front' && (
-            <>
-              <path d="M179 226V126c0-42 30-73 72-73h98c42 0 72 31 72 73v100H179Z" fill="var(--color-background)" />
-              <path d="M215 130c0-27 19-45 45-45h80c26 0 45 18 45 45v43H215v-43Z" fill="var(--color-surface-raised)" />
-              <rect x="159" y="127" width="20" height="46" rx="8" fill="var(--color-surface-raised)" />
-              <rect x="441" y="127" width="20" height="46" rx="8" fill="var(--color-surface-raised)" />
-              <circle cx="221" cy="226" r="16" fill="var(--color-surface-raised-2)" />
-              <circle cx="379" cy="226" r="16" fill="var(--color-surface-raised-2)" />
-            </>
-          )}
-          {view === 'top' && (
-            <>
-              <path d="M151 49h298c31 0 53 23 53 54v106c0 31-22 53-53 53H151c-31 0-53-22-53-53V103c0-31 22-54 53-54Z" fill="var(--color-background)" />
-              <path d="M161 68h195v175H161c-20 0-35-15-35-35v-105c0-20 15-35 35-35Z" fill="var(--color-surface-raised)" />
-              <rect x="293" y="117" width="64" height="64" rx="8" fill="var(--color-surface-raised-2)" />
-              <path d="M410 91v130M394 91v130" fill="none" />
-            </>
-          )}
-        </g>
+
+        {customImageUrl ? (
+          <g>
+            <rect
+              x="20"
+              y="10"
+              width="560"
+              height="252"
+              rx="14"
+              fill="var(--color-background)"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              className="text-foreground"
+              strokeOpacity="0.2"
+            />
+            <image
+              href={customImageUrl}
+              x="26"
+              y="16"
+              width="548"
+              height="240"
+              preserveAspectRatio="xMidYMid meet"
+            />
+          </g>
+        ) : (
+          <g className="text-foreground" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {view === 'side' && (
+              <>
+                {/* Linea del suolo */}
+                <line x1="34" y1="248" x2="566" y2="248" strokeWidth="1.5" strokeDasharray="6 6" opacity="0.4" />
+                {/* Oblò sul tetto e tendalino */}
+                <path d="M116 74h48l6 9h-60l6-9Z" fill="var(--color-surface-raised)" />
+                <path d="M278 74h56l6 9h-68l6-9Z" fill="var(--color-surface-raised)" />
+                {/* Scocca principale furgone camperizzato */}
+                <path
+                  d="M52 218V106c0-13 10-23 23-23h292c28 0 51 11 69 33l46 53 45 12c11 3 19 13 19 24v13H52Z"
+                  fill="var(--color-background)"
+                />
+                {/* Fascia inferiore protettiva e paraurti */}
+                <path d="M48 206h502v14c0 3-2 5-5 5H53c-3 0-5-2-5-5v-14Z" fill="var(--color-surface-raised)" />
+                {/* Tendalino esterno */}
+                <rect x="172" y="92" width="186" height="9" rx="4" fill="var(--color-surface-raised-2)" />
+                {/* Finestrino cabina e parabrezza */}
+                <path d="M380 96v68h88l-39-46c-12-14-28-22-49-22Z" fill="var(--color-surface-raised)" />
+                <line x1="416" y1="98" x2="416" y2="164" strokeWidth="2" />
+                {/* Porta scorrevole e finestra dinette */}
+                <rect x="254" y="103" width="108" height="113" rx="6" fill="none" strokeWidth="2" />
+                <rect x="268" y="112" width="80" height="46" rx="6" fill="var(--color-surface-raised)" />
+                <rect x="260" y="168" width="14" height="5" rx="2.5" fill="var(--color-surface-raised-2)" />
+                {/* Finestra posteriore zona notte */}
+                <rect x="86" y="114" width="118" height="44" rx="6" fill="var(--color-surface-raised)" />
+                {/* Griglia e sportelli impianti (vano bombole / cassetta) */}
+                <rect x="76" y="172" width="44" height="28" rx="4" fill="var(--color-surface-raised)" />
+                <rect x="136" y="174" width="32" height="24" rx="4" fill="var(--color-surface-raised)" />
+                {/* Faro anteriore e fanale posteriore */}
+                <path d="M526 184h18v14h-18a6 6 0 0 1-6-6v-2a6 6 0 0 1 6-6Z" fill="var(--color-surface-raised-2)" />
+                <rect x="52" y="156" width="7" height="34" rx="3" fill="var(--color-surface-raised-2)" />
+                {/* Ruote complete di passaruota e cerchi */}
+                <circle cx="154" cy="222" r="26" fill="var(--color-surface-raised-2)" />
+                <circle cx="154" cy="222" r="12" fill="var(--color-background)" />
+                <circle cx="446" cy="222" r="26" fill="var(--color-surface-raised-2)" />
+                <circle cx="446" cy="222" r="12" fill="var(--color-background)" />
+              </>
+            )}
+            {view === 'front' && (
+              <>
+                {/* Linea del suolo */}
+                <line x1="120" y1="248" x2="480" y2="248" strokeWidth="1.5" strokeDasharray="6 6" opacity="0.4" />
+                {/* Profilo oblò superiore */}
+                <rect x="256" y="42" width="88" height="10" rx="5" fill="var(--color-surface-raised)" />
+                {/* Scocca frontale / posteriore simmetrica */}
+                <path
+                  d="M184 220V108c0-32 24-56 56-56h120c32 0 56 24 56 56v112H184Z"
+                  fill="var(--color-background)"
+                />
+                {/* Specchietti retrovisori */}
+                <rect x="150" y="122" width="28" height="44" rx="8" fill="var(--color-surface-raised)" />
+                <line x1="178" y1="136" x2="184" y2="136" strokeWidth="3" />
+                <rect x="422" y="122" width="28" height="44" rx="8" fill="var(--color-surface-raised)" />
+                <line x1="416" y1="136" x2="422" y2="136" strokeWidth="3" />
+                {/* Vetratura superiore / portelloni */}
+                <path
+                  d="M206 112c0-20 16-36 36-36h116c20 0 36 16 36 36v44H206v-44Z"
+                  fill="var(--color-surface-raised)"
+                />
+                {/* Linea centrale battuta portelloni / riferimento asse */}
+                <line x1="300" y1="76" x2="300" y2="220" strokeWidth="1.8" strokeDasharray="4 4" />
+                {/* Calandra, fari e paraurti */}
+                <rect x="198" y="170" width="42" height="18" rx="5" fill="var(--color-surface-raised-2)" />
+                <rect x="360" y="170" width="42" height="18" rx="5" fill="var(--color-surface-raised-2)" />
+                <rect x="248" y="170" width="104" height="22" rx="6" fill="var(--color-surface-raised)" />
+                <rect x="178" y="202" width="244" height="18" rx="6" fill="var(--color-surface-raised)" />
+                {/* Pneumatici a terra */}
+                <rect x="192" y="220" width="34" height="28" rx="7" fill="var(--color-surface-raised-2)" />
+                <rect x="374" y="220" width="34" height="28" rx="7" fill="var(--color-surface-raised-2)" />
+              </>
+            )}
+            {view === 'top' && (
+              <>
+                {/* Specchietti esterni in pianta */}
+                <rect x="444" y="34" width="16" height="14" rx="5" fill="var(--color-surface-raised)" />
+                <rect x="444" y="248" width="16" height="14" rx="5" fill="var(--color-surface-raised)" />
+                {/* Scocca esterna in pianta */}
+                <path
+                  d="M92 48h356c42 0 74 28 74 68v60c0 40-32 68-74 68H92c-18 0-32-14-32-32V80c0-18 14-32 32-32Z"
+                  fill="var(--color-background)"
+                />
+                {/* Zona notte posteriore (letto matrimoniale trasversale) */}
+                <rect x="74" y="60" width="132" height="172" rx="10" fill="var(--color-surface-raised)" />
+                <rect x="82" y="72" width="28" height="66" rx="6" fill="var(--color-background)" />
+                <rect x="82" y="154" width="28" height="66" rx="6" fill="var(--color-background)" />
+                <line x1="142" y1="60" x2="142" y2="232" strokeWidth="1.5" strokeDasharray="5 5" />
+                {/* Vano bagno / doccia */}
+                <rect x="216" y="60" width="84" height="76" rx="8" fill="var(--color-surface-raised)" />
+                <circle cx="258" cy="98" r="18" fill="var(--color-background)" />
+                {/* Blocco cucina con lavello e fuochi */}
+                <rect x="242" y="168" width="114" height="64" rx="8" fill="var(--color-surface-raised)" />
+                <rect x="254" y="180" width="38" height="40" rx="6" fill="var(--color-background)" />
+                <circle cx="314" cy="192" r="8" fill="var(--color-background)" />
+                <circle cx="336" cy="206" r="8" fill="var(--color-background)" />
+                {/* Zona giorno / Dinette (panca + tavolo) */}
+                <rect x="312" y="60" width="38" height="72" rx="6" fill="var(--color-surface-raised-2)" />
+                <rect x="356" y="70" width="44" height="58" rx="8" fill="var(--color-surface-raised)" />
+                {/* Cabina di guida (sedili girevoli + parabrezza anteriore) */}
+                <rect x="414" y="68" width="42" height="46" rx="8" fill="var(--color-surface-raised-2)" />
+                <rect x="414" y="178" width="42" height="46" rx="8" fill="var(--color-surface-raised-2)" />
+                <path
+                  d="M472 64c22 10 34 34 34 82s-12 72-34 82V64Z"
+                  fill="var(--color-surface-raised)"
+                />
+              </>
+            )}
+          </g>
+        )}
 
         <g className="text-muted-foreground" fill="currentColor" fontSize="14" fontWeight="600">
           <text x="300" y="288" textAnchor="middle">{dimensionCaption}</text>
@@ -1298,6 +1556,47 @@ function shortDimension(value: string): string {
   return Number.isFinite(parsed) ? new Intl.NumberFormat('it-IT').format(parsed) : '—'
 }
 
+async function resizeImageFileToDataUrl(file: File): Promise<string | null> {
+  const rawDataUrl = await new Promise<string | null>((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+    reader.onerror = () => resolve(null)
+    reader.readAsDataURL(file)
+  })
+
+  if (!rawDataUrl) {
+    return null
+  }
+
+  return await new Promise<string>((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const maxWidth = 1100
+        const maxHeight = 580
+        const scale = Math.min(1, maxWidth / (img.width || 1), maxHeight / (img.height || 1))
+        const targetWidth = Math.max(1, Math.round(img.width * scale))
+        const targetHeight = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = targetWidth
+        canvas.height = targetHeight
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          resolve(rawDataUrl)
+          return
+        }
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+        const compressed = canvas.toDataURL('image/webp', 0.86)
+        resolve(compressed.startsWith('data:image/') ? compressed : rawDataUrl)
+      } catch {
+        resolve(rawDataUrl)
+      }
+    }
+    img.onerror = () => resolve(rawDataUrl)
+    img.src = rawDataUrl
+  })
+}
+
 export function CamperDashboardManualPanel({ camperId }: { camperId: string }) {
   const profileQuery = useQuery({
     queryKey: camperProfileQueryKey(camperId),
@@ -1337,6 +1636,9 @@ function CamperDashboardManualEditor({
   const [manualMeasurements, setManualMeasurements] = useState<CamperManualMeasurement[]>(
     profile.manualMeasurements ?? [],
   )
+  const [manualViewImages, setManualViewImages] = useState<CamperManualViewImages>(
+    profile.manualViewImages ?? {},
+  )
 
   const saveMutation = useMutation({
     mutationFn: (input: CamperProfileInput) => updateCamperProfile(camperId, input, currentEtag),
@@ -1350,6 +1652,7 @@ function CamperDashboardManualEditor({
       setManualSourceName(result.value.manualSourceName ?? '')
       setManualSourceUrl(result.value.manualSourceUrl ?? '')
       setManualMeasurements(result.value.manualMeasurements ?? [])
+      setManualViewImages(result.value.manualViewImages ?? {})
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: CAMPERS_QUERY_KEY }),
@@ -1362,6 +1665,7 @@ function CamperDashboardManualEditor({
     sourceName: string,
     sourceUrl: string,
     measurements: CamperManualMeasurement[],
+    viewImages: CamperManualViewImages,
   ): CamperProfileInput {
     return {
       name: base.name,
@@ -1384,6 +1688,7 @@ function CamperDashboardManualEditor({
       manualSourceName: sourceName.trim() || null,
       manualSourceUrl: sourceUrl.trim() || null,
       manualMeasurements: measurements,
+      manualViewImages: viewImages,
     }
   }
 
@@ -1438,7 +1743,13 @@ function CamperDashboardManualEditor({
 
     if (saveImmediately) {
       saveMutation.mutate(
-        buildInputFromProfile(mergedProfile, nextSourceName, nextSourceUrl, nextMeasurements),
+        buildInputFromProfile(
+          mergedProfile,
+          nextSourceName,
+          nextSourceUrl,
+          nextMeasurements,
+          manualViewImages,
+        ),
       )
     }
   }
@@ -1455,11 +1766,26 @@ function CamperDashboardManualEditor({
       manualSourceName={manualSourceName}
       manualSourceUrl={manualSourceUrl}
       manualMeasurements={manualMeasurements}
+      manualViewImages={manualViewImages}
       onSourceChange={(sourceName, sourceUrl) => {
         setManualSourceName(sourceName)
         setManualSourceUrl(sourceUrl)
       }}
       onMeasurementsChange={setManualMeasurements}
+      onViewImagesChange={(nextViewImages, saveImmediately) => {
+        setManualViewImages(nextViewImages)
+        if (saveImmediately) {
+          saveMutation.mutate(
+            buildInputFromProfile(
+              currentProfile,
+              manualSourceName,
+              manualSourceUrl,
+              manualMeasurements,
+              nextViewImages,
+            ),
+          )
+        }
+      }}
       onApplyParsedDraft={handleApplyParsedDraft}
       onSaveManualOnly={() =>
         saveMutation.mutate(
@@ -1468,6 +1794,7 @@ function CamperDashboardManualEditor({
             manualSourceName,
             manualSourceUrl,
             manualMeasurements,
+            manualViewImages,
           ),
         )
       }

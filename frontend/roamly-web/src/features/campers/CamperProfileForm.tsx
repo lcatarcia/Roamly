@@ -12,6 +12,7 @@ import {
   updateCamperProfile,
   type CamperManualMeasurement,
   type CamperManualParseResponse,
+  type CamperManualViewImages,
   type CamperProfile,
   type CamperProfileInput,
 } from '@/lib/api'
@@ -23,7 +24,7 @@ import {
 
 type EditableFieldKey = Exclude<
   keyof CamperProfileInput,
-  'manualSourceName' | 'manualSourceUrl' | 'manualMeasurements'
+  'manualSourceName' | 'manualSourceUrl' | 'manualMeasurements' | 'manualViewImages'
 >
 type ProfileValues = Record<EditableFieldKey, string>
 
@@ -85,6 +86,9 @@ function CamperProfileEditor({
   const [manualMeasurements, setManualMeasurements] = useState<CamperManualMeasurement[]>(
     () => profile.manualMeasurements ?? [],
   )
+  const [manualViewImages, setManualViewImages] = useState<CamperManualViewImages>(
+    () => profile.manualViewImages ?? {},
+  )
   const [currentEtag, setCurrentEtag] = useState(etag)
   const [nameInvalid, setNameInvalid] = useState(false)
 
@@ -101,6 +105,7 @@ function CamperProfileEditor({
       setManualSourceName(result.value.manualSourceName ?? '')
       setManualSourceUrl(result.value.manualSourceUrl ?? '')
       setManualMeasurements(result.value.manualMeasurements ?? [])
+      setManualViewImages(result.value.manualViewImages ?? {})
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: CAMPERS_QUERY_KEY }),
@@ -116,6 +121,7 @@ function CamperProfileEditor({
           setManualSourceName(latest.profile.manualSourceName ?? '')
           setManualSourceUrl(latest.profile.manualSourceUrl ?? '')
           setManualMeasurements(latest.profile.manualMeasurements ?? [])
+          setManualViewImages(latest.profile.manualViewImages ?? {})
         } catch {
           // Il messaggio di conflitto resta visibile anche se il refresh non riesce.
         }
@@ -140,7 +146,14 @@ function CamperProfileEditor({
 
     if (saveImmediately && nextValues.name.trim()) {
       saveMutation.mutate({
-        profile: toProfileInput(nextValues, nextSourceName, nextSourceUrl, nextMeasurements, true),
+        profile: toProfileInput(
+          nextValues,
+          nextSourceName,
+          nextSourceUrl,
+          nextMeasurements,
+          manualViewImages,
+          true,
+        ),
         etag: currentEtag,
       })
     }
@@ -154,7 +167,14 @@ function CamperProfileEditor({
     }
 
     saveMutation.mutate({
-      profile: toProfileInput(values, manualSourceName, manualSourceUrl, manualMeasurements, false),
+      profile: toProfileInput(
+        values,
+        manualSourceName,
+        manualSourceUrl,
+        manualMeasurements,
+        manualViewImages,
+        false,
+      ),
       etag: currentEtag,
     })
   }
@@ -232,16 +252,40 @@ function CamperProfileEditor({
       manualSourceName={manualSourceName}
       manualSourceUrl={manualSourceUrl}
       manualMeasurements={manualMeasurements}
+      manualViewImages={manualViewImages}
       onSourceChange={(sourceName, sourceUrl) => {
         setManualSourceName(sourceName)
         setManualSourceUrl(sourceUrl)
       }}
       onMeasurementsChange={setManualMeasurements}
+      onViewImagesChange={(nextViewImages, saveImmediately) => {
+        setManualViewImages(nextViewImages)
+        if (saveImmediately && values.name.trim()) {
+          saveMutation.mutate({
+            profile: toProfileInput(
+              values,
+              manualSourceName,
+              manualSourceUrl,
+              manualMeasurements,
+              nextViewImages,
+              true,
+            ),
+            etag: currentEtag,
+          })
+        }
+      }}
       onApplyParsedDraft={handleApplyParsedDraft}
       onSaveManualOnly={() => {
         if (!values.name.trim()) return
         saveMutation.mutate({
-          profile: toProfileInput(values, manualSourceName, manualSourceUrl, manualMeasurements, true),
+          profile: toProfileInput(
+            values,
+            manualSourceName,
+            manualSourceUrl,
+            manualMeasurements,
+            manualViewImages,
+            true,
+          ),
           etag: currentEtag,
         })
       }}
@@ -369,6 +413,7 @@ function toProfileInput(
   manualSourceName: string,
   manualSourceUrl: string,
   manualMeasurements: CamperManualMeasurement[],
+  manualViewImages: CamperManualViewImages,
   guardPartialGroups: boolean,
 ): CamperProfileInput {
   const lengthMm = optionalNumber(values.lengthMm)
@@ -408,6 +453,7 @@ function toProfileInput(
     manualSourceName: optionalText(manualSourceName),
     manualSourceUrl: optionalText(manualSourceUrl),
     manualMeasurements,
+    manualViewImages,
   }
 }
 

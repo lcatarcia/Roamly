@@ -15,10 +15,20 @@ public sealed record CamperManualMeasurementDto(
     [property: StringLength(300)] string? Description = null,
     [property: Range(1, 2000)] int? Page = null);
 
-/// <summary>Serializzazione JSON deterministica delle misure di dettaglio del camper.</summary>
+/// <summary>Immagini personalizzate opzionali (data URL o URL HTTP/HTTPS) per le tre viste del camper.</summary>
+public sealed record CamperManualViewImagesDto(
+    [property: StringLength(600_000)] string? Side = null,
+    [property: StringLength(600_000)] string? Front = null,
+    [property: StringLength(600_000)] string? Top = null);
+
+/// <summary>Serializzazione JSON deterministica delle misure di dettaglio e delle viste personalizzate del camper.</summary>
 public static class CamperManualMeasurementsSerializer
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
+    private sealed record StoredManualEnvelope(
+        IReadOnlyList<CamperManualMeasurementDto>? Measurements,
+        CamperManualViewImagesDto? ViewImages);
 
     /// <summary>Deserializza la collezione di misure salvata sul camper.</summary>
     public static IReadOnlyList<CamperManualMeasurementDto> Deserialize(string? json)
@@ -28,8 +38,15 @@ public static class CamperManualMeasurementsSerializer
             return [];
         }
 
+        var trimmed = json.AsSpan().TrimStart();
         try
         {
+            if (trimmed.StartsWith("{", StringComparison.Ordinal))
+            {
+                var envelope = JsonSerializer.Deserialize<StoredManualEnvelope>(json, SerializerOptions);
+                return envelope?.Measurements ?? [];
+            }
+
             return JsonSerializer.Deserialize<List<CamperManualMeasurementDto>>(json, SerializerOptions)
                 ?? [];
         }
@@ -39,15 +56,37 @@ public static class CamperManualMeasurementsSerializer
         }
     }
 
-    /// <summary>Serializza e normalizza le misure di dettaglio; restituisce <c>null</c> se la lista è vuota.</summary>
-    public static string? Serialize(IReadOnlyList<CamperManualMeasurementDto>? measurements)
+    /// <summary>Deserializza le immagini personalizzate delle viste salvate sul camper.</summary>
+    public static CamperManualViewImagesDto? DeserializeViewImages(string? json)
     {
-        if (measurements is null || measurements.Count == 0)
+        if (string.IsNullOrWhiteSpace(json))
         {
             return null;
         }
 
-        var normalized = measurements
+        var trimmed = json.AsSpan().TrimStart();
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<StoredManualEnvelope>(json, SerializerOptions);
+            return NormalizeViewImages(envelope?.ViewImages);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Serializza e normalizza le misure di dettaglio e le immagini personalizzate delle viste.</summary>
+    public static string? Serialize(
+        IReadOnlyList<CamperManualMeasurementDto>? measurements,
+        CamperManualViewImagesDto? viewImages = null)
+    {
+        var normalizedMeasurements = (measurements ?? [])
             .Select(item => new CamperManualMeasurementDto(
                 item.Id.Trim(),
                 item.Name.Trim(),
@@ -60,6 +99,38 @@ public static class CamperManualMeasurementsSerializer
                 item.Page))
             .ToArray();
 
-        return JsonSerializer.Serialize(normalized, SerializerOptions);
+        var normalizedImages = NormalizeViewImages(viewImages);
+
+        if (normalizedMeasurements.Length == 0 && normalizedImages is null)
+        {
+            return null;
+        }
+
+        if (normalizedImages is null)
+        {
+            return JsonSerializer.Serialize(normalizedMeasurements, SerializerOptions);
+        }
+
+        var envelope = new StoredManualEnvelope(normalizedMeasurements, normalizedImages);
+        return JsonSerializer.Serialize(envelope, SerializerOptions);
+    }
+
+    private static CamperManualViewImagesDto? NormalizeViewImages(CamperManualViewImagesDto? viewImages)
+    {
+        if (viewImages is null)
+        {
+            return null;
+        }
+
+        var side = string.IsNullOrWhiteSpace(viewImages.Side) ? null : viewImages.Side.Trim();
+        var front = string.IsNullOrWhiteSpace(viewImages.Front) ? null : viewImages.Front.Trim();
+        var top = string.IsNullOrWhiteSpace(viewImages.Top) ? null : viewImages.Top.Trim();
+
+        if (side is null && front is null && top is null)
+        {
+            return null;
+        }
+
+        return new CamperManualViewImagesDto(side, front, top);
     }
 }

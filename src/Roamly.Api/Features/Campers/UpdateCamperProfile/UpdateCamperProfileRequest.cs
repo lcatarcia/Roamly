@@ -28,7 +28,8 @@ public sealed record UpdateCamperProfileRequest(
     decimal? AverageConsumptionLPer100Km,
     [property: StringLength(200)] string? ManualSourceName = null,
     [property: StringLength(500)] string? ManualSourceUrl = null,
-    IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null)
+    IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null,
+    CamperManualViewImagesDto? ManualViewImages = null)
     : IValidatableObject
 {
     private static readonly HashSet<string> AllowedViews = new(StringComparer.OrdinalIgnoreCase)
@@ -131,6 +132,41 @@ public sealed record UpdateCamperProfileRequest(
                 }
             }
         }
+
+        if (ManualViewImages is not null
+            && (!IsValidViewImage(ManualViewImages.Side)
+                || !IsValidViewImage(ManualViewImages.Front)
+                || !IsValidViewImage(ManualViewImages.Top)))
+        {
+            yield return new ValidationResult(
+                "Ogni immagine delle viste deve essere un'immagine PNG, JPEG o WebP valida oppure un URL HTTP/HTTPS.",
+                [nameof(ManualViewImages)]);
+        }
+    }
+
+    private static bool IsValidViewImage(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Length > 600_000)
+        {
+            return false;
+        }
+
+        if (trimmed.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("data:image/jpg;base64,", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("data:image/webp;base64,", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
     }
 
     private static IEnumerable<ValidationResult> ValidateGroup(int?[] values, string[] fields)

@@ -86,15 +86,17 @@ public sealed class UpdateCamperProfileHandler(RoamlyDbContext db, TimeProvider 
         camper.FuelKind = request.FuelKind;
         camper.AverageConsumptionLPer100Km = request.AverageConsumptionLPer100Km;
         if (request.ManualMeasurements is not null
+            || request.ManualViewImages is not null
             || request.ManualSourceName is not null
             || request.ManualSourceUrl is not null)
         {
             camper.ManualSourceName = Normalize(request.ManualSourceName);
             camper.ManualSourceUrl = Normalize(request.ManualSourceUrl);
-            if (request.ManualMeasurements is not null)
-            {
-                camper.ManualMeasurementsJson = CamperManualMeasurementsSerializer.Serialize(request.ManualMeasurements);
-            }
+            var measurements = request.ManualMeasurements
+                ?? CamperManualMeasurementsSerializer.Deserialize(camper.ManualMeasurementsJson);
+            var viewImages = request.ManualViewImages
+                ?? CamperManualMeasurementsSerializer.DeserializeViewImages(camper.ManualMeasurementsJson);
+            camper.ManualMeasurementsJson = CamperManualMeasurementsSerializer.Serialize(measurements, viewImages);
         }
     }
 
