@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420">
+
+  <g transform="translate(42,35) scale(0.84)">
+    <circle cx="345" cy="122" r="78" fill="#C86F4A"/>
+    <path d="M18 337 C115 292 183 320 244 279 C293 247 326 225 402 220" fill="none" stroke="#9BAE91" stroke-width="24" stroke-linecap="round"/>
+    <path d="M18 360 C116 320 191 345 261 300 C316 265 352 246 430 243" fill="none" stroke="#173D32" stroke-width="18" stroke-linecap="round"/>
+    <path d="M71 173 Q80 149 115 148 L287 148 Q317 148 338 172 L378 213 L393 273 L381 302 L76 302 Q52 302 52 278 L52 199 Q52 178 71 173Z" fill="#FFFDF7" stroke="#173D32" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M112 160 L178 160 L178 207 L80 207 L83 184 Q86 162 112 160Z" fill="#9BAE91"/>
+    <path d="M193 160 L282 160 Q302 162 319 182 L338 207 L193 207Z" fill="#9BAE91"/>
+    <path d="M347 217 L372 239 L378 270 L346 270Z" fill="#9BAE91"/>
+    <path d="M190 218 L190 292 M279 218 L279 292" stroke="#173D32" stroke-width="7"/>
+    <path d="M90 147 Q117 130 164 132 L281 132 Q309 133 328 151" fill="none" stroke="#173D32" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="126" cy="302" r="29" fill="#173D32"/><circle cx="126" cy="302" r="13" fill="#FFFDF7"/>
+    <circle cx="326" cy="302" r="29" fill="#173D32"/><circle cx="326" cy="302" r="13" fill="#FFFDF7"/>
+    <path d="M18 357 Q130 387 257 340 Q326 314 430 258" fill="none" stroke="#173D32" stroke-width="12" stroke-linecap="round"/>
+    <path d="M416 204 C416 204 384 168 384 146 A32 32 0 1 1 448 146 C448 168 416 204 416 204Z" fill="#173D32"/>
+    <circle cx="416" cy="146" r="10" fill="#FFFDF7"/>
+  </g>
+  <text x="440" y="270" font-family="Georgia, 'Times New Roman', serif" font-size="176" font-weight="600" letter-spacing="-7" fill="#173D32">Roamly</text>
+</svg>

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
+import { BrandLogo } from '@/components/brand/BrandLogo'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
-import { t } from '@/i18n/catalog'
 
 interface AppShellProps {
   children: ReactNode
@@ -18,31 +18,7 @@ export function AppShell({ children }: AppShellProps) {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-xs">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <span
-              aria-hidden="true"
-              className="inline-flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="size-5"
-              >
-                <path d="M3 16V9a2 2 0 0 1 2-2h9l4 4h2a1 1 0 0 1 1 1v4" />
-                <circle cx="7.5" cy="16.5" r="2.5" />
-                <circle cx="16.5" cy="16.5" r="2.5" />
-                <path d="M10 16h4" />
-                <path d="M6 11h6" />
-              </svg>
-            </span>
-            <span className="text-base font-bold tracking-[0.04em] text-foreground">
-              {t('neutral.app.brand')}
-            </span>
-          </div>
+          <BrandLogo className="h-10 w-[114px] sm:h-12 sm:w-[137px]" />
           <ThemeToggle />
         </div>
       </header>

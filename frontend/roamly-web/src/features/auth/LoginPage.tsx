@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import { BrandLogo } from '@/components/brand/BrandLogo'
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { PageContainer } from '@/components/layout/PageContainer'
@@ -115,9 +116,12 @@ export function LoginPage() {
   return (
     <PageContainer size="form">
       <div className="rounded-3xl border border-border bg-card p-6 shadow-xs sm:p-8">
-        <div className="mb-6 space-y-2">
-          <h1 className="page-title">{t('neutral.login.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('neutral.login.description')}</p>
+        <div className="mb-6 flex items-center gap-4">
+          <BrandLogo variant="icon" className="size-16" />
+          <div className="space-y-2">
+            <h1 className="page-title">{t('neutral.login.title')}</h1>
+            <p className="text-sm text-foreground">{t('neutral.login.description')}</p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
@@ -168,7 +172,7 @@ export function LoginPage() {
           </FieldGroup>
         </form>
         {import.meta.env.DEV && (
-          <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
+          <p className="mt-5 border-t border-border pt-4 text-sm text-foreground">
             {t('neutral.login.noAccount')}{' '}
             <Link className="font-semibold underline underline-offset-4" to="/register">
               {t('neutral.login.register')}
