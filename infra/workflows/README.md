@@ -150,7 +150,7 @@ segreti andranno passati come GitHub Environment Variables:
 
 Solo l'Environment `azure-release` usa il client ID. Le variabili non segrete
 OIDC sono state configurate nel GitHub Environment. Al principal OIDC sono stati assegnati il custom role
-deployments sul RG, il custom role ACA (temporaneo sul RG fino alla prima app),
+deployments sul RG, il custom role ACA sulla sola app e il ruolo read/join sul solo environment,
 `AcrPush` solo sull'ACR e `Managed Identity Operator` solo sulla runtime
 identity. Il repository non deve contenere client secret, PAT, password SQL o
 valori dei secret Key Vault; GitHub non deve ricevere alcun valore di secret.
@@ -166,43 +166,44 @@ Il workflow userà solo federazione OIDC e permessi `contents: read` +
   release e la relativa federated credential sono state verificate live. Il
   trust bootstrap è stato rimosso. Le variabili GitHub non secret sono già
   impostate nell'Environment `azure-release`; riverificarle prima dell'attivazione.
-- Le assegnazioni RBAC per la sola release sono state create e verificate:
-  ruolo custom Container Apps senza `listSecrets` sul
-  resource group,
+- Le assegnazioni RBAC per la sola release sono state ridotte il 2026-10-30:
+  ruolo custom Container Apps sulla sola `ca-roamly-prod`,
+  ruolo read/join sul solo environment `cae-roamly-live`,
   `Managed Identity Operator` sulla sola runtime identity, `AcrPush` sull'ACR
   e ruolo custom `Microsoft.Resources/deployments/*` sul resource group. Tutti
   questi ruoli sono limitati al principal OIDC release. Il bootstrap resta
   manuale; non assegnare `Contributor` o `Role Based Access Control
-  Administrator` all'identità release. L'assegnazione ACA al RG è temporanea:
-  dopo la prima creazione va rimossa e ri-assegnata allo scope della sola
-  Container App. Verificare di nuovo le assegnazioni effettive e che `listSecrets`
-  resti negato prima di attivare il workflow e dopo il restringimento.
-- Il JSON preparatorio del ruolo è
+  Administrator` all'identità release. L'assegnazione ACA al RG è stata rimossa.
+  Le definizioni e le assegnazioni dirette sono state rilette dopo ogni modifica;
+  la verifica con token fresco del principal release resta da completare.
+- Il JSON del ruolo app è
   [`../roles/container-apps-release-no-secrets.json`](../roles/container-apps-release-no-secrets.json).
-  La definizione è basata sulle azioni di `Container Apps Contributor`
-  (role ID `358470bc-b998-42bd-ab17-a7e34c199c0f`) con
-  `Microsoft.App/containerApps/listSecrets/action` esclusa in `NotActions`.
-  La definizione live esiste con ID
+  La definizione live, aggiornata con ID
   `ce62cffa-613a-49db-9fc2-f299757a7e36`, assegnabile sul RG `rg-roamly-dev`,
-  ed è assegnata al principal release sul RG solo temporaneamente per il primo
-  deployment. Lo scope dovrà essere ridotto alla singola Container App appena
-  esiste. L'assegnazione al RG concede gestione su tutte le Container Apps
-  applicabili nel gruppo. `NotActions` sottrae l'azione solo da
-  questo ruolo: un'altra assegnazione che la concede può ancora dare accesso
-  effettivo ai secret.
+  concede solo `Microsoft.App/containerApps/read`, `write` e `revisions/read`
+  sulla app `ca-roamly-prod`. Il ruolo environment
+  [`../roles/container-apps-release-environment-join.json`](../roles/container-apps-release-environment-join.json),
+  ID `6f5774ed-a688-4ac7-859a-727bceb591bf`, concede solo
+  `Microsoft.App/managedEnvironments/read` e `join/action` su `cae-roamly-live`.
+  `AssignableScopes` delimita dove i ruoli possono essere assegnati, non concede
+  accesso al RG. Entrambi hanno `NotActions` e permessi data-plane vuoti.
+  Non concedono wildcard ACA, delete, exec o `listSecrets`; altri ruoli potrebbero
+  comunque concederli. Il permesso app `write` consente di cambiare l'intera
+  configurazione e l'immagine della sola app: non è un vincolo image-only.
 - La custom role `infra/roles/resource-deployments-release.json`, con la sola
   azione `Microsoft.Resources/deployments/*`, è stata creata live e assegnata
   sul RG; il suo ID è `432216d0-b0ea-4fa7-b2e0-d5e4000a6d72`.
 - Gate RBAC: prima di abilitare i workflow, verificare la definizione live per
   ID, `Actions`/`NotActions` e scope assegnabile; verificare tutte le
   assegnazioni effettive ereditate o dirette del principal release e
-  confermare che nessun altro ruolo conceda `listSecrets`. Verificare i
-  permessi effettivi su una Container App del gruppo: le operazioni di gestione
-  necessarie riescono e la lettura dei secret è negata. Ripetere la verifica
-  dopo cambi a ruoli built-in, custom role o assegnazioni. Il wildcard
-  `Microsoft.App/containerApps/*/action` continua a includere azioni correnti e
-  future che corrispondono al pattern, esclusa solo `listSecrets` da questa
-  definizione: riesaminare le nuove azioni sensibili del provider.
+  confermare che nessun altro ruolo conceda `listSecrets`. Con un token fresco
+  del principal release verificare GET app/revisioni/environment/identity e
+  l'inventario dei permessi, senza invocare `listSecrets`, exec o operazioni
+  distruttive come test negativi. Il percorso write/join non è ancora stato
+  provato dal workflow: richiede il what-if e il successivo deploy autorizzati.
+  Ripetere la verifica dopo cambi a ruoli built-in, custom role o assegnazioni.
+  Se manca un permesso, fermare la release e revisionare l'azione esatta:
+  non ripristinare automaticamente il vecchio ruolo ampio.
 
 Riferimenti Microsoft: [Container Apps secrets e `listSecrets`](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets),
 [Azure custom roles e `AssignableScopes`](https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles),
@@ -244,6 +245,12 @@ Riferimenti Microsoft: [Container Apps secrets e `listSecrets`](https://learn.mi
   il 2026-10-30: risultano applicate le 15 migration fino a
   `20261028134346_AddCamperManualSpecifications`. Nessuna migration è stata
   applicata in questa sessione; il workflow non applica migration.
+  Il confronto successivo al merge `ca591a5` ha confermato la corrispondenza
+  esatta dei 15 ID tra repository e database live e l'assenza di
+  `20261023083431_AddAuthenticationInfrastructure` nel registro live.
+  Colonne, tipi, default, chiavi e indici degli oggetti di autenticazione
+  coinvolti coincidono con le migration del branch: nessuna riconciliazione
+  SQL o modifica del registro è necessaria.
 
 Il workflow di release è già nel working tree sotto `.github/workflows/` e ha
 una copia di revisione in questa directory; il candidato non è stato ancora
