@@ -35,8 +35,8 @@ public sealed class R56_OwnedResourceCoverageTests(ModelFixture model)
             "che l'ha generata (ADR-0004). Una FK verso OwnerId non avrebbe senso su un record che esiste " +
             "proprio perche' quell'utente non esiste piu'.",
         [typeof(LoginAttemptCounter)] =
-            "Contatore infrastrutturale pseudonimizzato per il rate limit login: scade dopo la finestra, " +
-            "non contiene account/IP in chiaro, non ha OwnerId/FK e non appartiene a export o cancellazione.",
+            "Contiene esclusivamente bucket pseudonimi HMAC con contatori a scadenza; non conserva " +
+            "identificativi account/IP né appartiene ai dati owned dell'utente.",
     };
 
     [Fact]

@@ -5,8 +5,8 @@ using Roamly.Common.Security;
 namespace Roamly.Api.Common.Security;
 
 /// <summary>
-/// Rate limiting **in-memory per-account** per le azioni sensibili di export e cancellazione
-/// account. Il login usa il distinto <see cref="ILoginAttemptRateLimiter"/> condiviso su SQL.
+/// Rate limiting **in-memory per-account** per le azioni sensibili di export, cancellazione
+/// account e cambio password. Il login usa il distinto <see cref="ILoginAttemptRateLimiter"/> condiviso su SQL.
 /// <para>
 /// Questa implementazione resta invariata per preservare soglie e semantica dei flussi esistenti;
 /// non va riutilizzata per introdurre limiti al login.

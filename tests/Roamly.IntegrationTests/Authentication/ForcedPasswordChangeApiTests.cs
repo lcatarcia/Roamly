@@ -1,8 +1,12 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Roamly.Api.Common.Security;
 using Roamly.Infrastructure.Identity;
 using Roamly.IntegrationTests.Infrastructure;
 
@@ -75,6 +79,34 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         Assert.Equal(
             "https://roamly.dev/problems/password-change-required",
             problem.RootElement.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task password_change_required_account_is_blocked_from_protected_endpoints()
+    {
+        var account = await CreateUserAsync(Email, requiresPasswordChange: true);
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, account.Id.ToString())],
+            authenticationType: "integration-test"));
+        context.SetEndpoint(new Endpoint(
+            _ => Task.CompletedTask,
+            new EndpointMetadataCollection(new AuthorizeAttribute()),
+            "protected-test-endpoint"));
+        var nextCalled = false;
+        var middleware = new AccountSessionAuthorizationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        await middleware.InvokeAsync(
+            context,
+            scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>());
+
+        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        Assert.False(nextCalled);
     }
 
     [Fact]
@@ -296,7 +328,7 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         Assert.Equal(HttpStatusCode.Unauthorized, profile.StatusCode);
     }
 
-    private async Task CreateUserAsync(string email, bool requiresPasswordChange)
+    private async Task<ApplicationUser> CreateUserAsync(string email, bool requiresPasswordChange)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -310,5 +342,6 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         };
         var result = await userManager.CreateAsync(user, Password);
         Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(error => error.Description)));
+        return user;
     }
 }

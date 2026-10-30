@@ -1,6 +1,7 @@
 using Roamly.Api.Common.Identity;
 using Roamly.Api.Common.Ownership;
 using Roamly.Api.Features.Journal;
+using Roamly.Common.Security;
 
 namespace Roamly.Api.Common.Startup;
 
@@ -39,6 +40,12 @@ public static class OneShotJobDispatcher
             return true;
         }
 
+        if (args is ["--job", "login-attempt-counter-cleanup"])
+        {
+            await RunLoginAttemptCounterCleanupAsync(services, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
         ThrowIfInvalidJob(args);
         return false;
     }
@@ -63,8 +70,18 @@ public static class OneShotJobDispatcher
         {
             throw new ArgumentException(
                 "Uso job non valido. Modalita' supportate: --job account-erasure, --job provision-user, " +
-                "--job journal-attachment-reconciliation, --job journal-attachment-deletion-outbox.");
+                "--job journal-attachment-reconciliation, --job journal-attachment-deletion-outbox, " +
+                "--job login-attempt-counter-cleanup.");
         }
+    }
+
+    private static async Task RunLoginAttemptCounterCleanupAsync(
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+    {
+        await using var scope = services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<ILoginAttemptCounterMaintenance>()
+            .CleanupExpiredAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task RunJournalAttachmentReconciliationAsync(

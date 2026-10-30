@@ -156,6 +156,11 @@ public static class AuthenticationEndpoints
                     InvalidReauthenticationProblemType)),
                 ChangePasswordOutcome.PasswordRejected => Results.ValidationProblem(
                     new Dictionary<string, string[]> { ["newPassword"] = [.. result.Errors] }),
+                ChangePasswordOutcome.TooManyAttempts => Results.Problem(ProblemFactory.Create(
+                    context,
+                    StatusCodes.Status429TooManyRequests,
+                    "Troppi tentativi. Riprova piu' tardi.",
+                    TooManyAttemptsProblemType)),
                 ChangePasswordOutcome.AccountNotFound => Results.Problem(ProblemFactory.Create(
                     context,
                     StatusCodes.Status404NotFound,

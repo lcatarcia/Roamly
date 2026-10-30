@@ -350,59 +350,21 @@ public sealed class LoginAttemptRateLimitApiTests(SqlServerFixture sqlServer) : 
     }
 
     [Fact]
-    public async Task different_unknown_usernames_share_a_synthetic_account_bucket()
+    public async Task repeated_unknown_usernames_are_limited_only_by_the_ip_bucket()
     {
-        const string existingEmail = "separate-real-account@example.test";
-        var existingUser = await CreateUserAsync(existingEmail);
-        _passwordHasher.ResetCounts();
-        (string? Type, string? Title, int? Status)? firstUnknownResponse = null;
-        (string? Type, string? Title, int? Status)? limitedUnknownResponse = null;
+        const string unknownEmail = "arbitrary-unknown@example.test";
 
-        for (var attempt = 0; attempt < 11; attempt++)
+        for (var attempt = 0; attempt < 31; attempt++)
         {
             using var response = await _client.LoginAsync(
-                $"arbitrary-unknown-{attempt}@example.test",
+                unknownEmail,
                 "Wrong!Password123",
                 TestContext.Current.CancellationToken);
 
-            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-            var responseIdentity = await ProblemIdentityAsync(response);
-            if (attempt == 0)
-            {
-                firstUnknownResponse = responseIdentity;
-            }
-            else if (attempt == 10)
-            {
-                limitedUnknownResponse = responseIdentity;
-            }
+            Assert.Equal(
+                attempt < 30 ? HttpStatusCode.Unauthorized : HttpStatusCode.TooManyRequests,
+                response.StatusCode);
         }
-
-        Assert.Equal(firstUnknownResponse, limitedUnknownResponse);
-        Assert.Equal(11, _passwordHasher.VerifyCount);
-        Assert.Equal(0, await GetAccessFailedCountAsync(existingUser.Id));
-
-        using var existingAccountFailure = await _client.LoginAsync(
-            existingEmail,
-            "Wrong!Password123",
-            TestContext.Current.CancellationToken);
-        Assert.Equal(HttpStatusCode.Unauthorized, existingAccountFailure.StatusCode);
-
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<
-            Roamly.Infrastructure.Persistence.RoamlyDbContext>();
-        var now = _clock.GetUtcNow().UtcDateTime;
-        var syntheticBuckets = await context.LoginAttemptCounters
-            .Where(counter => counter.CounterKind == "unknown-account" && counter.ExpiresAtUtc > now)
-            .ToListAsync(TestContext.Current.CancellationToken);
-        var realAccountBuckets = await context.LoginAttemptCounters
-            .Where(counter => counter.CounterKind == "account" && counter.ExpiresAtUtc > now)
-            .ToListAsync(TestContext.Current.CancellationToken);
-
-        var syntheticBucket = Assert.Single(syntheticBuckets);
-        var realAccountBucket = Assert.Single(realAccountBuckets);
-        Assert.Equal(10, syntheticBucket.AttemptCount);
-        Assert.Equal(64, syntheticBucket.BucketKey.Length);
-        Assert.Equal(1, realAccountBucket.AttemptCount);
     }
 
     [Fact]
@@ -505,28 +467,6 @@ public sealed class LoginAttemptRateLimitApiTests(SqlServerFixture sqlServer) : 
         Assert.Equal(3, _passwordHasher.VerifyCount);
         Assert.Equal(1, _passwordHasher.HashCount);
         Assert.Equal(1, await GetAccessFailedCountAsync(existingUser.Id));
-    }
-
-    [Fact]
-    public async Task unknown_account_still_verifies_dummy_hash_when_account_limiter_is_unavailable()
-    {
-        _passwordHasher.ResetCounts();
-        await using var unavailableFactory = CreateFactory(
-            "Testing",
-            loginAttemptRateLimiter: new UnknownAccountUnavailableRateLimiter());
-        using var unavailableClient = CreateClient(unavailableFactory);
-
-        using var response = await unavailableClient.LoginAsync(
-            "unavailable-bucket@example.test",
-            "Wrong!Password123",
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Equal(1, _passwordHasher.VerifyCount);
-        Assert.Equal(1, _passwordHasher.HashCount);
-        Assert.DoesNotContain(
-            "unavailable-bucket@example.test",
-            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -682,8 +622,7 @@ public sealed class LoginAttemptRateLimitApiTests(SqlServerFixture sqlServer) : 
         string environmentName,
         IPAddress? controlledTestIpAddress = null,
         TrackingPasswordHasher? passwordHasher = null,
-        IdentityUserLookupTracker? identityUserLookupTracker = null,
-        Roamly.Common.Security.ILoginAttemptRateLimiter? loginAttemptRateLimiter = null)
+        IdentityUserLookupTracker? identityUserLookupTracker = null)
     {
         return new RoamlyApiFactory(
             _database.ConnectionString,
@@ -694,39 +633,14 @@ public sealed class LoginAttemptRateLimitApiTests(SqlServerFixture sqlServer) : 
                 services.AddSingleton<TimeProvider>(_clock);
                 services.RemoveAll<IPasswordHasher<ApplicationUser>>();
                 services.AddSingleton<IPasswordHasher<ApplicationUser>>(passwordHasher ?? _passwordHasher);
-                if (loginAttemptRateLimiter is not null)
-                {
-                    services.RemoveAll<Roamly.Common.Security.ILoginAttemptRateLimiter>();
-                    services.AddSingleton(loginAttemptRateLimiter);
-                }
-
                 if (identityUserLookupTracker is not null)
                 {
                     services.AddDbContext<Roamly.Infrastructure.Persistence.RoamlyDbContext>(
                         (_, options) => options.AddInterceptors(identityUserLookupTracker));
                 }
             },
-            controlledTestIpAddress ?? IPAddress.Parse("198.18.0.10"));
-    }
-
-    private sealed class UnknownAccountUnavailableRateLimiter :
-        Roamly.Common.Security.ILoginAttemptRateLimiter
-    {
-        public Task<Roamly.Common.Security.LoginAttemptLimitStatus> CheckIpAsync(
-            string clientIpAddress,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(Roamly.Common.Security.LoginAttemptLimitStatus.Allowed);
-
-        public Task<Roamly.Common.Security.LoginAttemptStartResult> BeginAccountAsync(
-            Guid identityUserId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new Roamly.Common.Security.LoginAttemptStartResult(
-                Roamly.Common.Security.LoginAttemptLimitStatus.Unavailable));
-
-        public Task<Roamly.Common.Security.LoginAttemptStartResult> BeginUnknownAccountAsync(
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new Roamly.Common.Security.LoginAttemptStartResult(
-                Roamly.Common.Security.LoginAttemptLimitStatus.Unavailable));
+            controlledTestIpAddress
+                ?? (environmentName == Environments.Production ? null : IPAddress.Parse("198.18.0.10")));
     }
 
     private sealed class IdentityUserLookupTracker : DbCommandInterceptor

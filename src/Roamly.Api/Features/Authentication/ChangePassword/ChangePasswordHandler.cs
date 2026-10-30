@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Roamly.Api.Common.Http;
+using Roamly.Api.Common.Security;
 using Roamly.Common;
 using Roamly.Infrastructure.Identity;
 
@@ -10,19 +11,30 @@ internal sealed class ChangePasswordHandler
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ICurrentUser _currentUser;
+    private readonly IPerAccountRateLimiter _rateLimiter;
 
-    public ChangePasswordHandler(UserManager<ApplicationUser> userManager, ICurrentUser currentUser)
+    public ChangePasswordHandler(
+        UserManager<ApplicationUser> userManager,
+        ICurrentUser currentUser,
+        IPerAccountRateLimiter rateLimiter)
     {
         ArgumentNullException.ThrowIfNull(userManager);
         ArgumentNullException.ThrowIfNull(currentUser);
+        ArgumentNullException.ThrowIfNull(rateLimiter);
 
         _userManager = userManager;
         _currentUser = currentUser;
+        _rateLimiter = rateLimiter;
     }
 
     public async Task<ChangePasswordResult> HandleAsync(ChangePasswordRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (!_rateLimiter.TryAcquire($"password-change:{_currentUser.Id:D}"))
+        {
+            return new ChangePasswordResult(ChangePasswordOutcome.TooManyAttempts, []);
+        }
 
         var user = await _userManager.FindByIdAsync(_currentUser.Id.ToString()).ConfigureAwait(false);
         if (user is null)
@@ -94,6 +106,7 @@ internal enum ChangePasswordOutcome
     InvalidCurrentPassword,
     PasswordRejected,
     AccountNotFound,
+    TooManyAttempts,
     UpdateFailed,
 }
 

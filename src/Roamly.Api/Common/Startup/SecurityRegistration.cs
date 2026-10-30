@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -74,9 +74,8 @@ public static class SecurityRegistration
             stampOptions.ValidationInterval = TimeSpan.FromMinutes(5);
             stampOptions.OnRefreshingPrincipal = refresh =>
             {
-                var currentPrincipal = refresh.CurrentPrincipal;
-                var newPrincipal = refresh.NewPrincipal;
-                if (currentPrincipal is not null && newPrincipal?.Identity is ClaimsIdentity newIdentity)
+                if (refresh.CurrentPrincipal is { } currentPrincipal
+                    && refresh.NewPrincipal?.Identity is ClaimsIdentity newIdentity)
                 {
                     CopySessionClaims(currentPrincipal, newIdentity, AccountSessionClaims.ModeClaimType);
                     CopySessionClaims(currentPrincipal, newIdentity, PasswordAuthenticationClaims.AuthenticatedAtUtc);
@@ -131,15 +130,17 @@ public static class SecurityRegistration
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/problem+json";
 
-        var problem = ProblemFactory.Create(context, statusCode, title, type);
         return JsonSerializer.SerializeAsync(
             context.Response.Body,
-            problem,
+            ProblemFactory.Create(context, statusCode, title, type),
             JsonSerializerOptions.Web,
             context.RequestAborted);
     }
 
-    private static void CopySessionClaims(ClaimsPrincipal currentPrincipal, ClaimsIdentity refreshedIdentity, string claimType)
+    private static void CopySessionClaims(
+        ClaimsPrincipal currentPrincipal,
+        ClaimsIdentity refreshedIdentity,
+        string claimType)
     {
         foreach (var claim in refreshedIdentity.FindAll(claimType).ToArray())
         {

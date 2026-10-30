@@ -13,7 +13,7 @@ public sealed class DataProtectionKeyPersistenceTests(SqlServerFixture sqlServer
     [Fact]
     public async Task Protected_payload_survives_api_host_recreation_using_the_database_key_ring()
     {
-        var migrated = await sqlServer.Phase1MigratedAsync();
+        var migrated = await sqlServer.ApplicationMigratedAsync();
         Assert.Null(migrated.Failure);
         var cancellationToken = TestContext.Current.CancellationToken;
         await migrated.Lease.ResetAsync(cancellationToken);

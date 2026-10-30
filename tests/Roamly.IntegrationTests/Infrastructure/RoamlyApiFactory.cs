@@ -1,12 +1,12 @@
-using Microsoft.Extensions.Hosting;
+using System.Net;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using System.Security.Cryptography;
-using System.Net;
+using Microsoft.Extensions.Hosting;
 using Roamly.Api.Common.Security;
 
 namespace Roamly.IntegrationTests.Infrastructure;
@@ -21,17 +21,19 @@ public sealed class RoamlyApiFactory(
     bool useAzureBlobJournalImageStorage = false,
     bool azureBlobAccountConfigurationVerified = false) : WebApplicationFactory<Program>
 {
-    private static readonly string TestHmacSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-    private readonly IPAddress _testIpAddress = controlledTestIpAddress ?? CreateIsolatedTestIpAddress();
+    private static readonly object EnvironmentVariableLock = new();
+    private static readonly string TestHmacSecret =
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+    private readonly IPAddress? _testIpAddress = controlledTestIpAddress
+        ?? (environmentName is "Development" or "Testing" ? CreateTestIpAddress() : null);
 
     /// <inheritdoc />
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(environmentName);
-
         builder.ConfigureTestServices(services =>
         {
-            if (environmentName == "Testing" || environmentName == Environments.Development)
+            if (_testIpAddress is not null)
             {
                 services.RemoveAll<ILoginClientIpAddressProvider>();
                 services.AddSingleton<ILoginClientIpAddressProvider>(
@@ -47,11 +49,7 @@ public sealed class RoamlyApiFactory(
     {
         builder.ConfigureHostConfiguration(configuration =>
         {
-            var settings = new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Roamly"] = connectionString,
-                ["RateLimiting:Login:HmacSecret"] = TestHmacSecret,
-            };
+            var settings = new Dictionary<string, string?>();
             if (journalImagesAzuriteConnectionString is not null)
             {
                 settings["JournalImages:Provider"] = "Azurite";
@@ -71,10 +69,29 @@ public sealed class RoamlyApiFactory(
             configuration.AddInMemoryCollection(settings);
         });
 
-        return base.CreateHost(builder);
+        lock (EnvironmentVariableLock)
+        {
+            const string connectionStringVariable = "ConnectionStrings__Roamly";
+            const string hmacSecretVariable = "RateLimiting__Login__HmacSecret";
+            var previousConnectionString = Environment.GetEnvironmentVariable(connectionStringVariable);
+            var previousHmacSecret = Environment.GetEnvironmentVariable(hmacSecretVariable);
+
+            try
+            {
+                // Minimal hosting runs Program while the factory creates its deferred host.
+                Environment.SetEnvironmentVariable(connectionStringVariable, connectionString);
+                Environment.SetEnvironmentVariable(hmacSecretVariable, TestHmacSecret);
+                return base.CreateHost(builder);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(connectionStringVariable, previousConnectionString);
+                Environment.SetEnvironmentVariable(hmacSecretVariable, previousHmacSecret);
+            }
+        }
     }
 
-    private static IPAddress CreateIsolatedTestIpAddress()
+    private static IPAddress CreateTestIpAddress()
     {
         var address = RandomNumberGenerator.GetBytes(4);
         address[0] = 198;
