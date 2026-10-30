@@ -15,7 +15,8 @@ internal static class BootstrapMigrationHistory
         "20261009131921_AddTripRouteEstimates",
         "20261021105543_AddTripFuelPrice",
         "20261021125327_EnforceTripFuelPricePair",
-        "20261022145640_RequirePasswordChangeForProvisionedUsers"
+        "20261022145640_RequirePasswordChangeForProvisionedUsers",
+        "20261028134346_AddCamperManualSpecifications"
     ]);
 
     internal static MigrationHistoryDifference Compare(

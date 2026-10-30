@@ -1,21 +1,19 @@
-# Bozze locali dei workflow OIDC
+# Workflow OIDC di release
 
-**Non sono workflow GitHub Actions attivi.** `release.yml` è una bozza locale in
-questa directory, fuori da `.github/workflows/`: GitHub Actions non la rileva e
-non può eseguirla. Non si attiva su push, PR, schedule o dispatch e non esegue
-autenticazione, provisioning, build o deployment finché resta qui.
+Il workflow eseguibile è `.github/workflows/release.yml`; `release.yml` in
+questa directory ne è la copia di revisione e deve restare sincronizzata. Il
+candidato locale non è stato eseguito né pubblicato sul branch protetto
+`main`. La presenza del file non sostituisce le approvazioni GitHub richieste
+per la pull request e per ciascun job protetto.
 
-La creazione dei workflow eseguibili resta bloccata: i gate di configurazione e
-verifica HIGH ancora aperti elencati in
+I gate di configurazione e verifica HIGH elencati in
 [`../../docs/architecture/DEVOPS.md`](../../docs/architecture/DEVOPS.md), nella
-sezione "Stato operativo: preparazione locale release", restano aperti. La
-decisione di preparare questa bozza non approva la sua attivazione. Non copiare
-né spostare file in `.github/workflows/` prima di aver chiuso e approvato tutti
-i gate.
+sezione "Stato operativo: preparazione locale release", devono essere chiusi
+prima del dispatch.
 
-## Bozza `release.yml`
+## Workflow `release.yml`
 
-La bozza è dispatch-only, rifiuta esplicitamente qualsiasi ref diverso da
+Il workflow è dispatch-only, rifiuta esplicitamente qualsiasi ref diverso da
 `refs/heads/main` e offre le modalità `release` (predefinita) e `rollback`.
 Entrambe richiedono due approvazioni dell'Environment protetto `azure-release`:
 la prima prima della preparazione/what-if, la seconda dopo la revisione del
@@ -62,10 +60,13 @@ esistente, senza leggere secret o stamparne valori.
 Se FQDN, asserzione della revisione o probe falliscono, il workflow si chiude
 senza annullare un deployment ARM eventualmente già applicato. Verificare lo
 stato e procedere con fix-forward o recovery manuale; nessun rollback
-applicativo o SQL è automatico. Al primo rilascio non c'è un digest precedente
-noto come sano.
+applicativo o SQL è automatico. La Container App ha già una revisione live
+attiva: prima di un rilascio, acquisire il digest dell'immagine corrente e
+verificarne salute e disponibilità in ACR prima di usarlo come candidato di
+rollback. Se non è possibile confermarli, fermarsi e procedere con fix-forward
+o con una decisione umana.
 
-La bozza non è stata eseguita. Il deployment è pinning al digest OCI
+Il workflow non è stato eseguito. Il deployment è pinning al digest OCI
 immutabile; il tag derivato da commit, run ID e tentativo è solo un alias ACR,
 non è bloccato e non viene usato per il deploy. L'utente ha approvato questa
 strategia come alternativa alla lock policy: riduce le collisioni accidentali,
@@ -76,13 +77,15 @@ registry-level, andranno valutati separatamente i lock di tag e manifest e i
 permessi necessari. Il rollback applicativo manuale tramite dispatch protetto
 è la strategia scelta: selezionare il digest dell'ultima release sana e
 sottoporlo agli stessi due gate e al confronto what-if. Al primo deploy non
-esiste un digest precedente noto come sano; in caso di problema, fermarsi e
-procedere con fix-forward o attendere una decisione umana. Questa modalità non
-esegue né annulla migration SQL.
+esiste ancora una release del workflow da cui derivare automaticamente un
+digest; usare la revisione live corrente solo dopo averne verificato salute e
+disponibilità in ACR. In caso contrario, fermarsi e procedere con fix-forward
+o attendere una decisione umana. Questa modalità non esegue né annulla
+migration SQL.
 
 ## Pin immutabili delle GitHub Actions
 
-La bozza usa SHA completi di commit, non tag mutabili:
+Il workflow usa SHA completi di commit, non tag mutabili:
 
 | Action | Release upstream | SHA di commit | Ref verificato |
 | --- | --- | --- | --- |
@@ -93,7 +96,7 @@ Le SHA sono state risolte dalle tag ufficiali con `git ls-remote --tags`:
 `actions/checkout` espone `v6.1.0` direttamente come commit; `azure/login`
 usa una tag annotata, quindi è stata usata la SHA di commit peeled da
 `refs/tags/v2.3.1^{}`, non la SHA dell'oggetto tag. Questi pin non chiudono i
-gate di configurazione o verifica né autorizzano a copiare o attivare la bozza.
+gate di configurazione o verifica né autorizzano un dispatch o un deployment.
 
 ## Separazione da mantenere
 
@@ -237,18 +240,18 @@ Riferimenti Microsoft: [Container Apps secrets e `listSecrets`](https://learn.mi
   digest noto come sano, con gli stessi gate e confronto what-if. Al primo
   deploy non esiste un digest precedente; usare fix-forward o fermarsi per
   decisione umana. Nessun rollback o restore SQL è autorizzato da questa scelta.
-- Riverificare lo stato live delle migration prima della release. Il registro
-  operativo indica 14 migration applicate il 2026-10-26, ma tale stato non è
-  stato riverificato in questo passaggio; il workflow non applica migration.
+- La cronologia live `__EFMigrationsHistory` è stata verificata in sola lettura
+  il 2026-10-30: risultano applicate le 15 migration fino a
+  `20261028134346_AddCamperManualSpecifications`. Nessuna migration è stata
+  applicata in questa sessione; il workflow non applica migration.
 
-Alla chiusura dei gate, i workflow andranno creati separatamente e solo con
-`workflow_dispatch`; nessun trigger `push`, `pull_request` o `schedule` dovrà
-pubblicare. Ogni release richiederà un'approvazione prima della preparazione e
-una seconda approvazione dopo aver esaminato il what-if, prima del deploy, e
-userà un alias univoco derivato da commit/run/tentativo più il digest OCI come
-identità effettiva dell'immagine. La modalità `rollback` salterà build/push e
-richiederà un digest `sha256` precedente, con gli stessi gate di approvazione e
-what-if. Prima
-dell'attivazione, rivedere la bozza completa e chiudere tutti i gate sopra e in
-`DEVOPS.md`; copiarla sotto `.github/workflows/` costituisce un cambiamento
-CI/CD HIGH separato, non autorizzato da questa preparazione.
+Il workflow di release è già nel working tree sotto `.github/workflows/` e ha
+una copia di revisione in questa directory; il candidato non è stato ancora
+pubblicato su `main` né eseguito. Usa solo `workflow_dispatch`, senza trigger
+`push`, `pull_request` o `schedule`. Ogni release richiede un'approvazione
+prima della preparazione e una seconda approvazione dopo l'esame del what-if,
+prima del deploy; usa un alias univoco derivato da commit/run/tentativo e il
+digest OCI come identità effettiva dell'immagine. La modalità `rollback` salta
+build/push e richiede un digest `sha256` precedente, con gli stessi gate di
+approvazione e what-if. Prima del dispatch, chiudere tutti i gate sopra e in
+`DEVOPS.md`.

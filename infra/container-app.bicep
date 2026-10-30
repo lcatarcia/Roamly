@@ -15,6 +15,9 @@ param containerAppsEnvironmentResourceId string
 @description('Resource ID della managed identity runtime gia esistente.')
 param runtimeIdentityResourceId string
 
+@description('Client ID della managed identity runtime, usato da Azure.Identity per selezionarla.')
+param runtimeIdentityClientId string
+
 @description('Nome DNS del registry ACR Basic.')
 param registryServer string
 
@@ -123,6 +126,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'JournalImages__Azure__AccountConfigurationVerified'
               value: string(journalBlobAccountConfigurationVerified)
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: runtimeIdentityClientId
             }
           ]
           probes: [

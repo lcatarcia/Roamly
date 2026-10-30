@@ -12,7 +12,7 @@
 
 Il template è a scope resource group e presuppone che `rg-roamly-dev` esista già. Il nome del gruppo non cambia il runtime previsto: questo è l'unico ambiente del servizio reale, quindi l'applicazione dovrà usare `ASPNETCORE_ENVIRONMENT=Production`.
 
-L'identità runtime non riceve accesso a livello di vault: così non può leggere la password SQL amministrativa. I due secret runtime sono stati creati il 2026-10-27; assegnare `Key Vault Secrets User` alla managed identity solo sui singoli scope `roamly-sql-connection` e `roamly-login-hmac`. Il runtime usa il principal SQL distinto `roamly_runtime` con il ruolo/grant minimo preparato dal bootstrap.
+L'identità runtime non riceve accesso a livello di vault: così non può leggere la password SQL amministrativa. I due secret runtime (`roamly-sql-connection` e `roamly-login-hmac`) sono stati creati il 2026-10-27; `Key Vault Secrets User` è assegnato alla managed identity sui soli scope dei rispettivi secret. Il runtime usa il principal SQL distinto `roamly_runtime`; principal e relativi grant sono stati creati e verificati dal bootstrap.
 
 ## Accesso amministrativo umano al Key Vault
 
@@ -25,7 +25,9 @@ versionato in [`tools/runtime-bootstrap`](tools/runtime-bootstrap/README.md).
 Non fa parte dei workflow GitHub Actions e non applica migration. Il bridge
 semplificato è stato eseguito sulle risorse Azure il 2026-10-27: il principal
 `roamly_runtime`, i relativi grant e i due secret runtime sono stati creati e
-verificati. La regola firewall temporanea `/32` usata per il collegamento SQL
+verificati. Entrambi i riferimenti Key Vault della Container App e l'accesso
+della managed identity ai rispettivi secret scope sono configurati. La regola
+firewall temporanea `/32` usata per il collegamento SQL
 è stata rimossa e verificata assente. Ogni operazione che modifica SQL o Key
 Vault richiede una conferma esplicita; un manifest locale di recovery blocca
 nuovi avvii se lo stato SQL o dei secret può essere parziale. La password
@@ -66,7 +68,7 @@ Il template crea una Storage Account `StorageV2` con replica LRS, tier Hot, HTTP
 
 L'identità runtime riceve `Storage Blob Delegator` allo scope dell'account, necessario per generare User Delegation SAS, e `Storage Blob Data Contributor` soltanto sul container. Non assegnare ruoli Storage all'utente finale o al workflow OIDC. Dopo il deployment verificare i valori effettivi dell'account e del Blob service; solo allora impostare `JournalImages__Azure__AccountConfigurationVerified=true` nell'eventuale runtime.
 
-Il primo provisioning non crea Container App o scheduler e non applica migration SQL. L'ACR Basic `acrroamlywse7wit7fzpja` è stato creato in Italy North il 2026-10-27 con admin user disabilitato; `AcrPull` è assegnato alla managed identity runtime sul solo scope del registry. Non sono ancora state pubblicate immagini né create Container App o workflow.
+Il template di provisioning non crea Container App o scheduler e non applica migration SQL. L'ACR Basic `acrroamlywse7wit7fzpja` è stato creato in Italy North il 2026-10-27 con admin user disabilitato; `AcrPull` è assegnato alla managed identity runtime sul solo scope del registry. La Container App `ca-roamly-prod` è **Running** sull'ambiente `cae-roamly-live`, con revisione pronta `ca-roamly-prod--0000007`. **Storico distinto, verificato tramite lettura read-only dei metadati GitHub Actions:** due run del workflow legacy `Release Azure` sono terminati con successo in `workflow_dispatch`, ai commit `686ed34` (2026-10-29 08:58 UTC) e `b31e3a8` (2026-10-29 10:53 UTC); ciascuno ha eseguito un job con build/push Docker, deploy Bicep e controlli `/health/live` e `/health/ready`. Questi run non sono esecuzioni del candidato attuale. Il candidato manuale in `.github/workflows/release.yml` è ancora locale e non eseguito; in questa sessione non sono stati effettuati nuovi dispatch, pubblicate nuove immagini o eseguiti nuovi deployment.
 
 ## Preparazione Container App e release
 
@@ -74,14 +76,16 @@ Il primo provisioning non crea Container App o scheduler e non applica migration
 
 Il template mappa la connection string completa del contained SQL user in `ConnectionStrings__Roamly` e la chiave HMAC del login in un riferimento Key Vault separato. L'utente ha approvato che il secret SQL contenga la connection string completa; l'app non costruisce una stringa a partire dalla sola password. Il workflow non deve poter leggere quei secret.
 
-La app registration OIDC `roamly-github-oidc` e il trust per l'Environment `azure-release` sono stati creati e verificati il 2026-10-27; il bootstrap resta manuale e il trust `azure-bootstrap` è stato rimosso prima di assegnare ruoli. Sono stati assegnati al principal release il custom role deployments sul RG, il custom role ACA temporaneamente sul RG, `AcrPush` solo sull'ACR e `Managed Identity Operator` solo sulla managed identity runtime. Le variabili GitHub non segrete per OIDC sono configurate in `azure-release`; i workflow in `.github/workflows/` non sono ancora presenti. Vedere `infra/workflows/README.md` e la sezione "Stato operativo: preparazione locale release" in `docs/architecture/DEVOPS.md` per i gate HIGH aperti. Non eseguire questo template, `az deployment`, comandi Container Apps o workflow finché non sono chiusi i gate, verificati gli ID reali e approvato il piano di release. Nessuna migration viene applicata automaticamente all'avvio dell'API.
+Il template passa inoltre il client ID della managed identity user-assigned runtime come `AZURE_CLIENT_ID`: `DefaultAzureCredential` usa questo valore per selezionare l'identità associata alla Container App durante l'accesso a Blob Storage. I workflow risolvono il client ID dall'identità esistente e si fermano se il valore non è disponibile.
+
+La app registration OIDC `roamly-github-oidc`, l'Environment `azure-release` e le protezioni sono stati configurati e verificati; per l'Environment sono presenti le federated credential `repo:lcatarcia/Roamly:environment:azure-release` e `repo:lcatarcia@70380170/Roamly@1387274893:environment:azure-release`. Il bootstrap resta manuale e il trust `azure-bootstrap` è stato rimosso. Sono configurati per il principal release il custom role deployments sul RG, il custom role ACA sul RG, `AcrPush` solo sull'ACR e `Managed Identity Operator` solo sulla managed identity runtime. **Il ruolo ACA a scope RG è un blocker prima del dispatch:** `ca-roamly-prod` esiste già, mentre il ruolo consente operazioni ampie sulle Container Apps nel gruppo e include wildcard; restringere lo scope ai permessi necessari e riverificare l'accesso effettivo, incluso il diniego di `listSecrets`. Non qualificarlo come set di permessi minimo. Le variabili GitHub non segrete per OIDC sono configurate in `azure-release`; il candidato workflow è locale e non è stato eseguito, non ha pubblicato una nuova immagine né eseguito un deployment. Vedere `infra/workflows/README.md` e la sezione "Stato operativo: preparazione locale release" in `docs/architecture/DEVOPS.md` per i gate ancora aperti. Non eseguire questo template, `az deployment`, comandi Container Apps o workflow finché non sono chiusi i gate, verificati gli ID reali e approvato il piano di release. Nessuna migration viene applicata automaticamente all'avvio dell'API.
 
 ## Passi operativi successivi
 
 1. Le impostazioni firewall SQL, le ACL di rete Key Vault e la configurazione effettiva Blob sono state verificate il 2026-10-20; ripetere la verifica dopo ogni modifica al template o alle risorse.
-2. ✅ Principal SQL `roamly_runtime` e grant runtime creati e verificati il 2026-10-27; non usare il login amministrativo nell'applicazione.
-3. ✅ `Key Vault Secrets User` assegnato il 2026-10-27 alla managed identity runtime solo sui due scope secret runtime; nessun accesso al secret SQL amministrativo.
-4. Il registro operativo riporta tutte le 14 migration applicate il 2026-10-26; la cronologia live non è stata riverificata in questa sessione. Verificati: backup LRS, TDE attivo, retention short-term 7 giorni e LTR non configurato. Budget alert da 10 EUR/mese verificato sul RG: 80% Actual e 100% Forecasted, senza cap; gli altri alert restano da configurare.
-5. ✅ ACR Basic creato e `AcrPull` assegnato il 2026-10-27; OIDC release, variabili GitHub non secret e ruoli minimi sono configurati. Restano workflow, immagine e Container App; dopo il primo deploy va ristretto lo scope ACA dalla RG alla singola app.
+2. ✅ Principal SQL `roamly_runtime` e relativi grant runtime creati e verificati il 2026-10-27; non usare il login amministrativo nell'applicazione.
+3. ✅ `Key Vault Secrets User` assegnato il 2026-10-27 alla managed identity runtime solo sugli scope dei secret `roamly-sql-connection` e `roamly-login-hmac`; nessun accesso al secret SQL amministrativo.
+4. Il registro live `__EFMigrationsHistory` è stato verificato in sola lettura il 2026-10-30: risultano applicate tutte le 15 migration fino a `20261028134346_AddCamperManualSpecifications`; nessuna migration è stata applicata in questa sessione. Verificati: backup LRS, TDE attivo, retention short-term 7 giorni e LTR non configurato. Budget alert da 10 EUR/mese verificato sul RG: 80% Actual e 100% Forecasted, senza cap; gli altri alert restano da configurare.
+5. ✅ ACR Basic creato e `AcrPull` assegnato il 2026-10-27; OIDC release, variabili GitHub non secret e assegnazioni RBAC sono configurati. Il candidato workflow è locale e non è stato eseguito; il ruolo ACA sul RG è un blocker pre-dispatch da restringere perché la Container App esiste già e il ruolo include azioni ampie e wildcard.
 
 Non inserire password, connection string, client secret o valori di segreti nei parametri o nel repository. Il template non configura l'accesso OIDC del workflow GitHub e non legge i valori dei segreti da Key Vault.

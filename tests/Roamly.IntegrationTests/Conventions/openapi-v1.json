@@ -5479,6 +5479,36 @@
         },
         "description": "Bozza strutturata estratta da un manuale PDF o da una scheda tecnica esterna."
       },
+      "CamperManualViewImagesDto": {
+        "type": "object",
+        "properties": {
+          "side": {
+            "maxLength": 600000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "front": {
+            "maxLength": 600000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "top": {
+            "maxLength": 600000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Immagini personalizzate opzionali (data URL o URL HTTP/HTTPS) per le tre viste del camper."
+      },
       "CamperProfileResponse": {
         "required": [
           "id",
@@ -5663,6 +5693,16 @@
             "items": {
               "$ref": "#/components/schemas/CamperManualMeasurementDto"
             }
+          },
+          "manualViewImages": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CamperManualViewImagesDto"
+              }
+            ]
           }
         },
         "description": "Profilo tecnico completo del camper, senza esporre il token di persistenza."
@@ -7894,6 +7934,16 @@
             "items": {
               "$ref": "#/components/schemas/CamperManualMeasurementDto"
             }
+          },
+          "manualViewImages": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CamperManualViewImagesDto"
+              }
+            ]
           }
         },
         "description": "Corpo completo di \u0060PUT /api/v1/campers/{camperId}\u0060."
