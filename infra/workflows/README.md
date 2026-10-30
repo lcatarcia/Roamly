@@ -2,10 +2,13 @@
 
 Il workflow eseguibile è `.github/workflows/release.yml`; `release.yml` in
 questa directory ne è la copia di revisione e deve restare sincronizzata. Il
-preflight aggiunto localmente non è ancora stato pubblicato tramite PR/CI
-né eseguito sul branch protetto `main`. I run riusciti del workflow legacy
-non validano questo candidato. La presenza del file non sostituisce i check
-della pull request e le approvazioni per ciascun job protetto.
+preflight è stato pubblicato tramite la PR #4 e superato dalla run
+`41098324048` del 2026-10-30, che ha anche costruito e pubblicato l'immagine.
+La run si è fermata al parsing del what-if prima del deploy: il formato testo
+predefinito della CLI non era JSON. La correzione locale forza
+`--no-pretty-print` in entrambe le anteprime e deve ancora essere pubblicata.
+La presenza del file non sostituisce i check della pull request e le
+approvazioni per ciascun job protetto.
 
 I gate di configurazione e verifica HIGH elencati in
 [`../../docs/architecture/DEVOPS.md`](../../docs/architecture/DEVOPS.md), nella
@@ -43,6 +46,14 @@ richiede `Microsoft.Authorization/permissions/read` sulla app e non prova il
 diniego di operazioni sensibili. L'inventario dei ruoli effettivi resta una
 verifica separata dell'operatore, descritta sotto. Le due approvazioni,
 il guard dispatch/main, il rollback e il confronto what-if rimangono invariati.
+
+Entrambe le invocazioni what-if usano `--no-pretty-print --output json`:
+il solo `--output json` non disabilita il renderer testuale di questo comando.
+Il JSON resta validato fail-closed con `jq`; non vengono rimossi prefissi,
+ignorati errori o introdotti fallback. Il job verifica questo contratto prima
+del login con `node --test infra/workflows/tests/release-what-if.test.mjs`.
+Lo stesso comando esegue la regressione offline e verifica la parita' delle
+copie. Riferimento: [output JSON del what-if](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-what-if#what-if-commands).
 
 Il job di preparazione esegue il what-if con il
 digest OCI restituito dal push e ne pubblica il risultato nel riepilogo della
