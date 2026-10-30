@@ -1,0 +1,14 @@
+{
+  "Name": "Roamly - release ARM deployments",
+  "IsCustom": true,
+  "Description": "Consente al principal OIDC release di leggere e inviare deployment ARM/Bicep al resource group. Non concede da solo permessi di scrittura sulle risorse: le operazioni effettive dipendono dagli altri ruoli assegnati.",
+  "Actions": [
+    "Microsoft.Resources/deployments/*"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/5b24089b-bf06-44ab-9486-c4d9cd326d80/resourceGroups/rg-roamly-dev"
+  ]
+}

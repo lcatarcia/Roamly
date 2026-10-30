@@ -5,10 +5,10 @@ using Roamly.Domain.Entities;
 namespace Roamly.Infrastructure.Persistence;
 
 /// <summary>
-/// Contesto di sola verifica: costruisce <b>tutte e 14</b> le entita', comprese quelle a tabella
-/// rimandata. Esiste perche' entrambi i casi 1785 noti coinvolgono entita' future: senza questo
-/// modello la topologia di CONTEXT.md §5.2 resterebbe una dimostrazione analitica (DATA.md §2.4).
-/// <b>Non genera migration.</b>
+/// Contesto di sola verifica: costruisce <b>tutte le entita'</b> di dominio, comprese quelle
+/// a tabella rimandata, oltre ai tipi infrastrutturali. Esiste perche' entrambi i casi 1785 noti
+/// coinvolgono entita' future: senza questo modello la topologia di CONTEXT.md §5.2 resterebbe una
+/// dimostrazione analitica (DATA.md §2.4). <b>Non genera migration.</b>
 /// </summary>
 public class FullSchemaDbContext : RoamlyDbContextBase
 {
@@ -38,7 +38,7 @@ public class FullSchemaDbContext : RoamlyDbContextBase
     /// <summary>Ricevute di cancellazione, non owned.</summary>
     public DbSet<ErasureReceipt> ErasureReceipts => Set<ErasureReceipt>();
 
-    /// <summary>Contatori infrastrutturali condivisi per il rate limit login.</summary>
+    /// <summary>Contatori infrastrutturali condivisi per il rate limit login, non owned.</summary>
     public DbSet<LoginAttemptCounter> LoginAttemptCounters => Set<LoginAttemptCounter>();
 
     /// <summary>Viaggi.</summary>
@@ -55,6 +55,13 @@ public class FullSchemaDbContext : RoamlyDbContextBase
 
     /// <summary>Note di viaggio.</summary>
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+
+    /// <summary>Immagini del Journal.</summary>
+    public DbSet<JournalEntryAttachment> JournalEntryAttachments => Set<JournalEntryAttachment>();
+
+    /// <summary>Intenti persistenti di cancellazione dei blob Journal.</summary>
+    public DbSet<JournalAttachmentDeletionOutboxMessage> JournalAttachmentDeletionOutbox =>
+        Set<JournalAttachmentDeletionOutboxMessage>();
 
     /// <summary>Spese.</summary>
     public DbSet<Expense> Expenses => Set<Expense>();

@@ -23,6 +23,9 @@ public sealed class CamperConfiguration(RoamlyDbContextBase context) : IEntityTy
         builder.Property(e => e.VehicleKind).HasTinyint().IsRequired();
         builder.Property(e => e.FuelKind).HasTinyint();
         builder.Property(e => e.AverageConsumptionLPer100Km).HasDecimal(4, 1);
+        builder.Property(e => e.ManualSourceName).HasNvarchar(200);
+        builder.Property(e => e.ManualSourceUrl).HasNvarchar(500);
+        builder.Property(e => e.ManualMeasurementsJson).HasNvarcharMax();
         builder.Property(e => e.RowVersion).IsRowVersion();
 
         // Tre complex type sulla stessa tabella: stessi campi di una CamperSpecification 1:1,

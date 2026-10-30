@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -15,7 +16,10 @@ public sealed class RoamlyApiFactory(
     string connectionString,
     string environmentName = "Testing",
     Action<IServiceCollection>? configureTestServices = null,
-    IPAddress? controlledTestIpAddress = null) : WebApplicationFactory<Program>
+    IPAddress? controlledTestIpAddress = null,
+    string? journalImagesAzuriteConnectionString = null,
+    bool useAzureBlobJournalImageStorage = false,
+    bool azureBlobAccountConfigurationVerified = false) : WebApplicationFactory<Program>
 {
     private static readonly object EnvironmentVariableLock = new();
     private static readonly string TestHmacSecret =
@@ -43,6 +47,28 @@ public sealed class RoamlyApiFactory(
     /// <inheritdoc />
     protected override IHost CreateHost(IHostBuilder builder)
     {
+        builder.ConfigureHostConfiguration(configuration =>
+        {
+            var settings = new Dictionary<string, string?>();
+            if (journalImagesAzuriteConnectionString is not null)
+            {
+                settings["JournalImages:Provider"] = "Azurite";
+                settings["JournalImages:Azurite:ConnectionString"] = journalImagesAzuriteConnectionString;
+            }
+
+            if (useAzureBlobJournalImageStorage)
+            {
+                settings["JournalImages:Provider"] = "AzureBlob";
+                settings["JournalImages:Azure:ServiceUri"] =
+                    "https://storoamlywse7wit7fzpja.blob.core.windows.net";
+                settings["JournalImages:Azure:ContainerName"] = "roamly-journal-images";
+                settings["JournalImages:Azure:AccountConfigurationVerified"] =
+                    azureBlobAccountConfigurationVerified.ToString();
+            }
+
+            configuration.AddInMemoryCollection(settings);
+        });
+
         lock (EnvironmentVariableLock)
         {
             const string connectionStringVariable = "ConnectionStrings__Roamly";

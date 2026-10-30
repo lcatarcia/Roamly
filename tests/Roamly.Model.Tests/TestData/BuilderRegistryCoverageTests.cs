@@ -39,9 +39,9 @@ public sealed class BuilderRegistryCoverageTests(ModelFixture model)
 
     /// <summary>
     /// La direzione opposta, con un messaggio che distingue i due casi. Un builder per un'entita'
-    /// <b>non owned</b> — <c>ErasureReceipt</c> e' l'unico caso possibile oggi — non e' "un builder
-    /// di troppo": e' un'entita' che per costruzione non ha <c>OwnerId</c> ne' FK verso
-    /// <c>AspNetUsers</c> (R10, ADR-0004), quindi sta fuori dal registro. Senza questa distinzione
+    /// <b>non owned</b> — per esempio <c>ErasureReceipt</c> o il contatore infrastrutturale del
+    /// rate limit login — non e' "un builder di troppo": e' un'entita' che per costruzione non ha
+    /// <c>OwnerId</c> ne' FK verso <c>AspNetUsers</c>, quindi sta fuori dal registro. Senza questa distinzione
     /// R33 fallirebbe <b>per il motivo sbagliato</b>, e si rimedierebbe nel modo sbagliato.
     /// </summary>
     [Fact]
@@ -61,7 +61,7 @@ public sealed class BuilderRegistryCoverageTests(ModelFixture model)
             "Builder registrati per tipi che non sono entita' owned: " + string.Join(", ", strangers)
             + ". Un tipo senza " + nameof(IOwnedResource) + " non ha OwnerId e non e' toccato da R9: "
             + "il suo builder va marcato con [OutsideTheRegistry], non aggiunto al registro. "
-            + "Caso previsto: ErasureReceipt (R10, ADR-0004).");
+            + "Casi previsti: ErasureReceipt (R10, ADR-0004) e LoginAttemptCounter (SECURITY.md §1).");
     }
 
     /// <summary>
@@ -114,6 +114,22 @@ public sealed class BuilderRegistryCoverageTests(ModelFixture model)
             + ". Conseguenza: il popolamento L1 inserirebbe un figlio prima del padre e la FK "
             + "composita lo rifiuterebbe. Ordine calcolato:\n"
             + BuilderRegistry.DescribeOrder(model.FullSchemaModel));
+    }
+
+    [Fact]
+    public void Runtime_builder_plan_contains_only_owned_types_present_in_that_model()
+    {
+        var expected = model.ApplicationRuntimeModel.GetEntityTypes()
+            .Where(entityType => typeof(IOwnedResource).IsAssignableFrom(entityType.ClrType))
+            .Select(entityType => entityType.ClrType)
+            .ToHashSet();
+
+        var actual = BuilderRegistry.InTopologicalOrder(model.ApplicationRuntimeModel)
+            .Select(builder => builder.EntityType)
+            .ToArray();
+
+        Assert.Equal(expected, actual.ToHashSet());
+        Assert.Equal(expected.Count, actual.Length);
     }
 
     private static string BuildUncoveredMessage(List<string> uncovered)

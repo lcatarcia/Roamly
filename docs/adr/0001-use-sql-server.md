@@ -113,11 +113,15 @@ Haversine assume una sfera e sbaglia fino a ~0,5% rispetto al modello ellissoida
 ### Positive
 
 - Nessun blocco alla scrittura di codice e di migration.
-- Migration semplici: finché vale questo ADR, **nessuna migration contiene SQL manuale**, quindi `dotnet ef migrations bundle` copre il 100% dei casi.
+- Migration di schema ordinarie generate da EF. Questo ADR non vieta SQL esplicito quando necessario per un'operazione di backfill.
 - Decisione #6 (test) non pregiudicata.
 - Test di distanza e raggio sono **unit test puri, senza database**: veloci.
 - Seed data di luoghi più semplici: coppie lat/lon, non geometrie.
 - Costo di inversione basso e unidirezionale.
+
+### Nota operativa (2026-10-26)
+
+La migration `RequirePasswordChangeForProvisionedUsers` usa `migrationBuilder.Sql` per marcare gli account provisionati già esistenti. Il backfill viene eseguito via `sys.sp_executesql`, così SQL Server compila il riferimento alla colonna dopo l'`ALTER TABLE` della stessa migration. Questa eccezione non modifica la decisione geografica dell'ADR; gli script idempotenti che includono SQL esplicito vanno comunque verificati su SQL Server reale.
 
 ### Negative — accettate consapevolmente
 

@@ -37,16 +37,6 @@ on:
   push:
     branches:
       - '**'
-    # Un commit di sola documentazione non puo' rompere build ne' test: i verificatori
-    # testuali (R30, R36) escludono docs/ per costruzione. In un repository che scrive
-    # molta documentazione e' la voce di spesa piu' facile da evitare.
-    # ⚠️ Da rivedere se un giorno questi job diventano controlli obbligatori su PR: un
-    # controllo "skipped" per paths-ignore blocca la PR a tempo indeterminato.
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '.github/agents/**'
-      - '.github/skills/**'
   workflow_dispatch:
 
 # Un push che ne supera un altro sullo stesso ref rende obsoleta l'esecuzione precedente.
@@ -69,6 +59,97 @@ env:
   CONFIGURATION: Release
 
 jobs:
+  # Il filtro vive a livello job, non sul trigger: i job di controllo risultano
+  # skipped/success per i push documentali e restano visibili come check richiesti.
+  # Per un push su un branch con PR confrontiamo l'intero diff PR, non solo l'ultimo
+  # push, cosi' un push documentale non nasconde codice non ancora verificato.
+  changes:
+    name: Rilevamento modifiche di codice
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run_ci: ${{ steps.filter.outputs.run_ci }}
+    steps:
+      - name: Checkout completo per il confronto dei commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rilevamento modifiche rilevanti
+        id: filter
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Le esecuzioni manuali sono sempre complete, senza consultare i path.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run_ci=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" != "push" ]]; then
+            echo "Unexpected event for CI: $EVENT_NAME" >&2
+            exit 1
+          fi
+
+          changed_files="$(mktemp)"
+          trap 'rm -f "$changed_files"' EXIT
+
+          if [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]]; then
+            # Il primo push non ha un commit precedente confrontabile: eseguiamo
+            # l'intera CI invece di rischiare di saltare modifiche non rilevate.
+            if [[ -z "$PUSH_BEFORE" || "$PUSH_BEFORE" =~ ^0+$ ]]; then
+              echo "run_ci=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git diff --name-only --no-renames "$PUSH_BEFORE" "$HEAD_SHA" > "$changed_files"
+          else
+            # Per una branch collegata a una PR, il suo diff completo rispetto alla
+            # base decide il filtro. Questo copre first-push e push solo documentali
+            # successivi a modifiche di codice ancora aperte nella PR.
+            pr_bases="$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls?per_page=100" \
+              --jq '.[] | select(.state == "open") | .base.sha')"
+            mapfile -t bases < <(printf '%s\n' "$pr_bases" | sed '/^$/d')
+
+            if (( ${#bases[@]} == 0 )); then
+              # Branch senza PR aperta: confronta col default branch; se il diff
+              # non e' calcolabile, il job fallisce senza fallback permissivi.
+              git fetch --no-tags origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+              git diff --name-only --no-renames "origin/$DEFAULT_BRANCH...$HEAD_SHA" > "$changed_files"
+            else
+              for base_sha in "${bases[@]}"; do
+                git fetch --no-tags origin "$base_sha"
+                git diff --name-only --no-renames "$base_sha...$HEAD_SHA" >> "$changed_files"
+              done
+            fi
+          fi
+
+          # Nessun path rilevato non e' una prova di docs-only: fail closed ed
+          # eseguiamo CI. I pattern mantengono le precedenti esclusioni documentali.
+          if [[ ! -s "$changed_files" ]]; then
+            echo "run_ci=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          has_code=false
+          while IFS= read -r path; do
+            case "$path" in
+              docs/*|*.md|.github/agents/*|.github/skills/*) ;;
+              *) has_code=true; break ;;
+            esac
+          done < "$changed_files"
+
+          echo "run_ci=$has_code" >> "$GITHUB_OUTPUT"
+
   # ---------------------------------------------------------------------------
   # L0 - il segnale rapido. Nessun Docker, nessun database.
   # 17 dei 25 verificatori di ADR-0009 non toccano alcun database (R31): tenerli
@@ -77,6 +158,8 @@ jobs:
   # ---------------------------------------------------------------------------
   backend-fast:
     name: Backend L0 - convenzioni e dominio, senza database
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -132,6 +215,8 @@ jobs:
   # ---------------------------------------------------------------------------
   backend-integration:
     name: Backend L1 - Testcontainers e SQL Server reale
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -165,6 +250,8 @@ jobs:
       # velocita', punto 2) lo vieta finche' non e' misurato, perche' ripristinare ~2,3 GB
       # dalla cache GHA puo' costare quanto il pull da registro.
       - name: Test L1 e L2 - Roamly.IntegrationTests
+        # Include R51: confronto HTTP di /openapi/v1.json con lo snapshot, nel test host
+        # containerizzato previsto dal fallback L2 di ADR-0005 §6.
         run: dotnet test --project tests/Roamly.IntegrationTests --configuration $CONFIGURATION --no-build
 
       # La fixture riversa le misure in TestResults/blocco4-tempi.txt perche' con
@@ -186,6 +273,8 @@ jobs:
   # ---------------------------------------------------------------------------
   frontend:
     name: Frontend L3 - lint, design e build
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_ci == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

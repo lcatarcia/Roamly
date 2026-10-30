@@ -11,8 +11,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Il workflow resta attivo per tutte le PR cosi' il check non scompare dai
+  # required checks. Questo job minimo classifica il diff; il browser E2E non viene
+  # avviato quando tutti i file modificati sono documentazione.
+  changes:
+    name: Rilevamento modifiche frontend
+    runs-on: ubuntu-latest
+    outputs:
+      run_e2e: ${{ steps.filter.outputs.run_e2e }}
+    steps:
+      - name: Checkout completo per il confronto della PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rilevamento modifiche rilevanti
+        id: filter
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$BASE_SHA" || -z "$HEAD_SHA" ]]; then
+            echo "The pull_request event is missing a base or head SHA." >&2
+            exit 1
+          fi
+
+          changed_files="$(mktemp)"
+          trap 'rm -f "$changed_files"' EXIT
+          git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" > "$changed_files"
+
+          # Un diff vuoto non e' una prova di docs-only: falliamo in modo chiuso
+          # eseguendo E2E, anziche' saltare il check.
+          if [[ ! -s "$changed_files" ]]; then
+            echo "run_e2e=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          has_code=false
+          while IFS= read -r path; do
+            case "$path" in
+              docs/*|*.md|.github/agents/*|.github/skills/*) ;;
+              *) has_code=true; break ;;
+            esac
+          done < "$changed_files"
+
+          echo "run_e2e=$has_code" >> "$GITHUB_OUTPUT"
+
   axe:
     name: Frontend E2E - axe sui due temi
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.run_e2e == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -39,3 +90,12 @@ jobs:
 
       - name: axe sui temi chiaro e scuro
         run: npm run design:axe
+
+      - name: Interazioni profilo camper ed equipaggiamento
+        run: npm run test:camper-flow
+
+      - name: Stima carburante nei viaggi
+        run: npm run test:fuel-estimate-flow
+
+      - name: Cambio password obbligatorio
+        run: npm run test:password-change-flow

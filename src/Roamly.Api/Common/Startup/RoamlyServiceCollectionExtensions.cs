@@ -21,10 +21,13 @@ public static class RoamlyServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IIdGenerator>(provider =>
+            new SequentialGuidGenerator(provider.GetRequiredService<TimeProvider>()));
 
         return services
             .AddPersistence(configuration)
             .AddSecurity(configuration)
+            .AddJournalImageStorage(configuration)
             .AddHttpConcerns()
             .AddObservability()
             .AddFeatures();

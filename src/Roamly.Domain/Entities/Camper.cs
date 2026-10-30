@@ -48,6 +48,15 @@ public class Camper : IOwnedResource
     /// <summary>Consumo medio dichiarato dall'utente, non calcolato.</summary>
     public decimal? AverageConsumptionLPer100Km { get; set; }
 
+    /// <summary>Nome o titolo del manuale o della scheda tecnica di riferimento.</summary>
+    public string? ManualSourceName { get; set; }
+
+    /// <summary>URL esterno opzionale del manuale o della scheda tecnica di riferimento.</summary>
+    public string? ManualSourceUrl { get; set; }
+
+    /// <summary>Misure e specifiche di dettaglio del camper serializzate in JSON per l'atlante dimensionale.</summary>
+    public string? ManualMeasurementsJson { get; set; }
+
     /// <inheritdoc />
     public DateTime CreatedAtUtc { get; set; }
 

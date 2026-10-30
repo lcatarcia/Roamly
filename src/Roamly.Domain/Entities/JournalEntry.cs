@@ -39,4 +39,7 @@ public class JournalEntry : IOwnedResource
 
     /// <summary>Navigazione verso la tappa.</summary>
     public TripStop? TripStop { get; set; }
+
+    /// <summary>Immagini originali allegate a questa voce.</summary>
+    public ICollection<JournalEntryAttachment> Attachments { get; } = [];
 }

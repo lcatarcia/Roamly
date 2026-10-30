@@ -1,5 +1,10 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using Microsoft.EntityFrameworkCore;
 using Roamly.Infrastructure.Persistence;
@@ -21,7 +26,12 @@ namespace Roamly.IntegrationTests.Infrastructure;
 /// </summary>
 public class SqlServerFixture : IAsyncLifetime
 {
+    public const string Phase1MigrationTarget = "20261006160121_AddLoginCounterKinds";
+
     private readonly MsSqlContainer _container;
+    private readonly IContainer _azuriteContainer;
+    private readonly string _azuriteAccountName;
+    private readonly string _azuriteAccountKey;
     private readonly List<(string Label, double Milliseconds)> _timings = [];
     private readonly Lazy<Task<FullSchemaDatabase>> _fullSchema;
     private readonly Lazy<Task<Phase1Database>> _phase1;
@@ -47,6 +57,8 @@ public class SqlServerFixture : IAsyncLifetime
         ArgumentNullException.ThrowIfNull(resources);
 
         Resources = resources;
+        _azuriteAccountName = "roamlytest";
+        _azuriteAccountKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         _fullSchema = new Lazy<Task<FullSchemaDatabase>>(CreateFullSchemaAsync);
         _phase1 = new Lazy<Task<Phase1Database>>(MigratePhase1Async);
         _application = new Lazy<Task<ApplicationDatabase>>(MigrateApplicationAsync);
@@ -64,6 +76,18 @@ public class SqlServerFixture : IAsyncLifetime
             // La wait strategy NON e' un retry (R37): attende una condizione di prontezza del
             // motore, non riprova un'operazione fallita. Quella di MsSqlBuilder e' gia' corretta.
             .Build();
+        _azuriteContainer = new ContainerBuilder("mcr.microsoft.com/azure-storage/azurite:3.35.0")
+            .WithEnvironment("AZURITE_ACCOUNTS", $"{_azuriteAccountName}:{_azuriteAccountKey}")
+            .WithCommand(
+                "azurite",
+                "--blobHost",
+                "0.0.0.0",
+                "--location",
+                "/data",
+                "--skipApiVersionCheck")
+            .WithPortBinding(10000, assignRandomHostPort: true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(10000))
+            .Build();
     }
 
     /// <summary>Profilo di risorse in uso.</summary>
@@ -72,12 +96,25 @@ public class SqlServerFixture : IAsyncLifetime
     /// <summary>Connection string verso <c>master</c>. Da qui nascono le lease.</summary>
     public string ConnectionString => _container.GetConnectionString();
 
+    /// <summary>Connection string isolata verso il servizio Blob Azurite del run corrente.</summary>
+    public string JournalImageStorageConnectionString =>
+        $"DefaultEndpointsProtocol=http;AccountName={_azuriteAccountName};AccountKey={_azuriteAccountKey};"
+        + $"BlobEndpoint=http://{_azuriteContainer.Hostname}:{_azuriteContainer.GetMappedPublicPort(10000)}/"
+        + $"{_azuriteAccountName};";
+
     /// <inheritdoc />
     public async ValueTask InitializeAsync()
     {
         var stopwatch = Stopwatch.StartNew();
         await _container.StartAsync().ConfigureAwait(false);
         Measure("Avvio del container fino alla prontezza (immagine gia' in locale)", stopwatch.Elapsed);
+
+        stopwatch.Restart();
+        await _azuriteContainer.StartAsync().ConfigureAwait(false);
+        var blobService = new BlobServiceClient(JournalImageStorageConnectionString);
+        await blobService.GetBlobContainerClient("roamly-journal-images")
+            .CreateIfNotExistsAsync(PublicAccessType.None).ConfigureAwait(false);
+        Measure("Avvio Azurite e creazione container privato", stopwatch.Elapsed);
     }
 
     /// <summary>Crea un database vuoto sul container e ne misura il costo.</summary>
@@ -109,8 +146,7 @@ public class SqlServerFixture : IAsyncLifetime
     /// <returns>Lo stato dell'applicazione, riuscita o fallita.</returns>
     public Task<Phase1Database> Phase1MigratedAsync() => _phase1.Value;
 
-    /// <summary>Database con tutte le migration del modello corrente, incluse le fondamenta auth.</summary>
-    /// <returns>Lo stato dell'applicazione.</returns>
+    /// <summary>Database su cui sono state applicate tutte le migration del modello applicativo corrente.</summary>
     public Task<ApplicationDatabase> ApplicationMigratedAsync() => _application.Value;
 
     /// <summary>Annota una misura di tempo, riversata su file a fine run (Passo 15 di ADR-0009 §9).</summary>
@@ -146,6 +182,7 @@ public class SqlServerFixture : IAsyncLifetime
         }
 
         await _container.DisposeAsync().ConfigureAwait(false);
+        await _azuriteContainer.DisposeAsync().ConfigureAwait(false);
 
         WriteTimings();
 
@@ -191,13 +228,13 @@ public class SqlServerFixture : IAsyncLifetime
 
         var stopwatch = Stopwatch.StartNew();
         var failure = await Record.ExceptionAsync(
-            () => context.Database.MigrateAsync("20260928095239_InitialPhase1")).ConfigureAwait(false);
+            () => context.Database.MigrateAsync(Phase1MigrationTarget)).ConfigureAwait(false);
         stopwatch.Stop();
 
         Measure(
             failure is null
-                ? "Migration InitialPhase1 su database vuoto"
-                : "Migration InitialPhase1 su database vuoto, FALLITA",
+                ? "Migration Phase 1 su database vuoto"
+                : "Migration Phase 1 su database vuoto, FALLITA",
             stopwatch.Elapsed);
 
         return new Phase1Database(lease, failure);
@@ -205,7 +242,7 @@ public class SqlServerFixture : IAsyncLifetime
 
     private async Task<ApplicationDatabase> MigrateApplicationAsync()
     {
-        var lease = await CreateEmptyDatabaseAsync("CREATE DATABASE per tutte le migration applicative").ConfigureAwait(false);
+        var lease = await CreateEmptyDatabaseAsync("CREATE DATABASE per le migration applicative").ConfigureAwait(false);
 
         var options = new DbContextOptionsBuilder<RoamlyDbContext>()
             .UseSqlServer(lease.ConnectionString)
@@ -219,8 +256,8 @@ public class SqlServerFixture : IAsyncLifetime
 
         Measure(
             failure is null
-                ? "Tutte le migration applicative su database vuoto"
-                : "Tutte le migration applicative su database vuoto, FALLITE",
+                ? "Migration applicative da database vuoto"
+                : "Migration applicative da database vuoto, FALLITA",
             stopwatch.Elapsed);
 
         return new ApplicationDatabase(lease, failure);
@@ -242,7 +279,7 @@ public class SqlServerFixture : IAsyncLifetime
 
         Measure(
             failure is null
-                ? "EnsureCreated dello schema completo (14 entita' + Identity)"
+                ? "EnsureCreated dello schema completo (15 entita' + Identity)"
                 : "EnsureCreated dello schema completo, FALLITO",
             stopwatch.Elapsed);
 

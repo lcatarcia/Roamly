@@ -55,36 +55,42 @@ Ma:
 > Il mockup precedente mostrava "Your next adventure", viaggi e costi: **feature di Phase 2-3, in inglese**. È stato sostituito con la dashboard reale dell'MVP, in italiano.
 
 ```text
-┌──────────────────────────────────────────────────────────┐
-│  IL MIO CAMPER                          (label micro)    │
-│  Hymer B-Class 588                      (.page-title)    │
-│                                                          │
-│           94.120 km                     (.numeral-display)│
-│           LETTURA ATTUALE                                │
-│                                                          │
-│  ultimo tagliando          ADESSO            prossimo    │
-│  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━◆━━━━━━━━━━━━━━━━━━━━━━━○  │
-│  82.400 km                                   97.400 km   │
-│  mar 2026                                    set 2026    │
-│                                        ┗━ fra 3.280 km   │
-└──────────────────────────────────────────────────────────┘
-
-┌───────────────────────────┐ ┌───────────────────────────┐
-│ PROSSIME SCADENZE         │ │ SPESA MANUTENZIONE 2026   │
-│ Revisione   [ scaduta ]   │ │ € 890                     │
-│ Tagliando   [ in scad. ]  │ │ 4 interventi              │
-│ Bombole     [ ok ]        │ │                           │
-└───────────────────────────┘ └───────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  [Nome camper]                         (.page-title)   │
+│  [Tipologia · marca · modello · anno, se presenti]     │
+├────────────────────────────────────────────────────────┤
+│  LETTURA DEL CONTACHILOMETRI                           │
+│  [Valore registrato] km                                 │
+│  [Data della lettura · recente / non attuale]           │
+│  Oppure: nessuna lettura registrata                    │
+├────────────────────────────────────────────────────────┤
+│  MANUTENZIONI                                          │
+│  [Nome attività]                                       │
+│  Tempo: [stato asse] · [scadenza se disponibile]       │
+│  Km:    [stato asse] · [soglia se verificabile]         │
+│  Oppure: Mai eseguito · nessuna scadenza prima del log  │
+└────────────────────────────────────────────────────────┘
 ```
 
-Regole di lettura del mockup:
+Regole di lettura della dashboard:
 
 - **Un solo numerale dominante** (`MetricBlock`) e **una sola** `.page-title` per schermata.
-- Il `Ribbon` è l'asse della manutenzione, **non una mappa**. ⚠️ Il suo asse km dipende dal prerequisito **D4** (lettura del contachilometri): decisione in carico a **@archimedes**. Se il dato non esiste, il `Ribbon` degrada ad asse solo temporale e **non stima i km** (R25).
-- I badge di scadenza non usano solo il colore: portano testo esplicito.
+- L'asse temporale e l'asse chilometrico hanno **stati distinti**, entrambi accompagnati da testo esplicito; non si sceglie quale scada prima né si mostra un `Ok` complessivo.
+- Una lettura oltre 90 giorni è presentata come **lettura datata non attuale**. Se manca o è obsoleta, l'asse km è «non verificabile», non verde e non stimato.
+- Una manutenzione senza storico dice **«mai eseguito»** e non mostra una scadenza fittizia.
+- Le soglie imminenti sono entro 30 giorni o 1.000 km; lo stato `Overdue` compare solo a soglia raggiunta o superata.
+- Non si mostrano spese, viaggi, checklist o altri widget Phase 2+ nella dashboard MVP.
 - Le liste (manutenzioni, storico) **non** seguono questo trattamento: sono tabellari, con `tabular-nums`.
 
 Dettaglio completo di token, componenti e sequenza in [`ADR-0007`](../adr/0007-design-system.md).
+
+### 2.1 Creazione e storico manutenzione
+
+La dashboard consente di aggiungere una regola ricorrente scegliendo il nome, la categoria e almeno un intervallo (km e/o mesi). La creazione non presume interventi passati: mostra «Mai eseguito» e nessun promemoria finché l'utente non registra il primo fatto.
+
+Ogni regola permette di registrare un intervento con data obbligatoria e chilometraggio, costo con valuta, officina e note facoltativi. Dopo il salvataggio si aggiorna la dashboard; l'utente può aprire lo storico, letto a pagine. Una collisione con una lettura odometrica discordante viene mostrata come errore, senza presentare il log come salvato. I promemoria rimangono nella dashboard: non sono previste notifiche email/push né elaborazioni in background.
+
+I form usano input vuoti, senza esempi o valori di servizio fittizi. Date, importi, valute e stati funzionali sono accompagnati da label testuali localizzate; il colore non è l'unico segnale. La lista degli interventi resta tabellare e usa numerali allineati, in coerenza con R21 e R22.
 
 ---
 
@@ -225,13 +231,11 @@ Tre schermate poco attraenti e non rimandabili. **Si progettano insieme alla das
 
 ## 5. Offline
 
-> ⚠️ **Decisione aperta #10 (review §4), severità MEDIUM. Owner: @archimedes.**
+> ✅ **Decisione #10 chiusa il 2026-10-21 (MEDIUM).** Per la v1 non sono previste modalità offline, PWA installabile o cache applicativa di dati utente; quando manca la rete l'interfaccia mostra uno stato esplicito e richiede la connessione per consultare o modificare i dati.
 >
-> I camperisti sono spesso senza rete. Checklist di partenza, journal e dettagli del viaggio sarebbero i candidati naturali alla consultazione offline.
+> Una futura estensione offline o PWA richiede una nuova decisione di scope.
 >
-> Ha impatto architetturale forte (sync, conflitti) e va deciso presto — **anche solo per escluderlo esplicitamente** dalla v1.
->
-> ⚠️ **Vincolo emerso da [`ADR-0004`](../adr/0004-privacy-and-erasure.md), prima non tracciato da nessuno:** una PWA che persiste dati sul dispositivo crea una **copia dei dati personali fuori dal perimetro del server**. La cancellazione dell'account **non la raggiunge**. Se la #10 entra in scope servono una policy di purge del client al logout e alla cancellazione, e una menzione esplicita nell'informativa.
+> ⚠️ Se in futuro si persisteranno dati sul dispositivo, si creerà una copia personale fuori dal perimetro del server che la cancellazione dell'account non raggiunge automaticamente; prima serviranno policy di purge client a logout/cancellazione e informativa esplicita, oltre agli stati di sync e alla gestione dei conflitti se si consentono modifiche offline.
 
 ### Impatti di design della #10, se entra in scope
 

@@ -35,6 +35,9 @@ public class Equipment : IOwnedResource
     /// <inheritdoc />
     public DateTime? UpdatedAtUtc { get; set; }
 
+    /// <summary>Token di concorrenza ottimistica per gli aggiornamenti e la rimozione.</summary>
+    public byte[]? RowVersion { get; set; }
+
     /// <summary>Navigazione verso il camper.</summary>
     public Camper? Camper { get; set; }
 }

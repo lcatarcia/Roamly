@@ -126,7 +126,15 @@ I seed di luoghi non costruiscono geometrie: sono coppie lat/lon. Semplificazion
 
 ## 4. Read model della dashboard
 
-`GET /api/v1/dashboard` aggrega 6-7 fonti. Va progettata come **una query dedicata con projection**, misurata, non come composizione di N query per widget. Owner: @oracle.
+`GET /api/v1/campers/{camperId}/dashboard` è una lettura dedicata owner-scoped: proietta l'anagrafica, la lettura contachilometri più recente e le manutenzioni attive con un numero fisso di query, non una query per elemento. Non aggrega spese o dati di Phase 2+ e non introduce indici senza una misura che ne dimostri la necessità. Stati e qualificazione dell'odometro sono definiti in [`CONTEXT.md` §2.2](CONTEXT.md).
+
+### 4.1 Scritture e storico manutenzione
+
+La creazione di un `MaintenanceItem` inserisce solo la regola ricorrente: nessun log o scadenza viene inventato. La registrazione di un `MaintenanceLog` e l'aggiornamento della proiezione avvengono nella stessa transazione SQL Server; prima del primo write si acquisisce un applock esclusivo e transaction-owned per `(OwnerId, MaintenanceItemId)`, così le scritture sullo stesso item non si incrociano durante il ricalcolo. Una collisione odometrica restituisce un conflitto senza scritture parziali. Se una lettura del giorno con lo stesso valore esiste già, viene riutilizzata senza modificarne `Source`; se manca, viene aggiunta con `Source = Service`.
+
+La proiezione deriva dal log massimo per `(PerformedOnUtc, CreatedAtUtc, Id)`: un inserimento retroattivo non sposta indietro l'ultimo intervento; a parità di data prevale quello registrato dopo. Se il log selezionato non ha chilometraggio, anche i campi km della proiezione restano nulli. Lo storico è letto owner-scoped e paginato per `Id` con il cursore keyset standard.
+
+Lo schema runtime contiene già `MaintenanceItem`, `MaintenanceLog` e `OdometerReading` nella migration `InitialPhase1`; questa slice non aggiunge migration né indici. Non vengono inseriti dati seed: la regola ricorrente è creata dall'utente.
 
 ---
 
@@ -136,7 +144,9 @@ Regola: **mai `Database.Migrate()` all'avvio in produzione.**
 
 Usare `dotnet ef migrations bundle` come step controllato della pipeline, con backup e piano di rollback. Dettagli in `docs/architecture/DEVOPS.md`.
 
-Finché vale l'ADR-0001 **nessuna migration contiene SQL manuale**, quindi il bundle copre il 100% dei casi. Al momento dell'eventuale upgrade a `geography` questo cesserà di essere vero: l'indice spaziale richiede `migrationBuilder.Sql` scritto a mano, perché **EF Core non genera indici spaziali** (`dotnet/efcore#12538`).
+La migration iniziale contiene solo lo schema Phase 1. `AddTripsAndTripStops` estende lo schema applicativo con `Trip` e `TripStop`, oltre a `SavedPlace` per la FK opzionale strutturale; `ActivateExpenseManagement` aggiunge `Expense` in modo additivo con il suo `rowversion`. I test L1 verificano l'applicazione a database vuoto, l'upgrade mantenendo i dati camper esistenti e la forma delle FK/colonne della spesa.
+
+Le migration di schema sono generate da EF, ma l'ADR-0001 non vieta SQL esplicito nelle migration. `RequirePasswordChangeForProvisionedUsers` usa `migrationBuilder.Sql` per marcare gli account provisionati già esistenti; il backfill viene eseguito con `sys.sp_executesql` perché dipende dalla colonna aggiunta nella stessa migration. Il test L1 verifica lo script idempotente generato su SQL Server reale: non assumere che la generazione del bundle o dello script sostituisca questa verifica. La scelta geografica dell'ADR-0001 resta invariata; un eventuale upgrade a `geography` richiederà comunque `migrationBuilder.Sql` scritto a mano, perché **EF Core non genera indici spaziali** (`dotnet/efcore#12538`).
 
 > ⚠️ **La prima migration va eseguita su un SQL Server vero prima di essere considerata valida.** L'errore **1785** (percorsi di cascade multipli) non emerge in `migrations add`: lo script si genera correttamente e fallisce **all'esecuzione**. Vedi §6.
 
@@ -201,9 +211,9 @@ La clustering key `(OwnerId, Id)` serve già da sola tutte le letture per chiave
 
 | Entità | Indice | Query servita | Fase |
 |---|---|---|---|
-| `OdometerReading` | `(OwnerId, CamperId, ReadAtUtc DESC)` | lettura corrente del contachilometri per il `Ribbon`: `TOP 1` per camper | 🟢 Phase 1 |
+| `OdometerReading` | `(OwnerId, CamperId, TakenOnUtc DESC)` | lettura corrente del contachilometri per la dashboard: `TOP 1` per camper | 🟢 Phase 1 |
 | `OdometerReading` | `UNIQUE (OwnerId, CamperId, TakenOnUtc)` | vincolo di dominio "una lettura al giorno", non una query | 🟢 Phase 1 |
-| `MaintenanceItem` | `(OwnerId, NextDueAtUtc)` | scadenze imminenti in dashboard, ordinate per urgenza | 🟢 Phase 1 |
+| `MaintenanceItem` | `(OwnerId, NextDueOnUtc)` | scadenze imminenti in dashboard, ordinate per urgenza | 🟢 Phase 1 |
 | `Expense` | `(OwnerId, SpentOn DESC)` | Cost Management: spese per periodo | 🟡 Phase 2 |
 
 > ⚠️ **Ogni indice non clusterizzato porta con sé la clustering key come puntatore alla riga: 32 byte** (`OwnerId` 16 + `Id` 16), contro gli 8 di una PK `bigint`. È il costo reale della scelta, e si paga **per ogni indice, per ogni riga** — non una volta sola. È la ragione per cui questa tabella è corta e va tenuta corta: qui la disciplina "nessun indice speculativo" non è igiene, è aritmetica.

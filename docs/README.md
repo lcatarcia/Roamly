@@ -1,6 +1,6 @@
 # Roamly — Documentazione
 
-Stato del progetto: **pre-implementazione.** Nessun codice è stato scritto.
+Stato del progetto: **implementazione attiva**. Foundation, autenticazione, slice camper/manutenzione, Expense e Checklist sono presenti; la Phase 2 prosegue con Journal e foto secondo ADR-0010. Consultare la roadmap per lo stato aggiornato.
 
 Il planning originale è stato splittato e corretto il 2026-09-24 a seguito della review di @janus. Gli originali sono preservati verbatim in `docs/archive/`.
 
@@ -15,6 +15,10 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | [`product/VISION.md`](product/VISION.md) | Visione, principi di prodotto, pilastri, metriche di successo |
 | [`product/FEATURES.md`](product/FEATURES.md) | Descrizione funzionale: dashboard, camper, trip planner, routing, checklist, costi, journal, intelligence, memory |
 | [`product/ROADMAP.md`](product/ROADMAP.md) | MVP 1.0, fasi con criteri di uscita, anti-scope, sequenza di lavoro |
+| [`product/DECISION-MAP-PRE-PUBBLICAZIONE.md`](product/DECISION-MAP-PRE-PUBBLICAZIONE.md) | Decisioni aperte per la pubblicazione generale e la deroga alpha privata dopo la Phase 2 |
+| [`product/AZURE-MAPS-RESEARCH.md`](product/AZURE-MAPS-RESEARCH.md) | Quote gratuite, costi, autenticazione, privacy e limiti di Azure Maps; nessuna integrazione o risorsa attivata |
+| [`product/AZURE-DEPLOYMENT-COST-ESTIMATE.md`](product/AZURE-DEPLOYMENT-COST-ESTIMATE.md) | Stima incrementale dei costi per pubblicare Roamly su Azure; nessun provisioning o rilascio autorizzato |
+| [`product/GEMINI-PLATFORM-DUE-DILIGENCE.md`](product/GEMINI-PLATFORM-DUE-DILIGENCE.md) | Due diligence tecnica e privacy documentale su Gemini UE; nessuna configurazione o invio dati |
 | [`product/UX.md`](product/UX.md) | Direzione UX, dashboard, design system, i18n, offline |
 
 ### Architettura
@@ -22,7 +26,7 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | Documento | Contenuto |
 |---|---|
 | [`architecture/ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | Stack, struttura repo, Vertical Slice + CQRS, modular monolith, observability, Docker |
-| [`architecture/CONTEXT.md`](architecture/CONTEXT.md) | Domain model e ubiquitous language — **incompleto, da completare prima del codice** |
+| [`architecture/CONTEXT.md`](architecture/CONTEXT.md) | Domain model e ubiquitous language — **deciso e normativo** |
 | [`architecture/DATA.md`](architecture/DATA.md) | SQL Server, regole di persistenza, seed, migration |
 | [`architecture/API-CONVENTIONS.md`](architecture/API-CONVENTIONS.md) | Endpoint, error model, paginazione, versioning, concorrenza |
 | [`architecture/SECURITY.md`](architecture/SECURITY.md) | Baseline, **regola di ownership**, privacy/GDPR, confine AI, upload |
@@ -38,10 +42,11 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | [`adr/0001-use-sql-server.md`](adr/0001-use-sql-server.md) | ✅ SQL Server confermato, tipi spaziali rimandati con trigger |
 | [`adr/0003-auth-and-ownership.md`](adr/0003-auth-and-ownership.md) | ✅ Identity + cookie httpOnly; ownership a tre livelli, `OwnerId` su ogni entità, `404` uniforme |
 | [`adr/0004-privacy-and-erasure.md`](adr/0004-privacy-and-erasure.md) | ✅ Topologia FK `NO ACTION`, export model-driven, hard delete con 30 giorni di grazia, R8-R10 |
-| [`adr/0005-api-conventions.md`](adr/0005-api-conventions.md) | ✅ **Le otto convenzioni API**: `ProblemDetails` **costruito** da una factory unica (`detail`/`instance`/`errors` mai sui 404, rende R7 verificabile); esito di dominio = `200` + `DomainResult<T>`; validazione **nativa .NET 10** con `errors` sui nomi JSON; ETag debole dal `rowversion` con **`If-Match` obbligatorio** (`428`/`412`); idempotenza dall'`Id` COMB, nessuno store; dentro `v1` si può solo **aggiungere**, con snapshot OpenAPI a diff bloccante; cursore keyset opaco; nessun ordinamento dinamico; R45-R53 |
+| [`adr/0005-api-conventions.md`](adr/0005-api-conventions.md) | ✅ **Le otto convenzioni API**: `ProblemDetails` **costruito** da una factory unica (`detail`/`instance`/`errors` mai sui 404, rende R7 verificabile); esito di dominio = `200` + `DomainResult<T>`; validazione **nativa .NET 10** con `errors` sui nomi JSON; ETag forte globale dal `rowversion` e **`If-Match` obbligatorio** (`428`/`412`; decisione utente 2026-10-08); idempotenza dall'`Id` COMB, nessuno store; dentro `v1` si può solo **aggiungere**, con snapshot OpenAPI a diff bloccante; cursore keyset opaco; nessun ordinamento dinamico; R45-R53 |
 | [`adr/0007-design-system.md`](adr/0007-design-system.md) | ✅ Tailwind v4 + shadcn/ui + token proprietari; identità su `Ribbon`, dato numerico e materiale sand/contour; dark mode in Phase 1; R11-R25 |
 | [`adr/0008-primary-key-strategy.md`](adr/0008-primary-key-strategy.md) | ✅ **PK composita `(OwnerId, Id)` CLUSTERED**, `Guid` COMB generato client-side via `IIdGenerator`; le 6 chiavi alternate `UNIQUE (Id, OwnerId)` **spariscono**; ❌ GUID v7 non è sequenziale su SQL Server (causa: ordinamento del tipo `uniqueidentifier`, non .NET); R26-R29, R40-R43 |
 | [`adr/0009-test-strategy.md`](adr/0009-test-strategy.md) | ✅ Testcontainers `MsSql` pinnato + Respawn, un container per run; **4 progetti di test** separati per costo, non per livello; 💡 **17 verificatori su 25 non toccano il database**; doppio test 1785 (analizzatore + `EnsureCreated` reale); `TimeProvider` dal primo commit; R30-R39 |
+| [`adr/0010-journal-image-storage.md`](adr/0010-journal-image-storage.md) | ✅ Foto del Journal in Azure Blob LRS Hot Italy North; `JournalEntryAttachment`; F1-F7, export, cancellazione e rischi accettati |
 
 ### Archivio
 
@@ -64,5 +69,4 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 
 ## Prossimo passo
 
-Chiudere le decisioni **#1-#4** in `OPEN-DECISIONS.md`, una alla volta.
-Nessuna implementazione parte prima.
+Proseguire con le capacita' restanti della Phase 2 secondo la roadmap; stime/provider geografici restano esclusi finche' la decisione aperta non e' risolta. Nessun provisioning o rilascio prima del completamento delle Phase 2-5 e del relativo gate.

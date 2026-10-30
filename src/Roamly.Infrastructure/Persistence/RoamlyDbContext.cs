@@ -6,8 +6,9 @@ using Roamly.Domain.Entities;
 namespace Roamly.Infrastructure.Persistence;
 
 /// <summary>
-/// Contesto applicativo: <b>solo le sei entita' della Phase 1</b> (CONTEXT.md §2.6).
-/// E' questo il contesto su cui si generano le migration.
+/// Contesto applicativo: le entita' attive fino alla Phase 2, SavedPlace strutturale per la FK
+/// opzionale delle tappe, Data Protection e il contatore infrastrutturale non-owned del rate limiter.
+/// E' questo il contesto su cui si generano le migration; FullSchema verifica anche le entita' future.
 /// </summary>
 public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
 {
@@ -34,10 +35,38 @@ public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
     /// <summary>Letture del contachilometri.</summary>
     public DbSet<OdometerReading> OdometerReadings => Set<OdometerReading>();
 
+    /// <summary>Viaggi pianificati e consuntivi.</summary>
+    public DbSet<Trip> Trips => Set<Trip>();
+
+    /// <summary>Tappe dei viaggi.</summary>
+    public DbSet<TripStop> TripStops => Set<TripStop>();
+
+    /// <summary>Checklist manuali dei viaggi.</summary>
+    public DbSet<Checklist> Checklists => Set<Checklist>();
+
+    /// <summary>Voci delle checklist.</summary>
+    public DbSet<ChecklistItem> ChecklistItems => Set<ChecklistItem>();
+
+    /// <summary>Voci del Journal di viaggio.</summary>
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+
+    /// <summary>Immagini originali del Journal.</summary>
+    public DbSet<JournalEntryAttachment> JournalEntryAttachments => Set<JournalEntryAttachment>();
+
+    /// <summary>Intenti persistenti di cancellazione dei blob Journal.</summary>
+    public DbSet<JournalAttachmentDeletionOutboxMessage> JournalAttachmentDeletionOutbox =>
+        Set<JournalAttachmentDeletionOutboxMessage>();
+
+    /// <summary>Spese associate ai camper e, facoltativamente, ai viaggi.</summary>
+    public DbSet<Expense> Expenses => Set<Expense>();
+
+    /// <summary>Luoghi salvati, presenti solo per l'integrita' referenziale in questa fase.</summary>
+    public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
+
     /// <summary>Ricevute di cancellazione, non owned.</summary>
     public DbSet<ErasureReceipt> ErasureReceipts => Set<ErasureReceipt>();
 
-    /// <summary>Chiavi di Data Protection condivise fra istanze applicative.</summary>
+    /// <summary>Chiavi di Data Protection condivise fra istanze dell'applicazione.</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     /// <summary>Contatori infrastrutturali condivisi per il rate limit login.</summary>
@@ -47,6 +76,6 @@ public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
-        ModelConfigurationRegistry.ApplyPhase1(builder, this);
+        ModelConfigurationRegistry.ApplyApplication(builder, this);
     }
 }

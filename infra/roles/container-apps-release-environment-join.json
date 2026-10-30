@@ -1,0 +1,16 @@
+{
+  "Id": "6f5774ed-a688-4ac7-859a-727bceb591bf",
+  "Name": "Roamly - release ACA environment join",
+  "IsCustom": true,
+  "Description": "Allowlist release ARM/Bicep: lettura e join dell ambiente ACA esistente. Assegnare solo a cae-roamly-live, non al resource group. Nessuna scrittura o gestione dell ambiente. Non limita i permessi concessi da altri ruoli.",
+  "Actions": [
+    "Microsoft.App/managedEnvironments/read",
+    "Microsoft.App/managedEnvironments/join/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/5b24089b-bf06-44ab-9486-c4d9cd326d80/resourceGroups/rg-roamly-dev"
+  ]
+}

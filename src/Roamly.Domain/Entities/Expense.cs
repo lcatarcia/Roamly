@@ -43,6 +43,9 @@ public class Expense : IOwnedResource
     /// <inheritdoc />
     public DateTime? UpdatedAtUtc { get; set; }
 
+    /// <summary>Token SQL Server per gli update concorrenti.</summary>
+    public byte[]? RowVersion { get; set; }
+
     /// <summary>Navigazione verso il camper.</summary>
     public Camper? Camper { get; set; }
 

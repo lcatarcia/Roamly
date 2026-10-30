@@ -1,5 +1,6 @@
 using Roamly.Domain.Abstractions;
 using Roamly.Domain.Enums;
+using Roamly.Domain.ValueObjects;
 
 namespace Roamly.Domain.Entities;
 
@@ -37,6 +38,15 @@ public class Trip : IOwnedResource
 
     /// <summary>Fine effettiva.</summary>
     public DateOnly? ActualEndOnUtc { get; set; }
+
+    /// <summary>Stima manuale della distanza dell'intero viaggio, in chilometri.</summary>
+    public decimal? EstimatedDistanceKm { get; set; }
+
+    /// <summary>Stima manuale della durata dell'intero viaggio, in minuti.</summary>
+    public int? EstimatedDurationMinutes { get; set; }
+
+    /// <summary>Prezzo manuale per litro usato dalla stima locale del carburante.</summary>
+    public Money? FuelPricePerLiter { get; set; }
 
     /// <inheritdoc />
     public DateTime CreatedAtUtc { get; set; }

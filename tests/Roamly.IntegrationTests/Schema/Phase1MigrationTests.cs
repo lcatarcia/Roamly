@@ -1,6 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Roamly.Domain.Entities;
+using Roamly.Domain.Enums;
+using Roamly.Infrastructure.Identity;
 using Roamly.IntegrationTests.Infrastructure;
 using Roamly.Infrastructure.Persistence;
+using System.Text.RegularExpressions;
 
 namespace Roamly.IntegrationTests.Schema;
 
@@ -56,10 +62,256 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
     }
 
     [Fact]
+    public async Task application_migration_upgrades_a_phase1_database_without_losing_camper_data()
+    {
+        var database = await sqlServer.CreateEmptyDatabaseAsync(
+            "CREATE DATABASE per upgrade Phase 1 -> modello applicativo");
+
+        try
+        {
+            var options = new DbContextOptionsBuilder<RoamlyDbContext>()
+                .UseSqlServer(database.ConnectionString)
+                .Options;
+            var ownerId = Guid.NewGuid();
+            var camperId = Guid.NewGuid();
+
+            await using (var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance))
+            {
+                await context.Database.MigrateAsync(
+                    SqlServerFixture.Phase1MigrationTarget,
+                    TestContext.Current.CancellationToken);
+
+                var createdAtUtc = new DateTime(2026, 10, 6, 9, 0, 0, DateTimeKind.Utc);
+                var username = ownerId.ToString("N");
+                var normalizedUsername = username.ToUpperInvariant();
+                var email = username + "@example.test";
+                var normalizedEmail = username.ToUpperInvariant() + "@EXAMPLE.TEST";
+
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO [AspNetUsers]
+                        ([Id], [UserName], [NormalizedUserName], [Email], [NormalizedEmail], [EmailConfirmed],
+                         [PhoneNumberConfirmed], [TwoFactorEnabled], [LockoutEnabled], [AccessFailedCount], [CreatedAtUtc])
+                    VALUES
+                        ({ownerId}, {username}, {normalizedUsername}, {email}, {normalizedEmail}, 1, 0, 0, 0, 0, {createdAtUtc});
+                    """,
+                    TestContext.Current.CancellationToken);
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO [Campers]
+                        ([Id], [OwnerId], [Name], [VehicleKind], [CreatedAtUtc])
+                    VALUES
+                        ({camperId}, {ownerId}, N'Camper preesistente', {(byte)VehicleKind.Coachbuilt}, {createdAtUtc});
+                    """,
+                    TestContext.Current.CancellationToken);
+
+                await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+
+                var applied = await context.Database.GetAppliedMigrationsAsync(
+                    TestContext.Current.CancellationToken);
+                Assert.Contains(
+                    applied,
+                    migration => migration.EndsWith("AddTripsAndTripStops", StringComparison.Ordinal));
+                Assert.Contains(
+                    applied,
+                    migration => migration.EndsWith("ActivateExpenseManagement", StringComparison.Ordinal));
+                Assert.Contains(
+                    applied,
+                    migration => migration.EndsWith("ActivateTripChecklists", StringComparison.Ordinal));
+                Assert.Equal(
+                    1,
+                    await context.Database.SqlQuery<int>(
+                            $"SELECT COUNT(*) AS [Value] FROM [Campers] WHERE [OwnerId] = {ownerId} AND [Id] = {camperId}")
+                        .SingleAsync(TestContext.Current.CancellationToken));
+                Assert.Equal(
+                    "Camper preesistente",
+                    await context.Database.SqlQuery<string>(
+                            $"SELECT [Name] AS [Value] FROM [Campers] WHERE [OwnerId] = {ownerId} AND [Id] = {camperId}")
+                        .SingleAsync(TestContext.Current.CancellationToken));
+                Assert.Equal(
+                    0,
+                    await context.Database.SqlQuery<int>(
+                            $"SELECT COUNT(*) AS [Value] FROM [TripStops] WHERE [OwnerId] = {ownerId}")
+                        .SingleAsync(TestContext.Current.CancellationToken));
+            }
+
+        }
+        finally
+        {
+            await database.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task password_change_migration_marks_existing_provisioned_users_only()
+    {
+        const string provisionedClaimType = "urn:roamly:identity:provisioned-unconfirmed-login";
+        var database = await sqlServer.CreateEmptyDatabaseAsync(
+            "CREATE DATABASE per backfill cambio password");
+        var provisionedUserId = Guid.NewGuid();
+        var ordinaryUserId = Guid.NewGuid();
+        var createdAtUtc = new DateTime(2026, 10, 22, 12, 0, 0, DateTimeKind.Utc);
+
+        try
+        {
+            var options = new DbContextOptionsBuilder<RoamlyDbContext>()
+                .UseSqlServer(database.ConnectionString)
+                .Options;
+
+            string[] migrations;
+            await using (var context = new RoamlyDbContext(options, ThrowingCurrentUser.Instance))
+            {
+                migrations = context.Database.GetMigrations().ToArray();
+                var backfillIndex = Array.FindIndex(
+                    migrations,
+                    migration => migration.EndsWith(
+                        "RequirePasswordChangeForProvisionedUsers",
+                        StringComparison.Ordinal));
+                Assert.True(backfillIndex > 0, "La migration di backfill deve seguire uno schema Identity esistente.");
+
+                await context.Database.MigrateAsync(
+                    migrations[backfillIndex - 1],
+                    TestContext.Current.CancellationToken);
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO [AspNetUsers]
+                        ([Id], [UserName], [NormalizedUserName], [Email], [NormalizedEmail], [EmailConfirmed],
+                         [PhoneNumberConfirmed], [TwoFactorEnabled], [LockoutEnabled], [AccessFailedCount], [CreatedAtUtc])
+                    VALUES
+                        ({provisionedUserId}, N'backfill-provisioned@example.test', N'BACKFILL-PROVISIONED@EXAMPLE.TEST',
+                         N'backfill-provisioned@example.test', N'BACKFILL-PROVISIONED@EXAMPLE.TEST', 0, 0, 0, 0, 0, {createdAtUtc}),
+                        ({ordinaryUserId}, N'backfill-ordinary@example.test', N'BACKFILL-ORDINARY@EXAMPLE.TEST',
+                         N'backfill-ordinary@example.test', N'BACKFILL-ORDINARY@EXAMPLE.TEST', 1, 0, 0, 0, 0, {createdAtUtc});
+                    """,
+                    TestContext.Current.CancellationToken);
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                    INSERT INTO [AspNetUserClaims] ([UserId], [ClaimType], [ClaimValue])
+                    VALUES ({provisionedUserId}, {provisionedClaimType}, N'true');
+                    """,
+                    TestContext.Current.CancellationToken);
+                var script = context.GetService<IMigrator>().GenerateScript(
+                    migrations[backfillIndex - 1],
+                    migrations[backfillIndex],
+                    MigrationsSqlGenerationOptions.Idempotent);
+                await ExecuteSqlBatchesAsync(
+                    context,
+                    script,
+                    TestContext.Current.CancellationToken);
+
+                var provisionedUser = await context.Users.SingleAsync(
+                    user => user.Id == provisionedUserId,
+                    TestContext.Current.CancellationToken);
+                var ordinaryUser = await context.Users.SingleAsync(
+                    user => user.Id == ordinaryUserId,
+                    TestContext.Current.CancellationToken);
+
+                Assert.True(provisionedUser.RequiresPasswordChange);
+                Assert.False(ordinaryUser.RequiresPasswordChange);
+            }
+        }
+        finally
+        {
+            await database.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task expense_migration_adds_rowversion_and_preserves_approved_fk_actions()
+    {
+        var database = await sqlServer.ApplicationMigratedAsync();
+        var columns = await SchemaCatalog.ColumnTypesAsync(database.ConnectionString);
+        var expenseColumns = columns.Where(column => column.TableName == "Expenses").ToArray();
+        Assert.Contains(expenseColumns, column => column.ColumnName == "RowVersion"
+            && column.TypeName is "timestamp" or "rowversion");
+        Assert.Contains(expenseColumns, column => column.ColumnName == "Amount"
+            && column.TypeName == "decimal" && column.Precision == 19 && column.Scale == 4);
+
+        var foreignKeys = (await SchemaCatalog.ForeignKeyColumnsAsync(database.ConnectionString))
+            .Where(column => column.ParentTable == "Expenses")
+            .GroupBy(column => column.ConstraintName)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        Assert.All(
+            foreignKeys["FK_Expenses_Campers_OwnerId_CamperId"],
+            column => Assert.Equal("CASCADE", column.DeleteAction));
+        Assert.All(
+            foreignKeys["FK_Expenses_Trips_OwnerId_TripId"],
+            column => Assert.Equal("NO_ACTION", column.DeleteAction));
+        Assert.Collection(
+            foreignKeys["FK_Expenses_Campers_OwnerId_CamperId"].OrderBy(column => column.Ordinal),
+            column => Assert.Equal(("OwnerId", "OwnerId"), (column.ParentColumn, column.ReferencedColumn)),
+            column => Assert.Equal(("CamperId", "Id"), (column.ParentColumn, column.ReferencedColumn)));
+        Assert.Collection(
+            foreignKeys["FK_Expenses_Trips_OwnerId_TripId"].OrderBy(column => column.Ordinal),
+            column => Assert.Equal(("OwnerId", "OwnerId"), (column.ParentColumn, column.ReferencedColumn)),
+            column => Assert.Equal(("TripId", "Id"), (column.ParentColumn, column.ReferencedColumn)));
+    }
+
+    [Fact]
+    public async Task checklist_and_journal_migrations_add_their_owned_tables_and_approved_fk_actions()
+    {
+        var database = await sqlServer.ApplicationMigratedAsync();
+        var columns = await SchemaCatalog.ColumnTypesAsync(database.ConnectionString);
+        Assert.Contains(columns, column => column.TableName == "Checklists"
+            && column.ColumnName == "Kind" && column.TypeName == "tinyint");
+        Assert.Contains(columns, column => column.TableName == "ChecklistItems"
+            && column.ColumnName == "Text" && column.TypeName == "nvarchar");
+        Assert.Contains(columns, column => column.TableName == "JournalEntries"
+            && column.ColumnName == "TripId");
+        Assert.Contains(columns, column => column.TableName == "JournalEntryAttachments"
+            && column.ColumnName == "JournalEntryId");
+        Assert.DoesNotContain(columns, column => column.TableName == "Documents");
+
+        var foreignKeys = (await SchemaCatalog.ForeignKeyColumnsAsync(database.ConnectionString))
+            .Where(column => column.ParentTable is "Checklists"
+                or "ChecklistItems"
+                or "JournalEntries"
+                or "JournalEntryAttachments")
+            .GroupBy(column => column.ConstraintName)
+            .ToDictionary(group => group.Key, group => group.OrderBy(column => column.Ordinal).ToArray(),
+                StringComparer.Ordinal);
+        Assert.Collection(
+            foreignKeys["FK_Checklists_Trips_OwnerId_TripId"],
+            column => Assert.Equal(("OwnerId", "OwnerId", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)),
+            column => Assert.Equal(("TripId", "Id", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)));
+        Assert.Collection(
+            foreignKeys["FK_ChecklistItems_Checklists_OwnerId_ChecklistId"],
+            column => Assert.Equal(("OwnerId", "OwnerId", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)),
+            column => Assert.Equal(("ChecklistId", "Id", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)));
+        Assert.Collection(
+            foreignKeys["FK_JournalEntries_Trips_OwnerId_TripId"],
+            column => Assert.Equal(("OwnerId", "OwnerId", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)),
+            column => Assert.Equal(("TripId", "Id", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)));
+        Assert.Collection(
+            foreignKeys["FK_JournalEntries_TripStops_OwnerId_TripStopId"],
+            column => Assert.Equal(("OwnerId", "OwnerId", "NO_ACTION"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)),
+            column => Assert.Equal(("TripStopId", "Id", "NO_ACTION"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)));
+        Assert.Collection(
+            foreignKeys["FK_JournalEntryAttachments_JournalEntries_OwnerId_JournalEntryId"],
+            column => Assert.Equal(("OwnerId", "OwnerId", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)),
+            column => Assert.Equal(("JournalEntryId", "Id", "CASCADE"),
+                (column.ParentColumn, column.ReferencedColumn, column.DeleteAction)));
+
+        await using var context = ContextOn(database);
+        var migrations = await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken);
+        Assert.Contains(
+            migrations,
+            migration => migration.EndsWith("ActivateJournalEntries", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task no_migration_is_left_pending_after_migrate()
     {
         var database = await sqlServer.ApplicationMigratedAsync();
-        Assert.Null(database.Failure);
         await using var context = ContextOn(database);
 
         var pending = (await context.Database.GetPendingMigrationsAsync(TestContext.Current.CancellationToken)).ToList();
@@ -76,7 +328,7 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
         // (RoamlyDbContextModelSnapshot) con il modello che RoamlyDbContext costruisce oggi.
         // Diventa rossa esattamente nel caso che il test C esiste per intercettare: modello
         // cambiato, migration non rigenerata.
-        var database = await sqlServer.Phase1MigratedAsync();
+        var database = await sqlServer.ApplicationMigratedAsync();
         await using var context = ContextOn(database);
 
         var hasChanges = context.Database.HasPendingModelChanges();
@@ -97,7 +349,7 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
         // La migration e' uno scaffolding: puo' divergere da cio' che il modello dichiara.
         // Qui lo si chiede al motore, sullo schema che le migration hanno davvero creato — non
         // su quello di EnsureCreated, che e' il soggetto del test B.
-        var database = await sqlServer.Phase1MigratedAsync();
+        var database = await sqlServer.ApplicationMigratedAsync();
         var columns = await SchemaCatalog.PrimaryKeyColumnsAsync(database.ConnectionString);
         var owned = await OwnedTablesAsync(database.ConnectionString);
 
@@ -137,7 +389,7 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
     {
         // R43 (ADR-0008) sul percorso delle migration. Il Blocco 4 lo ha verificato su
         // EnsureCreated; che lo scaffolding emetta lo stesso ordine e' un fatto distinto.
-        var database = await sqlServer.Phase1MigratedAsync();
+        var database = await sqlServer.ApplicationMigratedAsync();
 
         var foreignKeys = await SchemaCatalog.ForeignKeyColumnsAsync(database.ConnectionString);
         var primaryKeys = await SchemaCatalog.PrimaryKeyColumnsAsync(database.ConnectionString);
@@ -213,9 +465,34 @@ public sealed class Phase1MigrationTests(SqlServerFixture sqlServer)
         return [.. await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken)];
     }
 
+    private static async Task ExecuteSqlBatchesAsync(
+        RoamlyDbContext context,
+        string script,
+        CancellationToken cancellationToken)
+    {
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            var batches = Regex.Split(
+                script,
+                @"^\s*GO\s*(?:--.*)?$",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            foreach (var batch in batches.Where(batch => !string.IsNullOrWhiteSpace(batch)))
+            {
+                await context.Database.ExecuteSqlRawAsync(batch, cancellationToken);
+            }
+        }
+        finally
+        {
+            await context.Database.CloseConnectionAsync();
+        }
+    }
+
     /// <summary>
     /// Le tabelle owned dedotte dal motore: quelle che hanno una colonna <c>OwnerId</c>.
-    /// <c>ErasureReceipts</c> non lo e' per costruzione (R10, ADR-0004) e resta giustamente fuori.
+    /// <c>ErasureReceipts</c> non e' owned (R10, ADR-0004) e anche i contatori login sono
+    /// infrastrutturali, senza <c>OwnerId</c> (SECURITY.md §1).
     /// </summary>
     private static async Task<HashSet<string>> OwnedTablesAsync(string connectionString)
     {

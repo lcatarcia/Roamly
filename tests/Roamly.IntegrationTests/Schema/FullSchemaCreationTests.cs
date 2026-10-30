@@ -125,6 +125,32 @@ public sealed class FullSchemaCreationTests(SqlServerFixture sqlServer)
             "FK figlie non composite o senza OwnerId:\n - " + string.Join("\n - ", offenders));
     }
 
+    /// <summary>
+    /// Verifies the future reference constraint and its exact name. Phase 2 runtime excludes
+    /// JournalEntry, so the API's FK-to-409 translation cannot yet be exercised end-to-end here.
+    /// </summary>
+    [Fact]
+    public async Task journal_stop_reference_uses_the_named_no_action_constraint_for_future_trip_updates()
+    {
+        var database = await sqlServer.FullSchemaAsync();
+        var references = (await SchemaCatalog.ForeignKeyColumnsAsync(database.ConnectionString))
+            .Where(column => column.ParentTable == "JournalEntries"
+                && column.ReferencedTable == "TripStops")
+            .OrderBy(column => column.Ordinal)
+            .ToArray();
+
+        Assert.Equal(2, references.Length);
+        Assert.All(references, column =>
+        {
+            Assert.Equal("FK_JournalEntries_TripStops_OwnerId_TripStopId", column.ConstraintName);
+            Assert.Equal("NO_ACTION", column.DeleteAction);
+        });
+        Assert.Collection(
+            references,
+            column => Assert.Equal("OwnerId", column.ParentColumn),
+            column => Assert.Equal("TripStopId", column.ParentColumn));
+    }
+
     [Fact]
     public async Task money_and_coordinates_have_the_declared_decimal_shape()
     {
@@ -165,10 +191,10 @@ public sealed class FullSchemaCreationTests(SqlServerFixture sqlServer)
     /// Le tabelle <b>owned</b>, dedotte dal database reale: quelle che hanno una colonna
     /// <c>OwnerId</c>.
     /// <para>
-    /// ⚠️ <c>ErasureReceipts</c> non e' owned per costruzione (R10, ADR-0004: la ricevuta di
-    /// cancellazione non puo' avere una FK verso l'utente che si sta cancellando), quindi la sua
-    /// PK e' <c>(Id)</c> e non deve far fallire un'asserzione di ADR-0008. Dedurre l'elenco dal
-    /// motore invece di scriverlo a mano evita sia il falso rosso sia la lista che marcisce.
+    /// ⚠️ <c>ErasureReceipts</c> non e' owned per costruzione (R10, ADR-0004) e
+    /// <c>LoginAttemptCounters</c> e' infrastrutturale senza FK utente (SECURITY.md §1): le loro
+    /// PK non devono far fallire un'asserzione di ADR-0008. Dedurre l'elenco dal motore evita
+    /// sia il falso rosso sia la lista che marcisce.
     /// </para>
     /// </summary>
     private static async Task<HashSet<string>> OwnedTablesAsync(string connectionString)

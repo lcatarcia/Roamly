@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -31,13 +30,13 @@ namespace Roamly.Model.Tests.Conventions;
 /// </summary>
 public sealed class R44_HandlerRegistrationTests
 {
-    private static readonly string FeaturesRoot = Path.Combine(RepositoryRoot.Path, "src", "Roamly.Api", "Features");
-
     [Fact]
     public void Every_handler_file_has_a_matching_type_discoverable_by_reflection()
     {
-        var textualNames = DiscoverHandlerNamesFromFileSystem();
-        var reflectedNames = DiscoverHandlerTypesFromAssembly().Select(type => type.Name).ToHashSet(StringComparer.Ordinal);
+        var textualNames = FeatureHandlerDiscovery.DiscoverHandlerNamesFromFileSystem();
+        var reflectedNames = FeatureHandlerDiscovery.DiscoverHandlerTypesFromAssembly()
+            .Select(type => type.Name)
+            .ToHashSet(StringComparer.Ordinal);
 
         var missingFromAssembly = textualNames.Except(reflectedNames).ToList();
 
@@ -52,7 +51,7 @@ public sealed class R44_HandlerRegistrationTests
     [Fact]
     public void Every_handler_type_is_resolvable_from_the_composition_root_container()
     {
-        var handlerTypes = DiscoverHandlerTypesFromAssembly();
+        var handlerTypes = FeatureHandlerDiscovery.DiscoverHandlerTypesFromAssembly();
 
         Assert.NotEmpty(handlerTypes);
 
@@ -91,16 +90,11 @@ public sealed class R44_HandlerRegistrationTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Roamly"] = "Server=fake;Database=fake;TrustServerCertificate=True",
-                ["RateLimiting:Login:HmacSecret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                ["RateLimiting:Login:HmacSecret"] = Convert.ToBase64String(new byte[32]),
             })
             .Build();
 
         var services = new ServiceCollection();
-
-        // TimeProvider.System e' registrato di default dall'host generico (WebApplication.CreateBuilder);
-        // qui costruiamo un ServiceCollection nudo, quindi va aggiunto a mano — non e' un host, e' un
-        // singolo servizio di libreria, esattamente come nella produzione.
-        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IHostEnvironment>(new TestHostEnvironment());
 
         // AddAuthorization() (dentro AddSecurity) registra AuthorizationPolicyCache, che richiede un
@@ -122,31 +116,10 @@ public sealed class R44_HandlerRegistrationTests
     {
         public string EnvironmentName { get; set; } = "Testing";
 
-        public string ApplicationName { get; set; } = "Roamly.Model.Tests";
+        public string ApplicationName { get; set; } = typeof(R44_HandlerRegistrationTests).Assembly.GetName().Name!;
 
         public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
 
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-    }
-
-    private static HashSet<string> DiscoverHandlerNamesFromFileSystem()
-    {
-        return [.. Directory
-            .EnumerateFiles(FeaturesRoot, "*Handler.cs", SearchOption.AllDirectories)
-            .Select(Path.GetFileNameWithoutExtension)
-            .Where(name => name is not null)
-            .Select(name => name!)];
-    }
-
-    private static List<Type> DiscoverHandlerTypesFromAssembly()
-    {
-        var assembly = typeof(RoamlyServiceCollectionExtensions).Assembly;
-
-        return [.. assembly
-            .GetTypes()
-            .Where(type =>
-                type.Name.EndsWith("Handler", StringComparison.Ordinal)
-                && type.Namespace is not null
-                && Regex.IsMatch(type.Namespace, @"^Roamly\.Api\.Features(\.|$)", RegexOptions.None, TimeSpan.FromSeconds(1)))];
     }
 }

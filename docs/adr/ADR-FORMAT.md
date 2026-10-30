@@ -92,3 +92,4 @@ Documenti in `docs/` impattati e aggiornati.
 | `0007-design-system.md` | Tailwind v4, token, componenti di dominio | #7 | ✅ |
 | `0008-primary-key-strategy.md` | PK composita `(OwnerId, Id)`, Guid COMB client-side | — | ✅ |
 | `0009-test-strategy.md` | Livelli L0/L1/L2, Testcontainers, sequenza di implementazione | #6 | ✅ |
+| `0010-journal-image-storage.md` | Foto del Journal, Azure Blob, privacy ed erasure F1-F7 | #8 | ✅ |

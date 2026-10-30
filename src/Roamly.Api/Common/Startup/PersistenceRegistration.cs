@@ -48,7 +48,11 @@ public static class PersistenceRegistration
         services
             .AddIdentityCore<ApplicationUser>(identityOptions =>
             {
+                // Il job di provisioning marca gli account con un claim Identity interno.
+                // Login applica esplicitamente l'eccezione; gli altri account non confermati restano bloccati.
                 identityOptions.SignIn.RequireConfirmedEmail = false;
+
+                // Soglia approvata per il lockout Identity, distinta dai contatori SQL del login.
                 identityOptions.Lockout.AllowedForNewUsers = true;
                 identityOptions.Lockout.MaxFailedAccessAttempts = 10;
                 identityOptions.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);

@@ -8,6 +8,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Respawn" />
     <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers" />
   </ItemGroup>
   <ItemGroup>
     <!-- Isolamento G1 (ADR-0009): una sola collection, nessuna parallelizzazione sul database. -->

@@ -48,7 +48,7 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
     }
 
     [Fact]
-    public async Task password_change_required_account_can_read_its_status()
+    public async Task password_change_required_account_can_read_status_but_cannot_use_product_api()
     {
         await CreateUserAsync(Email, requiresPasswordChange: true);
         using var login = await _client.LoginAsync(
@@ -61,8 +61,24 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         Assert.False(loginProfile.RootElement.TryGetProperty("mustChangePassword", out _));
 
         using var status = await _client.GetAsync("/api/v1/me", TestContext.Current.CancellationToken);
+        using var product = await _client.GetAsync("/api/v1/campers", TestContext.Current.CancellationToken);
+        using var deletionStatus = await _client.GetAsync(
+            "/api/v1/me/deletion",
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, product.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, deletionStatus.StatusCode);
+        using var deletionProblem = JsonDocument.Parse(
+            await deletionStatus.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            "https://roamly.dev/problems/password-change-required",
+            deletionProblem.RootElement.GetProperty("type").GetString());
+        using var problem = JsonDocument.Parse(
+            await product.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            "https://roamly.dev/problems/password-change-required",
+            problem.RootElement.GetProperty("type").GetString());
     }
 
     [Fact]
@@ -91,6 +107,36 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
 
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
         Assert.False(nextCalled);
+    }
+
+    [Fact]
+    public async Task password_change_required_account_cannot_create_product_resources()
+    {
+        await CreateUserAsync(Email, requiresPasswordChange: true);
+        using var login = await _client.LoginAsync(
+            Email,
+            Password,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        using var create = await _client.PostJsonAsync(
+            "/api/v1/campers",
+            new { id = Guid.NewGuid(), name = "Camper bloccato", vehicleKind = 1 },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
+
+        using var changed = await _client.PostJsonAsync(
+            "/api/v1/auth/password/change",
+            new { currentPassword = Password, newPassword = "A_New!Password456" },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
+
+        using var campers = await _client.GetAsync("/api/v1/campers", TestContext.Current.CancellationToken);
+        using var page = JsonDocument.Parse(
+            await campers.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(HttpStatusCode.OK, campers.StatusCode);
+        Assert.Empty(page.RootElement.GetProperty("items").EnumerateArray());
     }
 
     [Fact]
@@ -131,8 +177,10 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         using var profile = await _client.GetAsync("/api/v1/me", TestContext.Current.CancellationToken);
         using var profileJson = JsonDocument.Parse(
             await profile.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var product = await _client.GetAsync("/api/v1/campers", TestContext.Current.CancellationToken);
 
         Assert.False(profileJson.RootElement.GetProperty("mustChangePassword").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, product.StatusCode);
 
         using var newPasswordClient = new RoamlyClient(_factory.CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -205,8 +253,10 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         using var profile = await _client.GetAsync("/api/v1/me", TestContext.Current.CancellationToken);
         using var profileJson = JsonDocument.Parse(
             await profile.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var product = await _client.GetAsync("/api/v1/campers", TestContext.Current.CancellationToken);
 
         Assert.True(profileJson.RootElement.GetProperty("mustChangePassword").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, product.StatusCode);
     }
 
     [Fact]
@@ -231,14 +281,16 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
             "newPassword",
             problem.RootElement.GetProperty("errors").EnumerateObject().Select(property => property.Name));
 
+        using var product = await _client.GetAsync("/api/v1/campers", TestContext.Current.CancellationToken);
         using var profile = await _client.GetAsync("/api/v1/me", TestContext.Current.CancellationToken);
         using var profileJson = JsonDocument.Parse(
             await profile.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(HttpStatusCode.Forbidden, product.StatusCode);
         Assert.True(profileJson.RootElement.GetProperty("mustChangePassword").GetBoolean());
     }
 
     [Fact]
-    public async Task ordinary_account_reports_no_required_password_change()
+    public async Task ordinary_account_remains_unrestricted_and_reports_no_required_change()
     {
         await CreateUserAsync(NormalEmail, requiresPasswordChange: false);
         using var login = await _client.LoginAsync(
@@ -250,8 +302,10 @@ public sealed class ForcedPasswordChangeApiTests(SqlServerFixture sqlServer) : I
         using var profile = await _client.GetAsync("/api/v1/me", TestContext.Current.CancellationToken);
         using var profileJson = JsonDocument.Parse(
             await profile.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        using var product = await _client.GetAsync("/api/v1/campers", TestContext.Current.CancellationToken);
 
         Assert.False(profileJson.RootElement.GetProperty("mustChangePassword").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, product.StatusCode);
     }
 
     [Fact]

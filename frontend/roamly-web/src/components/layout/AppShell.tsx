@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
+import { BrandLogo } from '@/components/brand/BrandLogo'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
-import { t } from '@/i18n/catalog'
 
 interface AppShellProps {
   children: ReactNode
@@ -10,17 +10,17 @@ interface AppShellProps {
 /**
  * Involucro dell'intera app: fondo/testo dai token semantici (mai letterali,
  * R12), header minimale con il toggle di tema. Nessuna navigazione qui:
- * l'MVP di Phase 0 e' solo la schermata di login, la navigazione entra
+ * Phase 0 comprende accesso, registrazione e conferma email; la navigazione entra
  * in Phase 1 (1.8, bottom nav mobile).
  */
 export function AppShell({ children }: AppShellProps) {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6">
-        <span className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {t('neutral.app.brand')}
-        </span>
-        <ThemeToggle />
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-xs">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <BrandLogo className="h-10 w-[114px] sm:h-12 sm:w-[137px]" />
+          <ThemeToggle />
+        </div>
       </header>
       <main className="flex flex-1 flex-col">{children}</main>
     </div>
