@@ -2,14 +2,16 @@
 
 Il workflow eseguibile è `.github/workflows/release.yml`; `release.yml` in
 questa directory ne è la copia di revisione e deve restare sincronizzata. Il
-candidato locale non è stato eseguito né pubblicato sul branch protetto
-`main`. La presenza del file non sostituisce le approvazioni GitHub richieste
-per la pull request e per ciascun job protetto.
+preflight aggiunto localmente non è ancora stato pubblicato tramite PR/CI
+né eseguito sul branch protetto `main`. I run riusciti del workflow legacy
+non validano questo candidato. La presenza del file non sostituisce i check
+della pull request e le approvazioni per ciascun job protetto.
 
 I gate di configurazione e verifica HIGH elencati in
 [`../../docs/architecture/DEVOPS.md`](../../docs/architecture/DEVOPS.md), nella
 sezione "Stato operativo: preparazione locale release", devono essere chiusi
-prima del dispatch.
+prima del dispatch, salvo la verifica con OIDC fresco: questa avviene nel
+job protetto, dopo la prima approvazione e prima della prima scrittura live.
 
 ## Workflow `release.yml`
 
@@ -23,6 +25,25 @@ solo `contents: read` e `id-token: write`, usano OIDC, costruiscono il
 e il tag `${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}`.
 In modalità `rollback` è richiesto un digest OCI `sha256` valido, viene saltato
 build/push e lo stesso digest passa attraverso what-if, confronto e approvazioni.
+Subito dopo `azure/login`, in entrambe le modalità, il job `prepare` esegue un
+preflight read-only fail-closed: confronta tipo `servicePrincipal`, client ID,
+tenant e subscription dell'account autenticato con le tre variabili OIDC non
+segrete, validate come GUID. Esegue GET ARM esplicite della app esistente,
+delle revisioni, dell'environment e della managed identity runtime, verificando
+gli ID restituiti, i collegamenti app/environment/identity e gli identificativi
+della identity. Una lista revisioni vuota, malformata o paginata viene rifiutata.
+Qualsiasi richiesta fallita o identificativo assente/diverso interrompe il job,
+senza build/push né what-if. Non ci sono retry di autenticazione, token nei log,
+letture di secret, `listSecrets`, exec o probe distruttivi.
+
+Questo è il posizionamento approvato del gate OIDC fresco: dopo la prima
+approvazione Environment, che permette il login federato, ma prima di qualunque
+scrittura live. Non è una verifica pre-dispatch, né un inventario RBAC: non
+richiede `Microsoft.Authorization/permissions/read` sulla app e non prova il
+diniego di operazioni sensibili. L'inventario dei ruoli effettivi resta una
+verifica separata dell'operatore, descritta sotto. Le due approvazioni,
+il guard dispatch/main, il rollback e il confronto what-if rimangono invariati.
+
 Il job di preparazione esegue il what-if con il
 digest OCI restituito dal push e ne pubblica il risultato nel riepilogo della
 run insieme all'impronta SHA-256 delle modifiche normalizzate. Dopo la seconda
@@ -123,13 +144,13 @@ Gli Environments `azure-bootstrap` e `azure-release` sono configurati live:
 entrambi richiedono approvazione manuale di `lcatarcia` (User ID `70380170`),
 impediscono l'auto-approvazione, limitano i deploy ai branch protetti e hanno
 `can_admins_bypass=false`. È attivo anche il ruleset `Roamly - protezione main`
-(ID `25866835`), applicato solo a `refs/heads/main`: richiede PR, una
-approvazione e i quattro check obbligatori con branch aggiornato (`strict:
+(ID `25866835`), applicato solo a `refs/heads/main`: richiede PR e i
+quattro check obbligatori con branch aggiornato (`strict:
 true`), revoca approvazioni obsolete, blocca eliminazione e force-push e non ha
 bypass actor. Non impone CODEOWNERS, approvazione dell'ultimo push o risoluzione
-dei thread. Per PR Copilot non attribuite a una persona, il default GitHub
-richiede un'approvazione aggiuntiva (due in totale); il default è stato
-mantenuto dopo conferma dell'utente. La presenza di queste protezioni non
+dei thread. Al 2026-10-30 il numero di approvazioni PR richieste è **0**,
+per scelta esplicita dell'utente; ciò non rimuove le due approvazioni
+Environment del rilascio. La presenza di queste protezioni non
 configura OIDC, RBAC o workflow. Dettagli nelle
 [regole GitHub per i ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets).
 
@@ -175,7 +196,8 @@ Il workflow userà solo federazione OIDC e permessi `contents: read` +
   manuale; non assegnare `Contributor` o `Role Based Access Control
   Administrator` all'identità release. L'assegnazione ACA al RG è stata rimossa.
   Le definizioni e le assegnazioni dirette sono state rilette dopo ogni modifica;
-  la verifica con token fresco del principal release resta da completare.
+  la verifica con token fresco del principal release resta da eseguire nel
+  preflight dopo la prima approvazione Environment e prima di build/push/what-if.
 - Il JSON del ruolo app è
   [`../roles/container-apps-release-no-secrets.json`](../roles/container-apps-release-no-secrets.json).
   La definizione live, aggiornata con ID
@@ -193,13 +215,19 @@ Il workflow userà solo federazione OIDC e permessi `contents: read` +
 - La custom role `infra/roles/resource-deployments-release.json`, con la sola
   azione `Microsoft.Resources/deployments/*`, è stata creata live e assegnata
   sul RG; il suo ID è `432216d0-b0ea-4fa7-b2e0-d5e4000a6d72`.
-- Gate RBAC: prima di abilitare i workflow, verificare la definizione live per
-  ID, `Actions`/`NotActions` e scope assegnabile; verificare tutte le
-  assegnazioni effettive ereditate o dirette del principal release e
-  confermare che nessun altro ruolo conceda `listSecrets`. Con un token fresco
-  del principal release verificare GET app/revisioni/environment/identity e
-  l'inventario dei permessi, senza invocare `listSecrets`, exec o operazioni
-  distruttive come test negativi. Il percorso write/join non è ancora stato
+- Gate RBAC separato dal preflight: il 2026-10-30 l'operatore ha verificato
+  tramite ARM il filtro `assignedTo('8a816682-a894-450a-9178-7767b8cdd87a')`
+  sull'intera subscription, seguendo la paginazione fino alla fine, e ha
+  esaminato tutte le definizioni restituite. Risultano esattamente cinque
+  assegnazioni dirette `ServicePrincipal` agli scope sopra descritti; nessuna
+  assegnazione ereditata/da gruppi restituita, nessun grant ACA `listSecrets`,
+  exec o delete. Il filtro include i gruppi transitivi per user/service
+  principal senza richiedere Graph:
+  [Microsoft Learn — List role assignments](https://learn.microsoft.com/en-us/azure/role-based-access-control/role-assignments-list-rest).
+  Questa evidenza usa la sessione dell'operatore, non il token fresco del
+  principal release. Quest'ultimo verifica le GET nel preflight protetto,
+  senza inventario `permissions/read` sulla app o test negativi sensibili.
+  Il percorso write/join non è ancora stato
   provato dal workflow: richiede il what-if e il successivo deploy autorizzati.
   Ripetere la verifica dopo cambi a ruoli built-in, custom role o assegnazioni.
   Se manca un permesso, fermare la release e revisionare l'azione esatta:
@@ -239,8 +267,12 @@ Riferimenti Microsoft: [Container Apps secrets e `listSecrets`](https://learn.mi
   separate.
 - Recovery applicativo deciso: rollback manuale via dispatch protetto a un
   digest noto come sano, con gli stessi gate e confronto what-if. Al primo
-  deploy non esiste un digest precedente; usare fix-forward o fermarsi per
-  decisione umana. Nessun rollback o restore SQL è autorizzato da questa scelta.
+  deploy di questo candidato esiste già una revisione live sana verificata
+  dall'operatore il 2026-10-30: `ca-roamly-prod--0000007`, health live/ready
+  HTTP 200, immagine `acrroamlywse7wit7fzpja.azurecr.io/roamly@sha256:9e996dee3f2eb9d5e756469ee6f0fc3bde95916c0ce58a6a8abb78c9e724c275`.
+  La richiesta HEAD del manifest ACR è riuscita e `Docker-Content-Digest`
+  coincide con quel digest. Riverificare prima di usarlo se lo stato cambia.
+  Nessun rollback o restore SQL è autorizzato da questa scelta.
 - La cronologia live `__EFMigrationsHistory` è stata verificata in sola lettura
   il 2026-10-30: risultano applicate le 15 migration fino a
   `20261028134346_AddCamperManualSpecifications`. Nessuna migration è stata
@@ -253,12 +285,13 @@ Riferimenti Microsoft: [Container Apps secrets e `listSecrets`](https://learn.mi
   SQL o modifica del registro è necessaria.
 
 Il workflow di release è già nel working tree sotto `.github/workflows/` e ha
-una copia di revisione in questa directory; il candidato non è stato ancora
-pubblicato su `main` né eseguito. Usa solo `workflow_dispatch`, senza trigger
+una copia di revisione in questa directory; la modifica preflight deve ancora
+passare PR/CI e non è stata eseguita. Usa solo `workflow_dispatch`, senza trigger
 `push`, `pull_request` o `schedule`. Ogni release richiede un'approvazione
 prima della preparazione e una seconda approvazione dopo l'esame del what-if,
 prima del deploy; usa un alias univoco derivato da commit/run/tentativo e il
 digest OCI come identità effettiva dell'immagine. La modalità `rollback` salta
 build/push e richiede un digest `sha256` precedente, con gli stessi gate di
-approvazione e what-if. Prima del dispatch, chiudere tutti i gate sopra e in
-`DEVOPS.md`.
+approvazione e what-if. Prima del dispatch, chiudere i gate operatore sopra e
+in `DEVOPS.md`; l'evidenza OIDC fresca viene raccolta dal preflight dopo la
+prima approvazione, prima di ogni build/push o what-if.

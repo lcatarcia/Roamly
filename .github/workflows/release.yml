@@ -105,6 +105,71 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Preflight read-only del principal OIDC e delle risorse esistenti
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::Preflight OIDC: $1" >&2; exit 1; }
+          guid_pattern='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          for value in "$AZURE_CLIENT_ID" "$AZURE_TENANT_ID" "$AZURE_SUBSCRIPTION_ID"; do
+            [[ "$value" =~ $guid_pattern ]] || fail "ID OIDC configurato assente o non valido."
+          done
+          [[ "$AZURE_RESOURCE_GROUP" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "Resource group non valido."
+
+          az account show --only-show-errors --output json |
+            jq -e --arg client "$AZURE_CLIENT_ID" --arg tenant "$AZURE_TENANT_ID" \
+              --arg subscription "$AZURE_SUBSCRIPTION_ID" '
+              .user.type == "servicePrincipal" and
+              ((.user.name | ascii_downcase) == ($client | ascii_downcase)) and
+              ((.tenantId | ascii_downcase) == ($tenant | ascii_downcase)) and
+              ((.id | ascii_downcase) == ($subscription | ascii_downcase)) and
+              .state == "Enabled"
+            ' > /dev/null || fail "Account autenticato diverso dal service principal/tenant/subscription attesi."
+
+          resource_root="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers"
+          app_id="${resource_root}/Microsoft.App/containerApps/ca-roamly-prod"
+          environment_id="${resource_root}/Microsoft.App/managedEnvironments/cae-roamly-live"
+          identity_id="${resource_root}/Microsoft.ManagedIdentity/userAssignedIdentities/id-roamly-runtime-prod"
+          read_resource() {
+            local resource_id="$1" api_version="$2" response
+            response="$(az rest --method get \
+              --url "https://management.azure.com${resource_id}?api-version=${api_version}" \
+              --only-show-errors --output json)" || fail "GET risorsa non riuscita."
+            printf '%s\n' "$response" | jq -e --arg id "$resource_id" '
+              (.id | ascii_downcase) == ($id | ascii_downcase)
+            ' > /dev/null || fail "Resource ID restituito assente o diverso da quello atteso."
+            printf '%s\n' "$response"
+          }
+
+          app="$(read_resource "$app_id" 2024-03-01)"
+          printf '%s\n' "$app" | jq -e --arg environment "$environment_id" --arg identity "$identity_id" '
+            ((.properties.managedEnvironmentId | ascii_downcase) == ($environment | ascii_downcase)) and
+            (.identity.userAssignedIdentities | keys | map(ascii_downcase) | index($identity | ascii_downcase) != null)
+          ' > /dev/null || fail "Environment o identità runtime associati alla app non corrispondenti."
+
+          az rest --method get \
+            --url "https://management.azure.com${app_id}/revisions?api-version=2024-03-01" \
+            --only-show-errors --output json |
+            jq -e --arg app "$app_id" '
+              (.nextLink == null) and (.value | type == "array" and length > 0) and
+              all(.value[];
+                (.name | type == "string" and test("^ca-roamly-prod--[a-zA-Z0-9-]+$")) and
+                ((.id | ascii_downcase) == (($app + "/revisions/" + .name) | ascii_downcase)))
+            ' > /dev/null || fail "GET revisioni non riuscita, incompleta o con ID non validi."
+
+          read_resource "$environment_id" 2024-03-01 > /dev/null
+          identity="$(read_resource "$identity_id" 2023-01-31)"
+          printf '%s\n' "$identity" | jq -e --arg tenant "$AZURE_TENANT_ID" --arg guid "$guid_pattern" '
+            (.properties.clientId | type == "string" and test($guid)) and
+            (.properties.principalId | type == "string" and test($guid)) and
+            ((.properties.tenantId | ascii_downcase) == ($tenant | ascii_downcase))
+          ' > /dev/null || fail "Identificativi della managed identity runtime assenti o non validi."
+          echo "Preflight OIDC read-only riuscito: account atteso e GET app/revisioni/environment/identity verificati."
+
       - name: Build e push dell'immagine identificata dallo SHA
         id: image
         if: ${{ inputs.mode == 'release' }}
