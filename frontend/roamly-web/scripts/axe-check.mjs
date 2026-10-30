@@ -174,6 +174,8 @@ async function verifyRegistrationAndConfirmation(page, theme) {
 
   await page.goto(DEV_SERVER_URL, { waitUntil: 'networkidle' })
   await page.getByRole('link', { name: 'Registrati' }).click()
+  // Le etichette Email/Password esistono anche nel login, ancora visibile durante la transizione.
+  await page.getByRole('heading', { name: 'Crea il tuo account' }).waitFor()
   await page.getByLabel('Email').fill('persona@example.test')
   await page.getByLabel('Password', { exact: true }).fill('Test-password-123!')
   await page.getByLabel('Conferma password').fill('password-diversa')
@@ -209,6 +211,7 @@ async function verifyRegistrationAndConfirmation(page, theme) {
   violations += await reportViolations(page, `registrazione accettata, tema "${theme}"`)
 
   await page.getByRole('link', { name: 'Apri il modulo di conferma email' }).click()
+  await page.getByRole('heading', { name: 'Conferma la tua email' }).waitFor()
   await page.getByLabel('UserId').fill('21ec2020-3aea-4069-a2dd-08002b4f0000')
   await page.getByLabel('Token di conferma').fill('token-di-prova/+con-caratteri')
   await page.getByRole('button', { name: 'Conferma email' }).click()
@@ -228,6 +231,7 @@ async function verifyRegistrationAndConfirmation(page, theme) {
   violations += await reportViolations(page, `conferma completata, tema "${theme}"`)
 
   await page.getByRole('link', { name: 'Vai al login' }).click()
+  await page.getByRole('heading', { name: 'Accedi', exact: true }).waitFor()
   await page.getByLabel('Email').fill('persona@example.test')
   await page.getByLabel('Password').fill('password-errata')
   await page.getByRole('button', { name: 'Accedi' }).click()
