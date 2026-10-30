@@ -66,6 +66,9 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Verifica il contratto JSON del what-if
+        run: node --test infra/workflows/tests/release-what-if.test.mjs
+
       - name: Validazione modalità e digest di rollback
         id: rollback
         shell: bash
@@ -245,6 +248,7 @@ jobs:
               journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
               journalBlobContainerName=roamly-journal-images \
               journalBlobAccountConfigurationVerified=true \
+            --no-pretty-print \
             --output json)"
           plan_changes="$(printf '%s\n' "$what_if_output" | jq -e -S -c '
             if .status == "Succeeded" and (.changes | type == "array") then
@@ -339,6 +343,7 @@ jobs:
               journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
               journalBlobContainerName=roamly-journal-images \
               journalBlobAccountConfigurationVerified=true \
+            --no-pretty-print \
             --output json)"
           plan_changes="$(printf '%s\n' "$what_if_output" | jq -e -S -c '
             if .status == "Succeeded" and (.changes | type == "array") then
