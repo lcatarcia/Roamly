@@ -18,7 +18,7 @@ export function AppShell({ children }: AppShellProps) {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-xs">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <BrandLogo className="h-10 w-[114px] sm:h-12 sm:w-[137px]" />
+          <BrandLogo className="h-11 w-44 sm:h-14 sm:w-56" />
           <ThemeToggle />
         </div>
       </header>

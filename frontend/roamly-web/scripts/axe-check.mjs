@@ -79,6 +79,7 @@ async function main() {
       await page.goto(DEV_SERVER_URL, { waitUntil: 'networkidle' })
       await page.evaluate((t) => window.localStorage.setItem('roamly.theme', t), theme)
       await page.reload({ waitUntil: 'networkidle' })
+      await verifyBrandAssets(page, theme)
 
       for (const route of AUTH_ROUTES) {
         await page.goto(`${DEV_SERVER_URL}${route.path}`, { waitUntil: 'networkidle' })
@@ -125,6 +126,49 @@ async function reportViolations(page, label) {
     }
   }
   return results.violations.reduce((count, violation) => count + violation.nodes.length, 0)
+}
+
+async function verifyBrandAssets(page, theme) {
+  const wordmarkPath = `/brand/logo-horizontal-${theme}.png`
+  const wordmark = page.locator('header').getByRole('img', { name: 'Roamly', exact: true })
+  const icon = page.locator('main').getByRole('img', { name: 'Roamly', exact: true })
+  await wordmark.waitFor()
+  await icon.waitFor()
+  assert.equal(await wordmark.getAttribute('src'), wordmarkPath)
+  assert.equal(await icon.getAttribute('src'), '/brand/app-icon.png')
+  assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'), '/brand/favicon-32.png')
+  assert.equal(await page.locator('link[rel="apple-touch-icon"]').getAttribute('href'), '/brand/apple-touch-icon.png')
+
+  for (const [src, width, height] of [
+    [wordmarkPath, 1300, 332],
+    ['/brand/app-icon.png', 319, 319],
+    ['/brand/favicon-32.png', 32, 32],
+    ['/brand/apple-touch-icon.png', 180, 180],
+  ]) {
+    const pixels = await page.evaluate(async (url) => {
+      const image = new Image()
+      image.src = url
+      await image.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = image.naturalWidth
+      canvas.height = image.naturalHeight
+      const context = canvas.getContext('2d')
+      context.drawImage(image, 0, 0)
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+      let transparent = 0, opaque = 0, partial = 0
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] === 0) transparent++
+        else if (data[i] === 255) opaque++
+        else partial++
+      }
+      return { width: canvas.width, height: canvas.height, transparent, opaque, partial }
+    }, src)
+    assert.equal(pixels.width, width, src)
+    assert.equal(pixels.height, height, src)
+    assert.ok(pixels.transparent > width * height * 0.05, `${src}: sfondo realmente trasparente`)
+    assert.ok(pixels.opaque > width * height * 0.25, `${src}: illustrazione preservata`)
+    assert.ok(pixels.partial > 0, `${src}: bordi antialias`)
+  }
 }
 
 async function verifyRegistrationAndConfirmation(page, theme) {

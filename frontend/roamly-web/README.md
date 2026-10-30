@@ -13,6 +13,19 @@ HTTPS di sviluppo.
 
 Comandi utili: `npm run build`, `npm run lint` e `npm run design:check`.
 
+## Identita' visiva
+
+`public/brand/` contiene i PNG RGBA ricavati dalla tavola loghi fornita
+dall'utente: lo sfondo a scacchi e le didascalie non fanno parte degli asset.
+`BrandLogo` seleziona il marchio orizzontale verde nel tema chiaro e quello
+avorio nel tema scuro; l'icona del camper mantiene il suo fondo crema e ha
+gli angoli esterni trasparenti. L'header usa il marchio completo, il login
+l'icona. Favicon e icona Apple derivano dalla stessa illustrazione.
+
+I PNG conservano i dettagli raster della tavola: non sono vettoriali.
+Per sostituirli, mantenere la trasparenza reale, aggiornare le dimensioni in
+`BrandLogo` e verificare `npm run design:axe` nei due temi.
+
 ## Catalogo i18n
 
 Le stringhe UI italiane vivono nell'unico catalogo tipizzato
