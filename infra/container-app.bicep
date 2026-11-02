@@ -18,13 +18,10 @@ param runtimeIdentityResourceId string
 @description('Client ID della managed identity runtime, usato da Azure.Identity per selezionarla.')
 param runtimeIdentityClientId string
 
-@description('Nome DNS del registry ACR Basic.')
-param registryServer string
-
 @description('Immagine OCI gia pubblicata, preferibilmente identificata da SHA immutabile.')
 param image string
 
-@description('URL versionless del secret Key Vault contenente la connection string SQL runtime. Il valore non viene letto dal template.')
+@description('URL della versione esatta del secret Key Vault SQL runtime, conservata dal preflight. Il valore non viene letto dal template.')
 param sqlConnectionSecretUrl string
 
 @description('URL versionless del secret Key Vault contenente la chiave HMAC del limiter login. Il valore non viene letto dal template.')
@@ -66,12 +63,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 8080
         transport: 'auto'
       }
-      registries: [
-        {
-          server: registryServer
-          identity: runtimeIdentityResourceId
-        }
-      ]
+      registries: []
       secrets: [
         {
           name: 'roamly-sql-connection'

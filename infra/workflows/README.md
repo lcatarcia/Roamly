@@ -1,5 +1,50 @@
 # Workflow OIDC di release
 
+## Passaggio a GHCR — preparazione del 2 novembre 2026
+
+La configurazione locale di release usa ora `ghcr.io/lcatarcia/roamly`.
+Il job `prepare` pubblica con `GITHUB_TOKEN` e `packages: write`; il job
+`deploy` non ha permessi Packages. Release e rollback richiedono un pull
+anonimo verificato con una configurazione Docker vuota. ACA non riceve
+credenziali GHCR, e il template imposta `registries: []`.
+
+Su richiesta esplicita dell'utente sono state rimosse le approvazioni
+Environment da `azure-release`, incluso il blocco all'auto-approvazione.
+Restano il dispatch manuale, la limitazione ai branch protetti
+dell'Environment e il guard `main` dei workflow. La protezione di `main`
+con PR e quattro check obbligatori non e stata modificata. Il confronto
+dei due what-if resta automatico; non implica piu una pausa per revisione
+umana tra i job.
+
+Il preflight legge solo i riferimenti Key Vault della app, non i valori:
+la versione esatta SQL fissata al cutover viene validata e trasmessa agli
+stessi due what-if e al deployment. Anche il riferimento HMAC esistente e
+conservato. Non viene ripristinato il vecchio URL SQL versionless.
+
+Il workflow manuale `migrate-registry.yml` copia esclusivamente il digest
+runtime controllato del 30 ottobre, includendo tutte le piattaforme e le
+attestazioni con `skopeo copy --all --preserve-digests`. Non ricostruisce il
+codice, non effettua deploy e non cancella risorse. Usa OIDC per ACR e il
+token temporaneo del workflow per GHCR, con auth file limitato al job e
+rimosso anche in caso di errore.
+
+La prima pubblicazione GHCR crea normalmente un pacchetto privato: prima
+del cutover occorre renderlo pubblico nelle impostazioni GitHub e
+verificarne accesso anonimo e digest. ACR resta necessario finche copia,
+pull anonimo, revisione ACA GHCR e aggiornamento del workflow su `main` non
+sono confermati. Una run di copia riuscita non completa la migrazione.
+Non eseguire il bootstrap `infra/main.bicep`: descrive le fondamenta
+storiche, compreso ACR, e potrebbe ricreare costi gia eliminati.
+
+L'utente ha autorizzato commit, push, PR/merge delle sole modifiche
+necessarie e avvio della copia. Questo non include il rilascio del codice
+locale, modifiche al polling SQL o eliminazione del database originale
+prima della conferma del login e dei dati.
+
+Le sezioni seguenti documentano anche la configurazione precedente ACR;
+su registry e riferimenti SQL prevale questo aggiornamento. Il passaggio
+live non e ancora attestato da questa preparazione.
+
 Il workflow eseguibile è `.github/workflows/release.yml`; `release.yml` in
 questa directory ne è la copia di revisione e deve restare sincronizzata. Il
 preflight è stato pubblicato tramite la PR #4 e superato dalla run
