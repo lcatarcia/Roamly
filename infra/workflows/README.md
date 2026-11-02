@@ -1,8 +1,8 @@
 # Workflow OIDC di release
 
-## Passaggio a GHCR — preparazione del 2 novembre 2026
+## Runtime GHCR — trasferimento completato il 2 novembre 2026
 
-La configurazione locale di release usa ora `ghcr.io/lcatarcia/roamly`.
+La configurazione di release su `main` usa ora `ghcr.io/lcatarcia/roamly`.
 Il job `prepare` pubblica con `GITHUB_TOKEN` e `packages: write`; il job
 `deploy` non ha permessi Packages. Release e rollback richiedono un pull
 anonimo verificato con una configurazione Docker vuota. ACA non riceve
@@ -21,18 +21,34 @@ la versione esatta SQL fissata al cutover viene validata e trasmessa agli
 stessi due what-if e al deployment. Anche il riferimento HMAC esistente e
 conservato. Non viene ripristinato il vecchio URL SQL versionless.
 
-Il workflow manuale `migrate-registry.yml` copia esclusivamente il digest
-runtime controllato del 30 ottobre, includendo tutte le piattaforme e le
-attestazioni con `skopeo copy --all --preserve-digests`. Non ricostruisce il
-codice, non effettua deploy e non cancella risorse. Usa OIDC per ACR e il
-token temporaneo del workflow per GHCR, con auth file limitato al job e
-rimosso anche in caso di errore.
+La [PR #6](https://github.com/lcatarcia/Roamly/pull/6) e stata unita dopo
+i quattro check obbligatori. La
+[run di copia 41423409735](https://github.com/lcatarcia/Roamly/actions/runs/41423409735)
+ha trasferito lo stesso digest OCI completo, senza rebuild, con
+`skopeo copy --all --preserve-digests`. Il workflow temporaneo
+`migrate-registry.yml` viene rimosso dopo l'uso: non e un percorso di release
+da mantenere e non va rieseguito dopo la dismissione ACR.
 
-La prima pubblicazione GHCR crea normalmente un pacchetto privato: prima
-del cutover occorre renderlo pubblico nelle impostazioni GitHub e
-verificarne accesso anonimo e digest. ACR resta necessario finche copia,
-pull anonimo, revisione ACA GHCR e aggiornamento del workflow su `main` non
-sono confermati. Una run di copia riuscita non completa la migrazione.
+Il pacchetto e risultato **Public**, verificato anche senza login GitHub.
+Tutti i 15 oggetti OCI (137.049.334 byte), comprese le attestazioni, sono
+stati scaricati anonimamente confrontando dimensioni e SHA-256 con la
+sorgente controllata. L'utente ha accettato esplicitamente PDB, sorgenti
+generati e metadati di provenance dopo l'audit dell'immagine.
+
+La revisione `ca-roamly-prod--ghcr-20261102` e l'unica attiva, Healthy,
+Single, min 0/max 1; usa
+`ghcr.io/lcatarcia/roamly@sha256:3bfba30702284f8b7d769f4a317153048eee9087b6c8777b8a0c7794c6556bd2`.
+SQL, HMAC, Blob, identita, probe e risorse sono stati preservati. La CLI ha
+aggiunto solo `value: ''` ai due environment con `secretRef`, senza cambiare
+i riferimenti: il confronto verifica esplicitamente questa equivalenza.
+Health live/ready e root rispondono 200; osservato un timeout iniziale
+di cold start seguito da successo.
+
+La configurazione pull ACR e stata rimossa e **ACR eliminato**, dopo
+verifica dipendenze e approvazione Janus del cutover e della dismissione.
+L'archivio OCI originale con checksum e conservato fuori Git con ACL
+ristrette. Per recupero usare un digest GHCR verificato; le immagini
+storiche eliminate da ACR non sono piu candidati disponibili per rollback.
 Non eseguire il bootstrap `infra/main.bicep`: descrive le fondamenta
 storiche, compreso ACR, e potrebbe ricreare costi gia eliminati.
 
@@ -41,9 +57,15 @@ necessarie e avvio della copia. Questo non include il rilascio del codice
 locale, modifiche al polling SQL o eliminazione del database originale
 prima della conferma del login e dei dati.
 
-Le sezioni seguenti documentano anche la configurazione precedente ACR;
-su registry e riferimenti SQL prevale questo aggiornamento. Il passaggio
-live non e ancora attestato da questa preparazione.
+L'utente ha poi confermato login e dati corretti, autorizzando la
+dismissione del solo database originale: `roamly` sul vecchio server
+`sql-roamly-prod-wse7wit7fzpja` e stato eliminato e verificato assente.
+Il database free e il backup BACPAC cifrato restano intatti; il vecchio
+server logico non e stato eliminato. Il canone ACR non prosegue, ma i costi
+gia maturati, eventuali backup trattenuti da Azure e le altre risorse non
+vengono azzerati retroattivamente.
+
+## Configurazione precedente — storico
 
 Il workflow eseguibile è `.github/workflows/release.yml`; `release.yml` in
 questa directory ne è la copia di revisione e deve restare sincronizzata. Il

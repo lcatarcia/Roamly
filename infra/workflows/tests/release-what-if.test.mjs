@@ -5,7 +5,6 @@ import test from 'node:test'
 const active = readFileSync(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8')
 const review = readFileSync(new URL('../release.yml', import.meta.url), 'utf8')
 const containerApp = readFileSync(new URL('../../container-app.bicep', import.meta.url), 'utf8')
-const migration = readFileSync(new URL('../../../.github/workflows/migrate-registry.yml', import.meta.url), 'utf8')
 
 test('active and review release workflows remain identical', () => {
   assert.equal(active, review)
@@ -68,12 +67,4 @@ for (const [name, source] of [['active', active], ['review', review]]) {
 test('public image deployment does not configure registry credentials', () => {
   assert.match(containerApp, /registries: \[\]/)
   assert.doesNotMatch(containerApp, /param registryServer|passwordSecretRef/)
-})
-
-test('one-off migration copies the audited index including attestations without deploying', () => {
-  assert.match(migration, /SOURCE_DIGEST: sha256:3bfba30702284f8b7d769f4a317153048eee9087b6c8777b8a0c7794c6556bd2/)
-  assert.match(migration, /skopeo copy --all --preserve-digests/)
-  assert.match(migration, /\[\[ "\$copied_digest" == "\$SOURCE_DIGEST" \]\]/)
-  assert.match(migration, /github\.ref == 'refs\/heads\/main'/)
-  assert.doesNotMatch(migration, /docker build|az containerapp update|az acr delete|az deployment group create/)
 })
