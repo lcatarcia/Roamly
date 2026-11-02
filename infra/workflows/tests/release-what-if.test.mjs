@@ -4,6 +4,8 @@ import test from 'node:test'
 
 const active = readFileSync(new URL('../../../.github/workflows/release.yml', import.meta.url), 'utf8')
 const review = readFileSync(new URL('../release.yml', import.meta.url), 'utf8')
+const containerApp = readFileSync(new URL('../../container-app.bicep', import.meta.url), 'utf8')
+const migration = readFileSync(new URL('../../../.github/workflows/migrate-registry.yml', import.meta.url), 'utf8')
 
 test('active and review release workflows remain identical', () => {
   assert.equal(active, review)
@@ -28,4 +30,50 @@ for (const [name, source] of [['active', active], ['review', review]]) {
       assert.match(parser, /error\("what-if non riuscito o output non valido"\)/)
     }
   })
+
+  test(`${name}: release and rollback use the owner-scoped GHCR repository`, () => {
+    assert.match(source, /IMAGE_REGISTRY: ghcr\.io/)
+    assert.equal([...source.matchAll(/image_repository="\$\{GITHUB_REPOSITORY,,\}"/g)].length, 2)
+    assert.doesNotMatch(source, /ACR_LOGIN_SERVER|ACR_NAME|az acr login|registryServer=/)
+    const prepare = source.split('\n  prepare:')[1].split('\n  deploy:')[0]
+    const deploy = source.split('\n  deploy:')[1]
+    assert.match(prepare, /packages: write/)
+    assert.doesNotMatch(deploy, /packages: write/)
+    assert.match(prepare, /GHCR_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/)
+    assert.match(prepare, /printf '%s' "\$GHCR_TOKEN" \| docker login .* --password-stdin/)
+  })
+
+  test(`${name}: public pull is checked without the publisher credentials`, () => {
+    const anonymousStep = source.split('      - name: Verifica accesso anonimo al digest GHCR')[1]
+      .split('      - name: Generazione del what-if Bicep')[0]
+    assert.match(anonymousStep, /set -euo pipefail/)
+    assert.match(anonymousStep, /anonymous_config="\$\(mktemp -d\)"/)
+    assert.match(anonymousStep, /DOCKER_CONFIG="\$anonymous_config" docker manifest inspect "\$RELEASE_IMAGE"/)
+    assert.doesNotMatch(anonymousStep, /\|\| true|continue-on-error|docker login/)
+  })
+
+  test(`${name}: all previews and deployment preserve the live SQL and HMAC references`, () => {
+    assert.match(source, /id: preflight/)
+    assert.match(source, /sql_secret_url: \$\{\{ steps\.preflight\.outputs\.sql_secret_url \}\}/)
+    assert.match(source, /login_hmac_secret_url: \$\{\{ steps\.preflight\.outputs\.login_hmac_secret_url \}\}/)
+    assert.match(source, /roamly-sql-connection\/\[0-9a-fA-F\]\{32\}\$/)
+    assert.equal([...source.matchAll(/sqlConnectionSecretUrl="\$SQL_SECRET_URL"/g)].length, 3)
+    assert.equal([...source.matchAll(/loginHmacSecretUrl="\$LOGIN_HMAC_SECRET_URL"/g)].length, 3)
+    assert.equal([...source.matchAll(/SQL_SECRET_URL: \$\{\{ needs\.prepare\.outputs\.sql_secret_url \}\}/g)].length, 2)
+    assert.equal([...source.matchAll(/LOGIN_HMAC_SECRET_URL: \$\{\{ needs\.prepare\.outputs\.login_hmac_secret_url \}\}/g)].length, 2)
+    assert.doesNotMatch(source, /az keyvault secret show|listSecrets/)
+  })
 }
+
+test('public image deployment does not configure registry credentials', () => {
+  assert.match(containerApp, /registries: \[\]/)
+  assert.doesNotMatch(containerApp, /param registryServer|passwordSecretRef/)
+})
+
+test('one-off migration copies the audited index including attestations without deploying', () => {
+  assert.match(migration, /SOURCE_DIGEST: sha256:3bfba30702284f8b7d769f4a317153048eee9087b6c8777b8a0c7794c6556bd2/)
+  assert.match(migration, /skopeo copy --all --preserve-digests/)
+  assert.match(migration, /\[\[ "\$copied_digest" == "\$SOURCE_DIGEST" \]\]/)
+  assert.match(migration, /github\.ref == 'refs\/heads\/main'/)
+  assert.doesNotMatch(migration, /docker build|az containerapp update|az acr delete|az deployment group create/)
+})

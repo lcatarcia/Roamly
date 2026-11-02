@@ -25,8 +25,7 @@ concurrency:
 
 env:
   AZURE_RESOURCE_GROUP: rg-roamly-dev
-  ACR_NAME: acrroamlywse7wit7fzpja
-  ACR_LOGIN_SERVER: acrroamlywse7wit7fzpja.azurecr.io
+  IMAGE_REGISTRY: ghcr.io
 
 jobs:
   guard:
@@ -56,9 +55,12 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      packages: write
     outputs:
       image: ${{ steps.image.outputs.reference || steps.rollback.outputs.reference }}
       plan_hash: ${{ steps.whatif.outputs.plan_hash }}
+      sql_secret_url: ${{ steps.preflight.outputs.sql_secret_url }}
+      login_hmac_secret_url: ${{ steps.preflight.outputs.login_hmac_secret_url }}
     steps:
       - name: Checkout dello SHA selezionato
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -90,9 +92,8 @@ jobs:
                 echo "::error::La modalità rollback richiede un digest sha256 valido."
                 exit 1
               fi
-              image_repository="${GITHUB_REPOSITORY##*/}"
-              image_repository="${image_repository,,}"
-              image_reference="${ACR_LOGIN_SERVER}/${image_repository}@${ROLLBACK_DIGEST}"
+              image_repository="${GITHUB_REPOSITORY,,}"
+              image_reference="${IMAGE_REGISTRY}/${image_repository}@${ROLLBACK_DIGEST}"
               printf 'reference=%s\n' "$image_reference" >> "$GITHUB_OUTPUT"
               ;;
             *)
@@ -109,6 +110,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Preflight read-only del principal OIDC e delle risorse esistenti
+        id: preflight
         shell: bash
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -154,6 +156,21 @@ jobs:
             (.identity.userAssignedIdentities | keys | map(ascii_downcase) | index($identity | ascii_downcase) != null)
           ' > /dev/null || fail "Environment o identità runtime associati alla app non corrispondenti."
 
+          sql_secret_url="$(printf '%s\n' "$app" | jq -er '
+            [.properties.configuration.secrets[] | select(.name == "roamly-sql-connection")] |
+            if length == 1 then .[0].keyVaultUrl else error("SQL secret ambiguo") end
+          ')" || fail "Riferimento SQL runtime assente o ambiguo."
+          [[ "$sql_secret_url" =~ ^https://kv-roamlywse7wit7fzpja\.vault\.azure\.net/secrets/roamly-sql-connection/[0-9a-fA-F]{32}$ ]] ||
+            fail "Il secret SQL deve conservare una versione esatta del vault atteso."
+          login_hmac_secret_url="$(printf '%s\n' "$app" | jq -er '
+            [.properties.configuration.secrets[] | select(.name == "roamly-login-hmac")] |
+            if length == 1 then .[0].keyVaultUrl else error("HMAC secret ambiguo") end
+          ')" || fail "Riferimento HMAC runtime assente o ambiguo."
+          [[ "$login_hmac_secret_url" =~ ^https://kv-roamlywse7wit7fzpja\.vault\.azure\.net/secrets/roamly-login-hmac(/[0-9a-fA-F]{32})?$ ]] ||
+            fail "Riferimento HMAC fuori dal vault atteso."
+          printf 'sql_secret_url=%s\n' "$sql_secret_url" >> "$GITHUB_OUTPUT"
+          printf 'login_hmac_secret_url=%s\n' "$login_hmac_secret_url" >> "$GITHUB_OUTPUT"
+
           az rest --method get \
             --url "https://management.azure.com${app_id}/revisions?api-version=2024-03-01" \
             --only-show-errors --output json |
@@ -182,14 +199,15 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          image_repository="${GITHUB_REPOSITORY##*/}"
-          image_repository="${image_repository,,}"
+          image_repository="${GITHUB_REPOSITORY,,}"
           image_tag="${COMMIT_SHA}-${RUN_ID}-${RUN_ATTEMPT}"
-          image_reference="${ACR_LOGIN_SERVER}/${image_repository}:${image_tag}"
+          image_reference="${IMAGE_REGISTRY}/${image_repository}:${image_tag}"
 
-          az acr login --name "$ACR_NAME"
+          printf '%s' "$GHCR_TOKEN" | docker login "$IMAGE_REGISTRY" --username "$GHCR_USER" --password-stdin
           docker build --file Dockerfile --tag "$image_reference" .
           push_output="$(docker push "$image_reference" 2>&1)" || {
             printf '%s\n' "$push_output"
@@ -201,10 +219,20 @@ jobs:
             echo "::error::Docker non ha restituito un digest OCI valido per l'immagine pubblicata."
             exit 1
           fi
-          image_reference="${ACR_LOGIN_SERVER}/${image_repository}@${image_digest}"
+          image_reference="${IMAGE_REGISTRY}/${image_repository}@${image_digest}"
           printf 'reference=%s\n' "$image_reference" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$image_tag" >> "$GITHUB_OUTPUT"
           printf 'RELEASE_IMAGE=%s\n' "$image_reference" >> "$GITHUB_ENV"
+
+      - name: Verifica accesso anonimo al digest GHCR
+        shell: bash
+        env:
+          RELEASE_IMAGE: ${{ steps.image.outputs.reference || steps.rollback.outputs.reference }}
+        run: |
+          set -euo pipefail
+          anonymous_config="$(mktemp -d)"
+          trap 'rm -rf -- "$anonymous_config"' EXIT
+          DOCKER_CONFIG="$anonymous_config" docker manifest inspect "$RELEASE_IMAGE" > /dev/null
 
       - name: Generazione del what-if Bicep
         id: whatif
@@ -218,6 +246,8 @@ jobs:
           RELEASE_IMAGE: ${{ steps.image.outputs.reference || steps.rollback.outputs.reference }}
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
           ROLLBACK_DIGEST: ${{ inputs.rollback_digest }}
+          SQL_SECRET_URL: ${{ steps.preflight.outputs.sql_secret_url }}
+          LOGIN_HMAC_SECRET_URL: ${{ steps.preflight.outputs.login_hmac_secret_url }}
         run: |
           set -euo pipefail
           container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
@@ -241,10 +271,9 @@ jobs:
               containerAppsEnvironmentResourceId="$container_apps_environment_id" \
               runtimeIdentityResourceId="$runtime_identity_id" \
               runtimeIdentityClientId="$runtime_identity_client_id" \
-              registryServer="$ACR_LOGIN_SERVER" \
               image="$RELEASE_IMAGE" \
-              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
-              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              sqlConnectionSecretUrl="$SQL_SECRET_URL" \
+              loginHmacSecretUrl="$LOGIN_HMAC_SECRET_URL" \
               journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
               journalBlobContainerName=roamly-journal-images \
               journalBlobAccountConfigurationVerified=true \
@@ -269,7 +298,7 @@ jobs:
             printf 'Modalità: `%s`\n\n' "$RELEASE_MODE"
             printf 'Commit: `%s`\n\n' "$COMMIT_SHA"
             if [[ "$RELEASE_MODE" == "release" ]]; then
-              printf 'Tag ACR (alias): `%s`\n\n' "$IMAGE_TAG"
+              printf 'Tag GHCR (alias): `%s`\n\n' "$IMAGE_TAG"
             else
               printf 'Digest rollback richiesto: `%s`\n\n' "$ROLLBACK_DIGEST"
             fi
@@ -279,7 +308,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
-    name: Applica Bicep dopo la revisione del what-if
+    name: Applica Bicep dopo la riverifica del what-if
     needs:
       - guard
       - prepare
@@ -313,6 +342,8 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
           APPROVED_PLAN_HASH: ${{ needs.prepare.outputs.plan_hash }}
+          SQL_SECRET_URL: ${{ needs.prepare.outputs.sql_secret_url }}
+          LOGIN_HMAC_SECRET_URL: ${{ needs.prepare.outputs.login_hmac_secret_url }}
         run: |
           set -euo pipefail
           container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
@@ -336,10 +367,9 @@ jobs:
               containerAppsEnvironmentResourceId="$container_apps_environment_id" \
               runtimeIdentityResourceId="$runtime_identity_id" \
               runtimeIdentityClientId="$runtime_identity_client_id" \
-              registryServer="$ACR_LOGIN_SERVER" \
               image="$RELEASE_IMAGE" \
-              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
-              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              sqlConnectionSecretUrl="$SQL_SECRET_URL" \
+              loginHmacSecretUrl="$LOGIN_HMAC_SECRET_URL" \
               journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
               journalBlobContainerName=roamly-journal-images \
               journalBlobAccountConfigurationVerified=true \
@@ -378,6 +408,8 @@ jobs:
           RUN_ATTEMPT: ${{ github.run_attempt }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
+          SQL_SECRET_URL: ${{ needs.prepare.outputs.sql_secret_url }}
+          LOGIN_HMAC_SECRET_URL: ${{ needs.prepare.outputs.login_hmac_secret_url }}
         run: |
           set -euo pipefail
           container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
@@ -401,10 +433,9 @@ jobs:
               containerAppsEnvironmentResourceId="$container_apps_environment_id" \
               runtimeIdentityResourceId="$runtime_identity_id" \
               runtimeIdentityClientId="$runtime_identity_client_id" \
-              registryServer="$ACR_LOGIN_SERVER" \
               image="$RELEASE_IMAGE" \
-              sqlConnectionSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-sql-connection \
-              loginHmacSecretUrl=https://kv-roamlywse7wit7fzpja.vault.azure.net/secrets/roamly-login-hmac \
+              sqlConnectionSecretUrl="$SQL_SECRET_URL" \
+              loginHmacSecretUrl="$LOGIN_HMAC_SECRET_URL" \
               journalBlobServiceUri=https://storoamlywse7wit7fzpja.blob.core.windows.net/ \
               journalBlobContainerName=roamly-journal-images \
               journalBlobAccountConfigurationVerified=true

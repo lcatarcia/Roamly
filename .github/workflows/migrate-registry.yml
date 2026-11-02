@@ -1,0 +1,79 @@
+name: Copy audited runtime image to GHCR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: roamly-registry-migration
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: azure-release
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      SOURCE_REGISTRY: acrroamlywse7wit7fzpja.azurecr.io
+      SOURCE_DIGEST: sha256:3bfba30702284f8b7d769f4a317153048eee9087b6c8777b8a0c7794c6556bd2
+      DESTINATION: ghcr.io/lcatarcia/roamly
+    steps:
+      - name: Authenticate to Azure using OIDC
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure the registry copy tool is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v skopeo; then
+            sudo apt-get update -qq
+            sudo apt-get install --yes --no-install-recommends skopeo
+          fi
+
+      - name: Copy the audited image without rebuilding or changing its digest
+        shell: bash
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          auth_directory="$(mktemp -d)"
+          trap 'rm -rf -- "$auth_directory"' EXIT
+          auth_file="${auth_directory}/auth.json"
+
+          acr_token="$(az acr login --name acrroamlywse7wit7fzpja --expose-token \
+            --query accessToken --output tsv --only-show-errors)"
+          [[ -n "$acr_token" ]] || { echo "::error::ACR did not return a token."; exit 1; }
+          printf '%s' "$acr_token" | skopeo login --authfile "$auth_file" \
+            --username 00000000-0000-0000-0000-000000000000 --password-stdin "$SOURCE_REGISTRY"
+          unset acr_token
+          printf '%s' "$GHCR_TOKEN" | skopeo login --authfile "$auth_file" \
+            --username "$GHCR_USER" --password-stdin ghcr.io
+          unset GHCR_TOKEN
+
+          skopeo copy --all --preserve-digests --authfile "$auth_file" \
+            "docker://${SOURCE_REGISTRY}/roamly@${SOURCE_DIGEST}" \
+            "docker://${DESTINATION}:migrated-e46d5453"
+          copied_digest="sha256:$(skopeo inspect --raw --authfile "$auth_file" \
+            "docker://${DESTINATION}@${SOURCE_DIGEST}" | sha256sum | cut -d ' ' -f1)"
+          [[ "$copied_digest" == "$SOURCE_DIGEST" ]] || {
+            echo "::error::The copied OCI index does not match the audited digest."
+            exit 1
+          }
+          {
+            printf '## Registry copy completed\n\n'
+            printf 'Image: `%s@%s`\n\n' "$DESTINATION" "$copied_digest"
+            printf 'No rebuild, application deployment or resource deletion was performed.\n\n'
+            printf 'Before switching ACA, make the package public and verify anonymous access to the index and blobs.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
