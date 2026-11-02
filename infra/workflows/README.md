@@ -57,9 +57,13 @@ necessarie e avvio della copia. Questo non include il rilascio del codice
 locale, modifiche al polling SQL o eliminazione del database originale
 prima della conferma del login e dei dati.
 
-Il database originale e conservato in attesa della conferma del login e
-dei dati da parte dell'utente. Il canone ACR non prosegue, ma i costi gia
-maturati e le altre risorse Azure non vengono azzerati retroattivamente.
+L'utente ha poi confermato login e dati corretti, autorizzando la
+dismissione del solo database originale: `roamly` sul vecchio server
+`sql-roamly-prod-wse7wit7fzpja` e stato eliminato e verificato assente.
+Il database free e il backup BACPAC cifrato restano intatti; il vecchio
+server logico non e stato eliminato. Il canone ACR non prosegue, ma i costi
+gia maturati, eventuali backup trattenuti da Azure e le altre risorse non
+vengono azzerati retroattivamente.
 
 ## Configurazione precedente — storico
 
