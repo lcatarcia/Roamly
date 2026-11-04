@@ -216,7 +216,7 @@ function SavedPlaceCreateForm({
             {validationMessage(validationError)}
           </p>
         )}
-        {Boolean(error) && <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(error, 'neutral.savedPlaces.error')}</p>}
+        {Boolean(error) && <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(error, t('neutral.savedPlaces.error'))}</p>}
         {saved && <p role="status" className="text-sm text-muted-foreground">{t('neutral.savedPlaces.added')}</p>}
         <Button type="submit" className="w-full" disabled={saving}>
           {saving ? t('neutral.savedPlaces.adding') : t('neutral.savedPlaces.add')}
@@ -445,7 +445,7 @@ function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedP
           )}
         </>
       )}
-      {failure !== null && <p role="alert" className="mt-3 rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(failure, 'neutral.savedPlaces.actionError')}</p>}
+      {failure !== null && <p role="alert" className="mt-3 rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(failure, t('neutral.savedPlaces.actionError'))}</p>}
     </li>
   )
 }
@@ -586,8 +586,8 @@ function validationMessage(error: 'required' | 'coordinates'): string {
     : t('neutral.savedPlaces.coordinatesRequired')
 }
 
-function savedPlaceError(error: unknown, fallback: 'neutral.savedPlaces.error' | 'neutral.savedPlaces.actionError'): string {
+function savedPlaceError(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.status === 409) return t('neutral.savedPlaces.referenced')
   if (error instanceof ApiError && error.status === 412) return t('neutral.savedPlaces.stale')
-  return t(fallback)
+  return fallback
 }
