@@ -212,11 +212,11 @@ function SavedPlaceCreateForm({
           />
         </FieldGroup>
         {validationError && (
-          <p role="alert" className="text-sm text-danger-text">
+          <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">
             {validationMessage(validationError)}
           </p>
         )}
-        {Boolean(error) && <p role="alert" className="text-sm text-danger-text">{savedPlaceError(error, 'neutral.savedPlaces.error')}</p>}
+        {Boolean(error) && <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(error, 'neutral.savedPlaces.error')}</p>}
         {saved && <p role="status" className="text-sm text-muted-foreground">{t('neutral.savedPlaces.added')}</p>}
         <Button type="submit" className="w-full" disabled={saving}>
           {saving ? t('neutral.savedPlaces.adding') : t('neutral.savedPlaces.add')}
@@ -445,7 +445,7 @@ function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedP
           )}
         </>
       )}
-      {failure !== null && <p role="alert" className="mt-3 text-sm text-danger-text">{savedPlaceError(failure, 'neutral.savedPlaces.actionError')}</p>}
+      {failure !== null && <p role="alert" className="mt-3 rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(failure, 'neutral.savedPlaces.actionError')}</p>}
     </li>
   )
 }
@@ -525,7 +525,7 @@ function CollectionMessage({ children }: { children: ReactNode }) {
 function CollectionError({ onRetry }: { onRetry: () => void }) {
   return (
     <section className="space-y-4 rounded-3xl border border-border bg-card p-6">
-      <p role="alert" className="text-sm text-danger-text">{t('neutral.savedPlaces.loadError')}</p>
+      <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{t('neutral.savedPlaces.loadError')}</p>
       <Button variant="outline" onClick={onRetry}>{t('neutral.savedPlaces.retry')}</Button>
     </section>
   )
