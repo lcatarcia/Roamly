@@ -53,6 +53,7 @@ using Roamly.Api.Features.Journal.ListJournalEntries;
 using Roamly.Api.Features.Journal.UpdateJournalEntry;
 using Roamly.Api.Features.Journal.UploadJournalAttachment;
 using Roamly.Api.Features.Journal.DeleteJournalAttachment;
+using Roamly.Api.Features.Places;
 using Roamly.Common.Email;
 
 namespace Roamly.Api.Common.Startup;
@@ -115,6 +116,13 @@ public static class FeatureRegistration
         services.AddScoped<ListTripsHandler>();
         services.AddScoped<UpdateTripHandler>();
         services.AddScoped<TransitionTripHandler>();
+
+        // Features/Places/
+        services.AddScoped<CreateSavedPlaceHandler>();
+        services.AddScoped<GetSavedPlaceHandler>();
+        services.AddScoped<UpdateSavedPlaceHandler>();
+        services.AddScoped<DeleteSavedPlaceHandler>();
+        services.AddScoped<ListSavedPlacesHandler>();
 
         // Features/Checklists/
         services.AddScoped<CreateChecklistHandler>();

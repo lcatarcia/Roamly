@@ -98,6 +98,34 @@ public sealed class RoamlyClient : IDisposable
         return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Esegue un metodo non sicuro (PUT/DELETE) con barriere CSRF, body JSON opzionale e
+    /// intestazione If-Match opzionale, per dimostrare le precondizioni di concorrenza.
+    /// </summary>
+    public async Task<HttpResponseMessage> SendUnsafeWithCsrfAsync(
+        HttpMethod method,
+        string path,
+        object? body,
+        string? ifMatch,
+        CancellationToken cancellationToken)
+    {
+        var token = await FetchCsrfTokenAsync(cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("X-Roamly-Request", "1");
+        request.Headers.Add("X-XSRF-TOKEN", token);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        if (ifMatch is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
+        }
+
+        return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Esegue una richiesta GET mantenendo il cookie applicativo del client.</summary>
     public Task<HttpResponseMessage> GetAsync(string path, CancellationToken cancellationToken)
     {

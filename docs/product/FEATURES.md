@@ -77,6 +77,16 @@ Evoluzione futura del motore di viaggio: dimensioni del camper, altezza, peso, r
 
 ---
 
+### Luoghi da visitare — piano della wishlist personale
+
+Sezione personale indipendente da Camper e Trip, basata su `SavedPlace`. Il [piano della prima versione](PLACES-WISHLIST-PLAN.md), definito il 2026-11-03, adotta elenco laterale, mappa e dettaglio sincronizzati; su mobile l'elenco è espandibile.
+
+Per contenere i costi: Azure Maps base caricata solo su richiesta, inserimento manuale di nome/categoria e dettagli facoltativi, posizione tramite coordinate o click; ricerca esclusivamente nella raccolta Roamly. Un link Google Maps può essere conservato e aperto volontariamente, senza importare dati o risolvere short-link. I luoghi senza posizione restano nell'elenco. Il riuso come tappa conserva lo snapshot del TripStop.
+
+Search geografica, autocomplete, reverse geocoding, routing e AI sono esclusi da questa versione. Il compromesso è un inserimento più manuale. **Stato: piano, non funzionalità attiva**; i gate geografici, privacy e consumi restano da completare prima dell'integrazione reale.
+
+---
+
 ## 4. Vehicle-Aware Routing
 
 Feature strategica. Non chiedere soltanto "Come arrivo da A a B?" ma:

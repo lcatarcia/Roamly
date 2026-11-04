@@ -1,10 +1,10 @@
 {
   "$schema": "./contrast-pairs.schema.json",
   "_nota": "Manifesto delle coppie colore/superficie (R14, ADR-0007). I valori 'ratio' sono quelli DICHIARATI nell'ADR (per confronto/sanity-check); lo script scripts/contrast-check.mjs ricalcola il ratio REALE leggendo i letterali da src/styles/theme.css e fallisce se si discosta troppo dal dichiarato o scende sotto soglia. fg/bg sono nomi di token LETTERALI (livello 1), non semantici: la stessa coppia fisica di colori e' valida indipendentemente da quale token semantico la usi.",
-  "totale": 47,
-  "chiare": 22,
-  "scure": 25,
-  "conSoglia": 44,
+  "totale": 49,
+  "chiare": 23,
+  "scure": 26,
+  "conSoglia": 46,
   "conEsitoNegativoDichiarato": 3,
   "coppie": [
     { "id": "L1", "tema": "chiaro", "fg": "ink", "bg": "sand-100", "ratio": 14.08, "soglia": 4.5, "nota": "testo primario" },
@@ -29,6 +29,7 @@
     { "id": "L20", "tema": "chiaro", "fg": "sun-400", "bg": "forest-950", "ratio": 8.89, "soglia": 4.5, "nota": "" },
     { "id": "L21", "tema": "chiaro", "fg": "clay-500", "bg": "forest-950", "ratio": 4.96, "soglia": 4.5, "nota": "" },
     { "id": "L22", "tema": "chiaro", "fg": "white", "bg": "forest-700", "ratio": 8.67, "soglia": 4.5, "nota": "" },
+    { "id": "L23", "tema": "chiaro", "fg": "danger-700", "bg": "sand-200", "ratio": 7.2, "soglia": 4.5, "nota": "errore di form su superficie secondaria (SavedPlacesPage)" },
 
     { "id": "D1", "tema": "scuro", "fg": "sand-100", "bg": "night-950", "ratio": 15.78, "soglia": 4.5, "nota": "testo primario" },
     { "id": "D2", "tema": "scuro", "fg": "sand-100", "bg": "night-900", "ratio": 13.78, "soglia": 4.5, "nota": "" },
@@ -69,6 +70,7 @@
       "declaredNegative": true,
       "nota": "regressione strutturale dichiarata: danger-400 e clay-400 sono indistinguibili per deuteranopia/protanopia su fondo quasi nero",
       "mitigazione": "R17 vincolante: colore + icona + testo esplicito dell'azione, sempre. CTA primario e azione distruttiva non compaiono mai nella stessa riga di azioni."
-    }
+    },
+    { "id": "D26", "tema": "scuro", "fg": "clay-400", "bg": "night-800", "ratio": 4.67, "soglia": 4.5, "nota": "link di accento su card (SavedPlacesPage)" }
   ]
 }

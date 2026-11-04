@@ -6,8 +6,8 @@ using Roamly.Domain.Entities;
 namespace Roamly.Infrastructure.Persistence;
 
 /// <summary>
-/// Contesto applicativo: le entita' attive fino alla Phase 2, SavedPlace strutturale per la FK
-/// opzionale delle tappe, Data Protection e il contatore infrastrutturale non-owned del rate limiter.
+/// Contesto applicativo: le entita' di dominio attive, incluso il create/list manuale di SavedPlace,
+/// Data Protection e il contatore infrastrutturale non-owned del rate limiter.
 /// E' questo il contesto su cui si generano le migration; FullSchema verifica anche le entita' future.
 /// </summary>
 public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
@@ -60,7 +60,7 @@ public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
     /// <summary>Spese associate ai camper e, facoltativamente, ai viaggi.</summary>
     public DbSet<Expense> Expenses => Set<Expense>();
 
-    /// <summary>Luoghi salvati, presenti solo per l'integrita' referenziale in questa fase.</summary>
+    /// <summary>Luoghi salvati dell'utente corrente.</summary>
     public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
 
     /// <summary>Ricevute di cancellazione, non owned.</summary>
