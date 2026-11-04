@@ -136,6 +136,21 @@ public enum SavedPlaceCategory : byte
 
     /// <summary>Punto di interesse generico.</summary>
     PointOfInterest = 8,
+
+    /// <summary>Citta' da visitare.</summary>
+    City = 9,
+
+    /// <summary>Paese o borgo da visitare.</summary>
+    Town = 10,
+
+    /// <summary>Museo da visitare.</summary>
+    Museum = 11,
+
+    /// <summary>Locale o luogo di intrattenimento.</summary>
+    Venue = 12,
+
+    /// <summary>Attrazione da visitare.</summary>
+    Attraction = 13,
 }
 
 /// <summary>

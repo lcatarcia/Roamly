@@ -298,6 +298,34 @@ export interface CamperListItem {
   vehicleKind: number
 }
 
+export interface SavedPlace {
+  id: string
+  name: string
+  category: number
+  position: { latitude: number; longitude: number } | null
+  address: string | null
+  notes: string | null
+  googleMapsUrl: string | null
+}
+
+export interface SavedPlaceInput {
+  id: string
+  name: string
+  category: number
+  position?: { latitude: number; longitude: number }
+  address: string | null
+  notes: string | null
+  googleMapsUrl: string | null
+}
+
+export type SavedPlaceUpdateInput = Omit<SavedPlaceInput, 'id'>
+
+/** Luogo letto insieme al suo ETag, da restituire in If-Match alla modifica o eliminazione. */
+export interface SavedPlaceVersion {
+  value: SavedPlace
+  etag: string
+}
+
 export interface PageResponse<T> {
   items: T[]
   nextCursor: string | null
@@ -518,6 +546,61 @@ export function fetchTrips(after: string | null = null): Promise<PageResponse<Tr
     pagePath('/api/v1/trips', after),
     'Non e’ stato possibile leggere i viaggi.',
   )
+}
+
+/** GET /api/v1/saved-places — pagina keyset della raccolta personale. */
+export function fetchSavedPlaces(after: string | null = null): Promise<PageResponse<SavedPlace>> {
+  return getJson(
+    pagePath('/api/v1/saved-places', after),
+    'Non e’ stato possibile leggere i luoghi salvati.',
+  )
+}
+
+/** POST /api/v1/saved-places — i dettagli e il link sono sempre inseriti manualmente. */
+export function createSavedPlace(input: SavedPlaceInput): Promise<SavedPlace> {
+  return mutate('/api/v1/saved-places', {
+    method: 'POST',
+    body: input,
+  })
+}
+
+/** GET /api/v1/saved-places/{id} — legge il luogo e il suo ETag prima di modificarlo o eliminarlo. */
+export async function fetchSavedPlaceVersion(id: string): Promise<SavedPlaceVersion> {
+  const response = await fetch(`/api/v1/saved-places/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    throw await toApiError(response, 'Non e\' stato possibile leggere il luogo.')
+  }
+
+  const etag = response.headers.get('ETag')
+  if (!etag) {
+    throw new ApiError(response.status, 'La risposta non contiene il token di aggiornamento.', null)
+  }
+
+  return { value: (await response.json()) as SavedPlace, etag }
+}
+
+/** PUT /api/v1/saved-places/{id} — sostituisce i dati modificabili se l'ETag e' ancora attuale. */
+export function updateSavedPlace(
+  id: string,
+  input: SavedPlaceUpdateInput,
+  etag: string,
+): Promise<SavedPlaceVersion> {
+  return mutateVersioned(`/api/v1/saved-places/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: input,
+    etag,
+  })
+}
+
+/** DELETE /api/v1/saved-places/{id} — elimina il luogo se l'ETag e' ancora attuale. */
+export async function deleteSavedPlace(id: string, etag: string): Promise<void> {
+  await mutate(`/api/v1/saved-places/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    etag,
+  })
 }
 
 export function createTrip(

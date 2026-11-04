@@ -31,6 +31,9 @@ public class SavedPlace : IOwnedResource
     /// <summary>Note libere.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>Link HTTPS inserito dall'utente, conservato senza risolverlo.</summary>
+    public string? GoogleMapsUrl { get; set; }
+
     /// <summary>Provider esterno di provenienza. Colonna senza FK: e' uno snapshot.</summary>
     public string? ExternalProvider { get; set; }
 
@@ -45,6 +48,9 @@ public class SavedPlace : IOwnedResource
 
     /// <inheritdoc />
     public DateTime? UpdatedAtUtc { get; set; }
+
+    /// <summary>Token di concorrenza ottimistica esposto come ETag.</summary>
+    public byte[]? RowVersion { get; set; }
 
     /// <summary>Tappe che citano questo luogo.</summary>
     public ICollection<TripStop> TripStops { get; } = [];

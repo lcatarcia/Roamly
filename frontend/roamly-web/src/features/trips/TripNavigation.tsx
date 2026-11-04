@@ -16,6 +16,7 @@ export function TripNavigation() {
     >
       <NavigationLink to="/" label={t('narrative.navigation.camper')} end />
       <NavigationLink to="/trips" label={t('narrative.navigation.trips')} />
+      <NavigationLink to="/places" label={t('narrative.navigation.savedPlaces')} />
     </nav>
   )
 }

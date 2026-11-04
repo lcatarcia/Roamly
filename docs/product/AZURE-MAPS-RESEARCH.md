@@ -161,3 +161,48 @@ Documentazione pubblica Microsoft/Azure verificata il **2026-10-22**; le pagine 
 - Non si è concluso quali limiti di caching/storage/retention si applichino ai singoli dati Azure Maps in un caso Roamly; consultare i Product Terms e condizioni specifiche prima dell'uso.
 - Non sono state provate dal vivo accuratezza, aggiornamento o completezza delle restrizioni truck/camper; la copertura tabellare non è un test di qualità su strada.
 - Non sono stati effettuati test con coordinate reali o sintetiche verso servizi live, né creati risorse, account o credenziali.
+
+## 11. Approfondimento per la wishlist manuale — 2026-11-03
+
+Questo aggiornamento riguarda il [piano ristretto della wishlist](PLACES-WISHLIST-PLAN.md): mappa base e dati inseriti dall'utente, senza Search o routing. Non approva attivazione, spesa o conformità legale.
+
+### Rendering senza chiamate Search implicite
+
+La reference `atlas.ServiceOptions` documenta `enableAccessibilityLocationFallback`, attivo per default: se l'estrazione dai dati vettoriali fallisce, può chiamare il geocoder REST. Per il perimetro senza Search occorre impostarlo esplicitamente a `false`, mantenendo `enableAccessibility` e un elenco/dettaglio accessibili. Impostare anche `disableTelemetry: true`, usare dominio UE, e verificare nella versione SDK concreta gli endpoint realmente richiesti. Non basta omettere il campo di ricerca per dimostrare assenza di chiamate Search.
+
+Caricare codice/stili SDK dagli asset dell'app, su apertura volontaria della mappa; niente CDN remota prima del consenso, preconnect o geolocalizzazione automatica. `domain` permette di scegliere il dominio dei servizi; va verificato con cattura di rete che stile, tile, sprite e glyph rispettino il perimetro previsto. Non dedurre la residenza di tutte le richieste dal solo endpoint di un esempio Search.
+
+Fonti: [ServiceOptions](https://learn.microsoft.com/en-us/javascript/api/azure-maps-control/atlas.serviceoptions?view=azure-maps-typescript-latest), [lazy loading e best practice](https://learn.microsoft.com/en-us/azure/azure-maps/web-sdk-best-practices), [geographic scope](https://learn.microsoft.com/en-us/azure/azure-maps/geographic-scope).
+
+### Accesso senza chiave permanente nel browser
+
+La documentazione conferma Entra, managed identity, SAS e ruoli custom limitati a `Microsoft.Maps/accounts/services/render/read`. Un ruolo Search+Render ammetterebbe anche Search e non va descritto come render-only.
+
+**Flusso confermato dall'utente per il piano il 2026-11-03:** «Token Entra tramite API esistente (Raccomandata)». Il disegno prevede managed identity dell'API e endpoint same-site autenticato che distribuisce un token Entra al controllo mappa, con ruolo render-only sul singolo account Maps. La conferma non autorizza provisioning, modifica RBAC, implementazione o traffico live; configurazione concreta e prova restano da approvare. Non aggiungere login Entra agli utenti Roamly, una nuova app di autenticazione utenti o una chiave permanente nel bundle. Applicare consenso corrente, flag, restrizioni di sessione e controllo emissione prima di restituire il token; risposta non memorizzabile, token soltanto in memoria e mai nei log.
+
+Il browser riceve comunque una credenziale bearer riutilizzabile fino alla scadenza. La durata effettiva del token Entra non è liberamente abbreviabile impostando un TTL locale: chiudere la mappa, revocare il consenso o spegnere il flag impedisce nuova emissione ma non garantisce invalidazione immediata di token già rilasciati. CORS non è un presidio contro client non-browser. Il rischio residuo va esplicitato, non trasformato in una promessa di costo massimo.
+
+SAS è un'alternativa con durata configurabile, regioni consentite e rate limit approssimativo per token/region. La reference List Sas richiede una user-assigned managed identity associata all'account; la durata massima documentata è 24 ore. Token multipli possono ampliare il consumo e il rate non è un plafond mensile. Non copiare il tutorial che usa un anno come durata: contrasta con la reference corrente. La scelta del flusso definitivo richiede conferma prima di modificare identità o RBAC.
+
+Fonti: [authentication e ruolo render-only](https://learn.microsoft.com/en-us/azure/azure-maps/azure-maps-authentication), [best practice autenticazione](https://learn.microsoft.com/en-us/azure/azure-maps/authentication-best-practices), [endpoint token per Web SDK](https://learn.microsoft.com/en-us/azure/azure-maps/how-to-secure-webapp-users), [List Sas](https://learn.microsoft.com/en-us/rest/api/maps-management/accounts/list-sas?view=rest-maps-management-2023-06-01), [tutorial SAS](https://learn.microsoft.com/en-us/azure/azure-maps/how-to-secure-sas-app).
+
+### Licenza e consenso: evidenza e limiti
+
+I [Product Terms MCA, sezione Azure Maps](https://www.microsoft.com/licensing/terms/productoffering/MicrosoftAzure/MCA) distinguono dati del cliente sovrapposti, restrizioni sui database e risultati API; prevedono limiti di conservazione dei risultati e un'eccezione per i geocodici con account Azure attivo. Non risolvono automaticamente la classificazione contrattuale di ogni dato ottenuto selezionando un punto sulla mappa. La wishlist manuale non deve copiare nomi, indirizzi o metadati dai tile né importarli come catalogo POI; serve comunque verificare il contratto effettivamente applicabile. Questa analisi non certifica la conformità legale.
+
+L'attribuzione non può essere coperta dai pannelli o eliminata. Per Render la documentazione richiede attribuzione coerente con area/zoom: verificarla nel controllo scelto, senza hardcodare un unico copyright per ogni vista. [Guida attribuzione](https://learn.microsoft.com/en-us/azure/azure-maps/how-to-show-attribution).
+
+Nel repository, il trigger 1 di ADR-0004 richiede consensi con finalità versionate e prova del consenso al primo trasferimento pertinente. Il controllo del viewport può rivelare zone scelte dall'utente anche senza inviare i marker. La sola informativa vista (`PrivacyPolicyVersionSeen`) o il pulsante «Apri mappa» non sostituiscono il consenso richiesto dal progetto. Nella ricognizione del runtime non è stato trovato un meccanismo di consensi già implementato. L'utente ha poi scelto per il piano un **registro unico grant/revoke in Identity**: [disegno e limiti](PLACES-WISHLIST-PLAN.md#consenso-trasversale-modello-scelto-e-dettagli-aperti). Schema dettagliato, testo, retention, base giuridica e implementazione restano aperti; revoca, export ed erasure fanno parte del disegno richiesto, non di funzionalità già presenti.
+
+### Ricognizione cloud: accesso ripristinato e inventario read-only
+
+La subscription e il tenant di destinazione sono stati letti dalle variabili **non segrete** del GitHub Environment `azure-release`. Il primo tentativo era fallito con `Subscription ... not found`: quel risultato non dimostrava l'assenza di risorse. Dopo autorizzazione esplicita dell'utente e accesso interattivo completato, `account show` sul target ha confermato subscription e tenant corrispondenti e stato `Enabled`. Tutte le letture successive hanno indicato esplicitamente la subscription, senza cambiare quella predefinita.
+
+Risultati osservati il 2026-11-03:
+
+- L'inventario ARM di `Microsoft.Maps/accounts` ha restituito **zero account** nell'intera subscription target, non soltanto nel resource group. Non ci sono account Maps restituiti dall'inventario da riutilizzare; non è una verifica di altre subscription o di risorse non visibili all'identità corrente.
+- `id-roamly-runtime-prod` esiste in `rg-roamly-dev`, regione Italy North, ed è già associata a `ca-roamly-prod` come user-assigned managed identity. Il suo riuso per Maps resta una proposta soggetta ad autorizzazione RBAC separata.
+- La lettura ARM delle assegnazioni per il principal runtime nella subscription ha restituito soltanto scope Storage e singoli segreti Key Vault; nessuno scope Maps. La lista dei ruoli custom visibili non contiene permessi che nominino esplicitamente `Microsoft.Maps`. Non è un audit completo dei permessi effettivi ereditati o attribuiti tramite gruppi.
+- Non essendoci un account Maps restituito dall'inventario, non sono stati verificati SKU, CORS, configurazione di autenticazione, metriche o quota residua di un account. Il prezzo applicabile all'offerta e la disponibilità effettiva delle quote gratuite restano da verificare prima dell'attivazione.
+
+Non sono stati letti valori Key Vault, richieste chiavi, emessi token Maps, assegnati ruoli, create risorse o chiamate API tile/Search. L'autorizzazione ricevuta copriva login e ricognizione read-only, non provisioning o spesa. Il blocco di accesso è risolto; rimangono i gate di licenza, consenso, autenticazione, consumi e spike/ADR.

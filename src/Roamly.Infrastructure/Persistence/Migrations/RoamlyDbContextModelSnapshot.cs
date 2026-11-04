@@ -869,6 +869,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .IsUnicode(true)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("GoogleMapsUrl")
+                        .HasMaxLength(2048)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(2048)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -879,6 +884,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .IsUnicode(true)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2(3)");

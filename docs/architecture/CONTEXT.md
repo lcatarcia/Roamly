@@ -332,6 +332,8 @@ La rimozione di una tappa collegata a `JournalEntry` è rifiutata con `409` e an
 
 `SavedPlace` è il **luogo salvato dall'utente**, riusabile tra più viaggi: owned a tutti gli effetti, dentro `IOwnedResource`, dentro l'export e dentro il grafo di cancellazione.
 
+**Wishlist «Da visitare» (piano del 2026-11-03):** è una vista della raccolta personale di `SavedPlace`, non un nuovo aggregato né una lista figlia del Camper o del Trip. Include città, paesi, locali, musei e attrazioni oltre ai servizi per camper. Il luogo può esistere senza posizione e senza essere stato inserito in un viaggio; essere usato in una tappa non significa essere stato visitato. Un eventuale link Google Maps è un riferimento inserito dall'utente, non un identificativo del provider cartografico né autorizzazione a importarne dati. Nella prima versione nome e dettagli sono manuali, senza acquisizione di record POI. Le estensioni di schema sono da implementare secondo il [piano](../product/PLACES-WISHLIST-PLAN.md); questa definizione non attiva la Phase 3.
+
 Campi: `Id`, `OwnerId`, `Name nvarchar(120)`, `Category tinyint` (area sosta, campeggio, parcheggio, punto panoramico, ristorante, distributore, officina, supermercato, POI), `Position` (complex `Coordinates`, nullable), `Address nvarchar(300)?`, `Notes?`, `CreatedAtUtc`, `UpdatedAtUtc`, più **tre colonne di provenienza esterna senza FK**: `ExternalProvider nvarchar(32)?`, `ExternalPlaceId nvarchar(128)?`, `ExternalFetchedAtUtc?`.
 FK: `OwnerId → AspNetUsers` **NO ACTION**. PK: `(OwnerId, Id)` CLUSTERED — referenziata dalla FK composita opzionale di `TripStop`.
 
