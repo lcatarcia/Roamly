@@ -50,14 +50,15 @@ usando un build aggiornato che contenga tutte le migration:
 dotnet ef migrations script 20261028134346_AddCamperManualSpecifications 20261106105835_AddMapsEconomicGate --idempotent --no-build --project src/Roamly.Infrastructure --startup-project src/Roamly.Infrastructure --context RoamlyDbContext --output "$env:TEMP/roamly-maps-release-20261106.sql"
 ```
 
-Le tre migration attese sono:
+Le quattro migration attese nello script sono:
 
 - `20261104084728_AddSavedPlaceGoogleMapsUrl`;
+- `20261104093558_AddSavedPlaceRowVersion` (gia' presente su `main`);
 - `20261106091448_AddIdentityConsentRegistry`;
 - `20261106105835_AddMapsEconomicGate`.
 
 Lo script generato e revisionato offline aggiunge la colonna nullable
-`SavedPlaces.GoogleMapsUrl`, `ConsentTransitions` (PK owned e indice
+`SavedPlaces.GoogleMapsUrl` e `SavedPlaces.RowVersion`, `ConsentTransitions` (PK owned e indice
 univoco per revisione) e `MapsEconomicStates` con i relativi vincoli.
 Non contiene drop, copie dati, credenziali o cambi di principal.
 La generazione non attesta lo schema live: verificare separatamente

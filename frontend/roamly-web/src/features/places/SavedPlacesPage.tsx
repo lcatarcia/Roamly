@@ -12,9 +12,13 @@ import { createCombGuid } from '@/lib/comb-guid.mjs'
 import {
   ApiError,
   createSavedPlace,
+  deleteSavedPlace,
   fetchSavedPlaces,
+  fetchSavedPlaceVersion,
+  updateSavedPlace,
   type SavedPlace,
   type SavedPlaceInput,
+  type SavedPlaceUpdateInput,
 } from '@/lib/api'
 
 const CATEGORIES = [
@@ -34,6 +38,13 @@ const CATEGORIES = [
   [13, t('neutral.savedPlaces.category.attraction')],
 ] as const
 
+interface SavedPlaceActions {
+  update: (id: string, etag: string, input: SavedPlaceUpdateInput) => Promise<unknown>
+  remove: (id: string, etag: string) => Promise<unknown>
+  pendingId: string | null
+  failure: { id: string; error: unknown } | null
+}
+
 export function SavedPlacesPage() {
   const queryClient = useQueryClient()
   const placesQuery = useInfiniteQuery({
@@ -47,6 +58,36 @@ export function SavedPlacesPage() {
     mutationFn: createSavedPlace,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: SAVED_PLACES_QUERY_KEY }),
   })
+  const updateMutation = useMutation({
+    mutationFn: ({ id, etag, input }: { id: string; etag: string; input: SavedPlaceUpdateInput }) =>
+      updateSavedPlace(id, input, etag),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SAVED_PLACES_QUERY_KEY }),
+    onError: (error) => refreshOnStale(error),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, etag }: { id: string; etag: string }) => deleteSavedPlace(id, etag),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SAVED_PLACES_QUERY_KEY }),
+    onError: (error) => refreshOnStale(error),
+  })
+  function refreshOnStale(error: unknown) {
+    if (error instanceof ApiError && error.status === 412) {
+      void queryClient.invalidateQueries({ queryKey: SAVED_PLACES_QUERY_KEY })
+    }
+  }
+  const placeActions: SavedPlaceActions = {
+    update: (id, etag, input) => updateMutation.mutateAsync({ id, etag, input }),
+    remove: (id, etag) => deleteMutation.mutateAsync({ id, etag }),
+    pendingId: updateMutation.isPending
+      ? (updateMutation.variables?.id ?? null)
+      : deleteMutation.isPending
+        ? (deleteMutation.variables?.id ?? null)
+        : null,
+    failure: updateMutation.isError && updateMutation.variables
+      ? { id: updateMutation.variables.id, error: updateMutation.error }
+      : deleteMutation.isError && deleteMutation.variables
+        ? { id: deleteMutation.variables.id, error: deleteMutation.error }
+        : null,
+  }
   const places = placesQuery.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
@@ -59,6 +100,7 @@ export function SavedPlacesPage() {
       />
       <SavedPlaceCollection
         places={places}
+        actions={placeActions}
         loading={placesQuery.isPending}
         error={placesQuery.isError}
         hasMore={placesQuery.hasNextPage}
@@ -171,11 +213,11 @@ function SavedPlaceCreateForm({
           />
         </FieldGroup>
         {validationError && (
-          <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">
+          <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">
             {validationMessage(validationError)}
           </p>
         )}
-        {Boolean(error) && <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{savedPlaceError(error)}</p>}
+        {Boolean(error) && <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(error, t('neutral.savedPlaces.error'))}</p>}
         {saved && <p role="status" className="text-sm text-muted-foreground">{t('neutral.savedPlaces.added')}</p>}
         <Button type="submit" className="w-full" disabled={saving}>
           {saving ? t('neutral.savedPlaces.adding') : t('neutral.savedPlaces.add')}
@@ -219,13 +261,13 @@ function TextInputField({
   )
 }
 
-function CategoryField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function CategoryField({ id = 'saved-place-category', value, onChange }: { id?: string; value: string; onChange: (value: string) => void }) {
   return (
     <Field>
-      <FieldLabel htmlFor="saved-place-category">{t('neutral.savedPlaces.category')}</FieldLabel>
+      <FieldLabel htmlFor={id}>{t('neutral.savedPlaces.category')}</FieldLabel>
       <FieldContent>
         <select
-          id="saved-place-category"
+          id={id}
           required
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -242,11 +284,13 @@ function CategoryField({ value, onChange }: { value: string; onChange: (value: s
 }
 
 function CoordinateFields({
+  idPrefix = 'saved-place',
   latitude,
   longitude,
   setLatitude,
   setLongitude,
 }: {
+  idPrefix?: string
   latitude: string
   longitude: string
   setLatitude: (value: string) => void
@@ -258,14 +302,15 @@ function CoordinateFields({
         {t('neutral.savedPlaces.positionLabel')}
       </legend>
       <p className="text-sm text-muted-foreground sm:col-span-2">{t('neutral.savedPlaces.positionHelp')}</p>
-      <TextInputField id="saved-place-latitude" label={t('neutral.savedPlaces.latitude')} value={latitude} onChange={setLatitude} type="number" step="0.000001" />
-      <TextInputField id="saved-place-longitude" label={t('neutral.savedPlaces.longitude')} value={longitude} onChange={setLongitude} type="number" step="0.000001" />
+      <TextInputField id={`${idPrefix}-latitude`} label={t('neutral.savedPlaces.latitude')} value={latitude} onChange={setLatitude} type="number" step="0.000001" />
+      <TextInputField id={`${idPrefix}-longitude`} label={t('neutral.savedPlaces.longitude')} value={longitude} onChange={setLongitude} type="number" step="0.000001" />
     </fieldset>
   )
 }
 
 function SavedPlaceCollection({
   places,
+  actions,
   loading,
   error,
   hasMore,
@@ -274,6 +319,7 @@ function SavedPlaceCollection({
   onLoadMore,
 }: {
   places: SavedPlace[]
+  actions: SavedPlaceActions
   loading: boolean
   error: boolean
   hasMore: boolean
@@ -282,6 +328,8 @@ function SavedPlaceCollection({
   onLoadMore: () => void
 }) {
   const [view, setView] = useState<'list' | 'map'>('list')
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null)
+  const selectedId = places.some(place => place.id === selectedPlaceId) ? selectedPlaceId : null
   if (loading) return <CollectionMessage>{t('neutral.savedPlaces.loading')}</CollectionMessage>
   if (error && places.length === 0) return <CollectionError onRetry={onRetry} />
 
@@ -292,10 +340,10 @@ function SavedPlaceCollection({
         <Button variant={view === 'map' ? 'default' : 'outline'} aria-pressed={view === 'map'} onClick={() => setView('map')}>{t('neutral.maps.map')}</Button>
       </div>
       {error && <CollectionError onRetry={onRetry} />}
-      {view === 'map' ? <SavedPlacesMapPanel places={places} categoryLabel={categoryLabel} /> : (
+      {view === 'map' ? <SavedPlacesMapPanel places={places} categoryLabel={categoryLabel} selectedId={selectedId} onSelect={setSelectedPlaceId} /> : (
         places.length === 0 ? <CollectionMessage>{t('neutral.savedPlaces.empty')}</CollectionMessage> :
           <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
-            {places.map((place) => <SavedPlaceCard key={place.id} place={place} />)}
+            {places.map((place) => <SavedPlaceCard key={place.id} place={place} actions={actions} />)}
           </ul>
       )}
       {hasMore && (
@@ -307,33 +355,177 @@ function SavedPlaceCollection({
   )
 }
 
-function SavedPlaceCard({ place }: { place: SavedPlace }) {
+function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedPlaceActions }) {
+  // L'ETag è letto quando l'utente apre modifica o eliminazione e inviato in If-Match: un 412 indica una modifica nel frattempo.
+  const [mode, setMode] = useState<'view' | 'edit' | 'confirmDelete'>('view')
+  const [etag, setEtag] = useState<string | null>(null)
+  const [loadingVersion, setLoadingVersion] = useState(false)
+  const [loadError, setLoadError] = useState<unknown>(null)
+  const pending = actions.pendingId === place.id
+  const busy = pending || loadingVersion
+  const failure = loadError ?? (actions.failure?.id === place.id ? actions.failure.error : null)
+
+  async function openWithVersion(next: 'edit' | 'confirmDelete') {
+    setLoadError(null)
+    setLoadingVersion(true)
+    try {
+      const version = await fetchSavedPlaceVersion(place.id)
+      setEtag(version.etag)
+      setMode(next)
+    } catch (error) {
+      setLoadError(error)
+    } finally {
+      setLoadingVersion(false)
+    }
+  }
+
+  async function handleSave(input: SavedPlaceUpdateInput) {
+    if (!etag) return
+    try {
+      await actions.update(place.id, etag, input)
+      setMode('view')
+    } catch {
+      // L'errore resta visibile sotto la card tramite actions.failure.
+    }
+  }
+
+  async function handleDelete() {
+    if (!etag) return
+    try {
+      await actions.remove(place.id, etag)
+    } catch {
+      // L'errore resta visibile sotto la card tramite actions.failure.
+    }
+  }
+
   return (
     <li className="min-w-0 rounded-2xl border border-border bg-card p-5 shadow-2xs">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h2 className="break-words text-lg font-semibold">{place.name}</h2>
-        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
-          {categoryLabel(place.category)}
-        </span>
-      </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {place.position
-          ? `${place.position.latitude}, ${place.position.longitude}`
-          : t('neutral.savedPlaces.positionMissing')}
-      </p>
-      {place.address && <p className="mt-2 break-words text-sm">{place.address}</p>}
-      {place.notes && <p className="mt-2 break-words text-sm text-muted-foreground">{place.notes}</p>}
-      {place.googleMapsUrl && (
-        <a
-          className="mt-3 inline-block max-w-full break-all text-sm text-foreground underline underline-offset-4"
-          href={place.googleMapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {t('neutral.savedPlaces.googleMapsUrl')}
-        </a>
+      {mode === 'edit' ? (
+        <SavedPlaceEditForm
+          place={place}
+          saving={pending}
+          onSave={handleSave}
+          onCancel={() => setMode('view')}
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h2 className="break-words text-lg font-semibold">{place.name}</h2>
+            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+              {categoryLabel(place.category)}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {place.position
+              ? `${place.position.latitude}, ${place.position.longitude}`
+              : t('neutral.savedPlaces.positionMissing')}
+          </p>
+          {place.address && <p className="mt-2 break-words text-sm">{place.address}</p>}
+          {place.notes && <p className="mt-2 break-words text-sm text-muted-foreground">{place.notes}</p>}
+          {place.googleMapsUrl && (
+            <a
+              className="mt-3 inline-block max-w-full break-all text-sm text-accent-text underline underline-offset-4"
+              href={place.googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('neutral.savedPlaces.googleMapsUrl')}
+            </a>
+          )}
+          {mode === 'confirmDelete' ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm">{t('neutral.savedPlaces.deleteQuestion')}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="destructive" size="sm" onClick={() => void handleDelete()} disabled={busy}>
+                  {pending ? t('neutral.savedPlaces.deleting') : t('neutral.savedPlaces.confirmDelete')}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setMode('view')} disabled={busy}>
+                  {t('neutral.savedPlaces.cancel')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => void openWithVersion('edit')} disabled={busy}>
+                {t('neutral.savedPlaces.edit')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void openWithVersion('confirmDelete')} disabled={busy}>
+                {t('neutral.savedPlaces.delete')}
+              </Button>
+            </div>
+          )}
+        </>
       )}
+      {failure !== null && <p role="alert" className="mt-3 rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{savedPlaceError(failure, t('neutral.savedPlaces.actionError'))}</p>}
     </li>
+  )
+}
+
+function SavedPlaceEditForm({
+  place,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  place: SavedPlace
+  saving: boolean
+  onSave: (input: SavedPlaceUpdateInput) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(place.name)
+  const [category, setCategory] = useState(String(place.category))
+  const [address, setAddress] = useState(place.address ?? '')
+  const [notes, setNotes] = useState(place.notes ?? '')
+  const [latitude, setLatitude] = useState(place.position ? String(place.position.latitude) : '')
+  const [longitude, setLongitude] = useState(place.position ? String(place.position.longitude) : '')
+  const [googleMapsUrl, setGoogleMapsUrl] = useState(place.googleMapsUrl ?? '')
+  const [validationError, setValidationError] = useState<'required' | 'coordinates' | null>(null)
+  const idPrefix = `saved-place-edit-${place.id}`
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!name.trim() || !category) {
+      setValidationError('required')
+      return
+    }
+    if (Boolean(latitude) !== Boolean(longitude)) {
+      setValidationError('coordinates')
+      return
+    }
+    setValidationError(null)
+    onSave(buildSavedPlaceInput(name, category, address, notes, latitude, longitude, googleMapsUrl))
+  }
+
+  return (
+    <form className="space-y-4" onSubmit={handleSubmit} noValidate aria-label={t('neutral.savedPlaces.editTitle')}>
+      <FieldGroup>
+        <TextInputField id={`${idPrefix}-name`} label={t('neutral.savedPlaces.name')} value={name} onChange={setName} required maxLength={120} />
+        <CategoryField id={`${idPrefix}-category`} value={category} onChange={setCategory} />
+        <TextInputField id={`${idPrefix}-address`} label={t('neutral.savedPlaces.address')} value={address} onChange={setAddress} maxLength={300} />
+        <TextInputField id={`${idPrefix}-notes`} label={t('neutral.savedPlaces.notes')} value={notes} onChange={setNotes} maxLength={1000} />
+        <CoordinateFields idPrefix={idPrefix} latitude={latitude} longitude={longitude} setLatitude={setLatitude} setLongitude={setLongitude} />
+        <TextInputField
+          id={`${idPrefix}-google-maps-url`}
+          label={t('neutral.savedPlaces.googleMapsUrl')}
+          value={googleMapsUrl}
+          onChange={setGoogleMapsUrl}
+          type="url"
+          maxLength={2048}
+          help={t('neutral.savedPlaces.googleMapsHelp')}
+        />
+      </FieldGroup>
+      {validationError && (
+        <p role="alert" className="text-sm text-danger-text">{validationMessage(validationError)}</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? t('neutral.savedPlaces.saving') : t('neutral.savedPlaces.save')}
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={saving}>
+          {t('neutral.savedPlaces.cancel')}
+        </Button>
+      </div>
+    </form>
   )
 }
 
@@ -344,7 +536,7 @@ function CollectionMessage({ children }: { children: ReactNode }) {
 function CollectionError({ onRetry }: { onRetry: () => void }) {
   return (
     <section className="space-y-4 rounded-3xl border border-border bg-card p-6">
-      <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{t('neutral.savedPlaces.loadError')}</p>
+      <p role="alert" className="rounded-lg bg-surface-raised px-3 py-2 text-sm text-danger-text">{t('neutral.savedPlaces.loadError')}</p>
       <Button variant="outline" onClick={onRetry}>{t('neutral.savedPlaces.retry')}</Button>
     </section>
   )
@@ -405,7 +597,12 @@ function validationMessage(error: 'required' | 'coordinates'): string {
     : t('neutral.savedPlaces.coordinatesRequired')
 }
 
-function savedPlaceError(error: unknown): string {
-  if (error instanceof ApiError && error.status === 409) return t('neutral.savedPlaces.conflict')
-  return t('neutral.savedPlaces.error')
+function savedPlaceError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.status === 409) {
+    return fallback === t('neutral.savedPlaces.error')
+      ? t('neutral.savedPlaces.conflict')
+      : t('neutral.savedPlaces.referenced')
+  }
+  if (error instanceof ApiError && error.status === 412) return t('neutral.savedPlaces.stale')
+  return fallback
 }

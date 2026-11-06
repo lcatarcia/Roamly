@@ -144,6 +144,8 @@ public static class FeatureRegistration
         // Features/Places/
         services.AddScoped<CreateSavedPlaceHandler>();
         services.AddScoped<GetSavedPlaceHandler>();
+        services.AddScoped<UpdateSavedPlaceHandler>();
+        services.AddScoped<DeleteSavedPlaceHandler>();
         services.AddScoped<ListSavedPlacesHandler>();
 
         // Features/Checklists/

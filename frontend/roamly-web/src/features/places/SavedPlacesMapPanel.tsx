@@ -11,16 +11,17 @@ const MapsCanvas = lazy(() => import('./MapsCanvas').catch(() => ({
   default: () => <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{t('neutral.maps.renderError')}</p>,
 })))
 
-export function SavedPlacesMapPanel({ places, categoryLabel }: {
+export function SavedPlacesMapPanel({ places, categoryLabel, selectedId, onSelect }: {
   places: SavedPlace[]
   categoryLabel: (category: number) => string
+  selectedId: string | null
+  onSelect: (id: string) => void
 }) {
   const [configuration, setConfiguration] = useState<MapsConfiguration | null>(null)
   const [consent, setConsent] = useState<MapsConsent | null>(null)
   const [opened, setOpened] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const lifetime = useRef<AbortController | null>(null)
   const selected = places.find(place => place.id === selectedId)
   const located = positionedPlaces(places)
@@ -79,7 +80,7 @@ export function SavedPlacesMapPanel({ places, categoryLabel }: {
           <p className="text-xs text-muted-foreground">{t('neutral.maps.revokeNotice')}</p>
           {located.length > 0 ? (
             <Suspense fallback={<p role="status">{t('neutral.maps.loading')}</p>}>
-              <MapsCanvas places={places} configuration={configuration} selectedId={selectedId} onSelect={setSelectedId} />
+              <MapsCanvas places={places} configuration={configuration} selectedId={selectedId} onSelect={onSelect} />
             </Suspense>
           ) : <p role="status">{t('neutral.maps.noCoordinates')}</p>}
         </>
@@ -96,7 +97,7 @@ export function SavedPlacesMapPanel({ places, categoryLabel }: {
       <ul aria-label={t('neutral.maps.accessiblePlaces')} className="flex flex-wrap gap-2">
         {places.map(place => (
           <li key={place.id}>
-            <Button variant="outline" aria-pressed={selectedId === place.id} onClick={() => setSelectedId(place.id)}>
+            <Button variant="outline" aria-pressed={selectedId === place.id} onClick={() => onSelect(place.id)}>
               <span aria-hidden="true">{categorySymbols[place.category] ?? '◆'}</span>
               <span className="max-w-56 truncate">{place.name}</span>
             </Button>

@@ -28,6 +28,17 @@ public sealed record SavedPlaceResponse(
     }
 }
 
+/// <summary>Risposta con il token di versione da esporre come ETag nell'header.</summary>
+public sealed record SavedPlaceSnapshot(SavedPlaceResponse Place, byte[]? RowVersion)
+{
+    /// <summary>Converte la risorsa persistita mantenendo la versione per l'ETag.</summary>
+    public static SavedPlaceSnapshot From(SavedPlace place)
+    {
+        ArgumentNullException.ThrowIfNull(place);
+        return new SavedPlaceSnapshot(SavedPlaceResponse.From(place), place.RowVersion);
+    }
+}
+
 /// <summary>Coordinate salvate manualmente, se presenti.</summary>
 public sealed record SavedPlacePositionResponse(decimal Latitude, decimal Longitude)
 {

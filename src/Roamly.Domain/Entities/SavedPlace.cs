@@ -49,6 +49,9 @@ public class SavedPlace : IOwnedResource
     /// <inheritdoc />
     public DateTime? UpdatedAtUtc { get; set; }
 
+    /// <summary>Token di concorrenza ottimistica esposto come ETag.</summary>
+    public byte[]? RowVersion { get; set; }
+
     /// <summary>Tappe che citano questo luogo.</summary>
     public ICollection<TripStop> TripStops { get; } = [];
 }

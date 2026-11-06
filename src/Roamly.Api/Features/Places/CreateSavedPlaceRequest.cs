@@ -25,24 +25,9 @@ public sealed record CreateSavedPlaceRequest(
             yield return new ValidationResult("L'identificativo non puo' essere vuoto.", [nameof(Id)]);
         }
 
-        if (Name is not null && string.IsNullOrWhiteSpace(Name.Trim()))
+        foreach (var error in SavedPlaceContent.Validate(Name, Category, GoogleMapsUrl))
         {
-            yield return new ValidationResult("Il nome e' obbligatorio.", [nameof(Name)]);
-        }
-
-        if (Category.HasValue && !Enum.IsDefined(Category.Value))
-        {
-            yield return new ValidationResult("La categoria non e' valida.", [nameof(Category)]);
-        }
-
-        if (GoogleMapsUrl is not null
-            && (!Uri.TryCreate(GoogleMapsUrl.Trim(), UriKind.Absolute, out var uri)
-                || uri.Scheme != Uri.UriSchemeHttps
-                || string.IsNullOrWhiteSpace(uri.Host)))
-        {
-            yield return new ValidationResult(
-                "Il link deve essere un URL HTTPS assoluto.",
-                [nameof(GoogleMapsUrl)]);
+            yield return error;
         }
     }
 }

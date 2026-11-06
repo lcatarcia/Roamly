@@ -36,7 +36,7 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return new CreateSavedPlaceResult(CreateSavedPlaceOutcome.Created, SavedPlaceResponse.From(place));
+            return new CreateSavedPlaceResult(CreateSavedPlaceOutcome.Created, SavedPlaceSnapshot.From(place));
         }
         catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
         {
@@ -52,16 +52,13 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
 
     private SavedPlace BuildPlace(CreateSavedPlaceRequest request)
     {
-        Coordinates? position = request.Position is null
-            ? null
-            : new Coordinates(request.Position.Latitude!.Value, request.Position.Longitude!.Value);
         return new SavedPlace
         {
             Id = request.Id!.Value,
             OwnerId = db.CurrentUserId,
             Name = request.Name!.Trim(),
             Category = request.Category!.Value,
-            Position = position,
+            Position = SavedPlaceContent.ToPosition(request.Position),
             Address = NormalizeOptional(request.Address),
             Notes = NormalizeOptional(request.Notes),
             GoogleMapsUrl = NormalizeOptional(request.GoogleMapsUrl),
@@ -80,7 +77,7 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
     private static CreateSavedPlaceResult Resolve(SavedPlace existing, CreateSavedPlaceRequest request)
     {
         return HasSameContent(existing, request)
-            ? new CreateSavedPlaceResult(CreateSavedPlaceOutcome.Replayed, SavedPlaceResponse.From(existing))
+            ? new CreateSavedPlaceResult(CreateSavedPlaceOutcome.Replayed, SavedPlaceSnapshot.From(existing))
             : new CreateSavedPlaceResult(CreateSavedPlaceOutcome.Conflict, null);
     }
 
@@ -105,7 +102,7 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
 
     private static string? NormalizeOptional(string? value)
     {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        return SavedPlaceContent.NormalizeOptional(value);
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception)
@@ -115,7 +112,7 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
 }
 
 /// <summary>Esito della creazione idempotente di un luogo.</summary>
-public sealed record CreateSavedPlaceResult(CreateSavedPlaceOutcome Outcome, SavedPlaceResponse? Place);
+public sealed record CreateSavedPlaceResult(CreateSavedPlaceOutcome Outcome, SavedPlaceSnapshot? Place);
 
 /// <summary>Esiti osservabili della creazione di un luogo.</summary>
 public enum CreateSavedPlaceOutcome

@@ -9,13 +9,13 @@ namespace Roamly.Api.Features.Places;
 public sealed class GetSavedPlaceHandler(RoamlyDbContext db)
 {
     /// <summary>Restituisce la risorsa posseduta dall'utente corrente o null.</summary>
-    public async Task<SavedPlaceResponse?> HandleAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<SavedPlaceSnapshot?> HandleAsync(Guid id, CancellationToken cancellationToken)
     {
         var place = await db.SavedPlaces.AsNoTracking()
             .SingleOrDefaultAsync(
                 item => item.OwnerId == db.CurrentUserId && item.Id == id,
                 cancellationToken)
             .ConfigureAwait(false);
-        return place is null ? null : SavedPlaceResponse.From(place);
+        return place is null ? null : SavedPlaceSnapshot.From(place);
     }
 }

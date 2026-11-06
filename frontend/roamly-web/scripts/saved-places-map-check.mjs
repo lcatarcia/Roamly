@@ -64,6 +64,8 @@ async function main() {
     let configured = true
     let failToken = false
     let delayToken = null
+    const versions = new Map()
+    const mutations = []
     const places = Array.from({ length: 14 }, (_, category) => ({
       id: `place-${category}`, name: category === 0 ? maliciousName : `Categoria ${category}`,
       category, position: { latitude: category, longitude: category }, notes: 'Nota locale', address: null,
@@ -103,6 +105,30 @@ async function main() {
         tokenCount++
         if (delayToken) await delayToken
         return json(failToken ? { title: 'Azure unavailable' } : { accessToken: 'mock', expiresAtUtc: '2099-01-01' }, failToken ? 503 : 200)
+      }
+      if (url.pathname.startsWith('/api/v1/saved-places/')) {
+        const id = decodeURIComponent(url.pathname.split('/').pop())
+        const place = places.find(item => item.id === id)
+        if (!place) return json({}, 404)
+        const version = versions.get(id) ?? 1
+        if (request.method() === 'GET') return route.fulfill({
+          status: 200, contentType: 'application/json',
+          headers: { ETag: `"${version}"` }, body: JSON.stringify(place),
+        })
+        assert.equal(request.headers()['if-match'], `"${version}"`)
+        assert.equal(request.headers()['x-xsrf-token'], 'csrf')
+        mutations.push({ id, method: request.method(), version })
+        if (request.method() === 'PUT') {
+          Object.assign(place, request.postDataJSON())
+          versions.set(id, version + 1)
+          return route.fulfill({
+            status: 200, contentType: 'application/json',
+            headers: { ETag: `"${version + 1}"` }, body: JSON.stringify(place),
+          })
+        }
+        assert.equal(request.method(), 'DELETE')
+        places.splice(places.indexOf(place), 1)
+        return route.fulfill({ status: 204 })
       }
       if (url.pathname === '/api/v1/saved-places') return json({
         items: url.searchParams.has('after') ? [{ id: 'no-coordinates', name: 'Senza coordinate', category: 10, position: null }] : places,
@@ -144,6 +170,38 @@ async function main() {
     const accessibility = await new AxeBuilder({ page }).include('.saved-places-map')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
     assert.deepEqual(accessibility.violations.map(item => item.id), [], 'map pins have accessible names and contrast')
+
+    // Maps selection survives list CRUD; details and pins use the refreshed resource.
+    await pins.first().click()
+    await page.getByRole('button', { name: 'Lista', exact: true }).click()
+    const firstCard = page.locator('li').filter({ has: page.getByRole('heading', { name: maliciousName, exact: true }) })
+    await firstCard.getByRole('button', { name: 'Modifica', exact: true }).click()
+    const edit = page.getByRole('form', { name: 'Modifica luogo' })
+    await edit.getByLabel('Note').fill('Nota aggiornata con If-Match')
+    await edit.getByRole('button', { name: 'Salva modifiche' }).click()
+    await firstCard.getByText('Nota aggiornata con If-Match').waitFor()
+    await page.getByRole('button', { name: 'Mappa', exact: true }).click()
+    const details = page.getByRole('region', { name: 'Dettagli luogo selezionato' })
+    await details.getByText(maliciousName).waitFor()
+    await details.getByText('Nota aggiornata con If-Match').waitFor()
+    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
+    await pins.last().waitFor()
+    await pins.last().click()
+    await details.getByText('Categoria 13', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Lista', exact: true }).click()
+    const lastCard = page.locator('li').filter({ has: page.getByRole('heading', { name: 'Categoria 13', exact: true }) })
+    await lastCard.getByRole('button', { name: 'Elimina', exact: true }).click()
+    await lastCard.getByRole('button', { name: 'Conferma eliminazione' }).click()
+    await lastCard.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'Mappa', exact: true }).click()
+    assert.equal(await details.count(), 0, 'deleted selection cannot leave stale details')
+    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
+    await pins.first().waitFor()
+    assert.equal(await pins.count(), 13, 'deleted place has no pin')
+    assert.deepEqual(mutations, [
+      { id: 'place-0', method: 'PUT', version: 1 },
+      { id: 'place-13', method: 'DELETE', version: 1 },
+    ])
 
     await page.getByRole('button', { name: 'Revoca consenso e chiudi mappa' }).click()
     await page.getByRole('button', { name: 'Consenti e apri mappa' }).waitFor()

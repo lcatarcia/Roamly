@@ -21,6 +21,7 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | [`product/AZURE-MAPS-RESEARCH.md`](product/AZURE-MAPS-RESEARCH.md) | Quote gratuite, costi, autenticazione, privacy e limiti di Azure Maps; nessuna integrazione o risorsa attivata |
 | [`product/PLACES-MAP-PROVIDER-COST-RESEARCH.md`](product/PLACES-MAP-PROVIDER-COST-RESEARCH.md) | Confronto MapTiler, Azure Maps, Geoapify e servizi OSM pubblici per la wishlist: quote, addebiti, persistenza e privacy |
 | [`product/AZURE-DEPLOYMENT-COST-ESTIMATE.md`](product/AZURE-DEPLOYMENT-COST-ESTIMATE.md) | Stima incrementale dei costi per pubblicare Roamly su Azure; nessun provisioning o rilascio autorizzato |
+| [`product/AZURE-COST-OPTIONS-RESEARCH.md`](product/AZURE-COST-OPTIONS-RESEARCH.md) | Analisi costi del 2 novembre: SQL gratuito West Europe e GHCR pubblico attivati; ACR e database originale dismessi |
 | [`product/GEMINI-PLATFORM-DUE-DILIGENCE.md`](product/GEMINI-PLATFORM-DUE-DILIGENCE.md) | Due diligence tecnica e privacy documentale su Gemini UE; nessuna configurazione o invio dati |
 | [`product/UX.md`](product/UX.md) | Direzione UX, dashboard, design system, i18n, offline |
 

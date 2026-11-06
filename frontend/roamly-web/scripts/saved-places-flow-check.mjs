@@ -56,12 +56,24 @@ async function main() {
     assert.equal(observed.created.position, undefined)
     assert.equal(observed.created.googleMapsUrl, 'https://maps.google.com/?q=Borgo')
     assert.deepEqual(remoteRequests, [], 'la wishlist manuale non deve contattare servizi esterni')
+    await page.getByRole('button', { name: 'Modifica', exact: true }).click()
+    const editForm = page.getByRole('form', { name: 'Modifica luogo' })
+    await editForm.getByLabel('Nome').fill('Borgo rinominato')
+    await editForm.getByRole('button', { name: 'Salva modifiche' }).click()
+    await page.getByRole('heading', { name: 'Borgo rinominato' }).waitFor()
+    assert.equal(observed.updateIfMatch, '"1"', 'la modifica deve inviare l’ETag letto')
+    assert.equal(observed.updated.name, 'Borgo rinominato')
+    await page.getByRole('button', { name: 'Elimina', exact: true }).click()
+    await page.getByRole('button', { name: 'Conferma eliminazione' }).click()
+    await page.getByRole('heading', { name: 'Borgo rinominato' }).waitFor({ state: 'detached' })
+    assert.equal(observed.deleteIfMatch, '"2"', 'l’eliminazione deve inviare l’ETag più recente')
+    assert.equal(observed.savedPlaceCount, 0)
     await page.setViewportSize({ width: 390, height: 844 })
     assert.ok(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       'la pagina non deve avere overflow orizzontale su mobile',
     )
-    console.log('saved-places-flow-check: superato (creazione manuale, lista e nessuna chiamata esterna).')
+    console.log('saved-places-flow-check: superato (creazione manuale, lista, modifica e eliminazione con If-Match, nessuna chiamata esterna).')
   } finally {
     await browser.close()
     preview.kill()
@@ -70,7 +82,8 @@ async function main() {
 
 async function mockApi(page) {
   let places = []
-  const observed = { createCount: 0, created: null, createRequests: [], savedPlaceCount: 0 }
+  const versions = new Map()
+  const observed = { createCount: 0, created: null, createRequests: [], savedPlaceCount: 0, updated: null, updateIfMatch: null, deleteIfMatch: null }
 
   await page.route('**/api/v1/me', (route) => route.fulfill({
     status: 200,
@@ -88,6 +101,51 @@ async function mockApi(page) {
     contentType: 'application/json',
     body: '{"token":"flow-csrf"}',
   }))
+  await page.route('**/api/v1/saved-places/*', async (route) => {
+    const request = route.request()
+    const id = decodeURIComponent(new URL(request.url()).pathname.split('/').pop())
+    const place = places.find((item) => item.id === id)
+    if (!place) {
+      await route.fulfill({ status: 404 })
+      return
+    }
+    if (request.method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { ETag: `"${versions.get(id)}"` },
+        body: JSON.stringify(place),
+      })
+      return
+    }
+
+    const headers = await request.allHeaders()
+    assert.equal(headers['x-roamly-request'], '1')
+    assert.equal(headers['x-xsrf-token'], 'flow-csrf')
+    if (headers['if-match'] !== `"${versions.get(id)}"`) {
+      await route.fulfill({ status: 412 })
+      return
+    }
+    if (request.method() === 'PUT') {
+      observed.updateIfMatch = headers['if-match']
+      observed.updated = request.postDataJSON()
+      versions.set(id, versions.get(id) + 1)
+      Object.assign(place, observed.updated)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { ETag: `"${versions.get(id)}"` },
+        body: JSON.stringify(place),
+      })
+      return
+    }
+
+    assert.equal(request.method(), 'DELETE')
+    observed.deleteIfMatch = headers['if-match']
+    places = places.filter((item) => item.id !== id)
+    observed.savedPlaceCount = places.length
+    await route.fulfill({ status: 204 })
+  })
   await page.route('**/api/v1/saved-places*', async (route) => {
     const request = route.request()
     if (request.method() === 'GET') {
@@ -115,6 +173,7 @@ async function mockApi(page) {
         notes: null,
       }
       places = [saved, ...places]
+      versions.set(saved.id, 1)
       observed.savedPlaceCount = places.length
     }
     if (observed.createCount === 1) {

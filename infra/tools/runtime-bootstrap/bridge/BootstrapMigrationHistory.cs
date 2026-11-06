@@ -18,6 +18,7 @@ internal static class BootstrapMigrationHistory
         "20261022145640_RequirePasswordChangeForProvisionedUsers",
         "20261028134346_AddCamperManualSpecifications",
         "20261104084728_AddSavedPlaceGoogleMapsUrl",
+        "20261104093558_AddSavedPlaceRowVersion",
         "20261106091448_AddIdentityConsentRegistry",
         "20261106105835_AddMapsEconomicGate"
     ]);
