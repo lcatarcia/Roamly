@@ -509,7 +509,7 @@ jobs:
             if app_fqdn="$(timeout "${metadata_timeout_seconds}s" az containerapp show \
               --name ca-roamly-prod \
               --resource-group "$AZURE_RESOURCE_GROUP" \
-              --query properties.configuration.ingress.fqdn \
+              --query properties.latestRevisionFqdn \
               --output tsv \
               --only-show-errors 2>&1)"; then
               fqdn_cli_status=0
@@ -535,6 +535,48 @@ jobs:
                 "$metadata_max_attempts" "$metadata_timeout_seconds" "$metadata_retry_delay_seconds"
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::error::FQDN pubblico ACA assente o non valido dopo i tentativi limitati; il deployment ARM potrebbe essere già stato applicato. Verificare manualmente la risorsa."
+            exit 1
+          fi
+
+          # Single mode retains the old revision until the new one passes readiness.
+          # Probe the new revision directly, not the ingress that may still serve the old one.
+          base_url="https://${app_fqdn}"
+          paths=(/health/live /health/ready)
+          max_attempts=5
+          retry_delay_seconds=10
+          revision_healthy=false
+          printf '## Smoke test pubblico HTTPS post-deploy\n\nNuova revisione: `%s`\n\nProbe richiesti: `/health/live` e `/health/ready` (HTTP 200), prima del gate finale di unicità/digest.\n\n' \
+            "$base_url" >> "$GITHUB_STEP_SUMMARY"
+          for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+            all_healthy=true
+            for path in "${paths[@]}"; do
+              if http_status="$(curl \
+                --connect-timeout 5 \
+                --max-time 10 \
+                --silent \
+                --show-error \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                "${base_url}${path}" 2>/dev/null)"; then
+                if [[ "$http_status" == "200" ]]; then
+                  printf 'Tentativo %d/%d: %s HTTP 200\n' "$attempt" "$max_attempts" "$path"
+                  continue
+                fi
+              else
+                http_status="errore di trasporto"
+              fi
+              all_healthy=false
+              printf 'Tentativo %d/%d: %s non pronto (%s)\n' "$attempt" "$max_attempts" "$path" "$http_status"
+            done
+            if [[ "$all_healthy" == "true" ]]; then
+              revision_healthy=true
+              break
+            fi
+            if (( attempt < max_attempts )); then sleep "$retry_delay_seconds"; fi
+          done
+          if [[ "$revision_healthy" != "true" ]]; then
+            printf '\nEsito: probe della nuova revisione falliti; nessun successo o rollback automatico.\n' >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Smoke test della nuova revisione fallito; verificare la risorsa."
             exit 1
           fi
 
@@ -596,51 +638,4 @@ jobs:
             exit 1
           fi
 
-          base_url="https://${app_fqdn}"
-          paths=(/health/live /health/ready)
-          max_attempts=5
-          retry_delay_seconds=10
-
-          printf '## Smoke test pubblico HTTPS post-deploy\n\nEndpoint: `%s`\n\nRevisione attiva: esattamente una, con immagine identica al digest della release (API ACA `2024-03-01`). Probe richiesti: `/health/live` e `/health/ready` (HTTP 200).\n\n' \
-            "$base_url" >> "$GITHUB_STEP_SUMMARY"
-
-          for ((attempt = 1; attempt <= max_attempts; attempt++)); do
-            all_healthy=true
-            for path in "${paths[@]}"; do
-              if http_status="$(curl \
-                --connect-timeout 5 \
-                --max-time 10 \
-                --silent \
-                --show-error \
-                --output /dev/null \
-                --write-out '%{http_code}' \
-                "${base_url}${path}" 2>/dev/null)"; then
-                if [[ "$http_status" == "200" ]]; then
-                  printf 'Tentativo %d/%d: %s HTTP 200\n' "$attempt" "$max_attempts" "$path"
-                  continue
-                fi
-              else
-                http_status="errore di trasporto"
-              fi
-
-              all_healthy=false
-              printf 'Tentativo %d/%d: %s non pronto (%s)\n' "$attempt" "$max_attempts" "$path" "$http_status"
-            done
-
-            if [[ "$all_healthy" == "true" ]]; then
-              printf '\nEsito: entrambi gli endpoint hanno restituito HTTP 200.\n' >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-
-            if (( attempt < max_attempts )); then
-              sleep "$retry_delay_seconds"
-            fi
-          done
-
-          {
-            printf '\nEsito: gate fallito dopo %d tentativi per probe, con timeout curl di 10 s e pausa di %d s. FQDN e revisione sono stati controllati prima dei probe.\n\n' \
-              "$max_attempts" "$retry_delay_seconds"
-            printf 'Il deployment ARM potrebbe essere già stato applicato e la risorsa potrebbe essere attiva nonostante il fallimento del workflow. Verificare lo stato e procedere con fix-forward o recovery manuale; nessun rollback applicativo o SQL viene eseguito automaticamente.\n'
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::Smoke test post-deploy fallito. Il deployment ARM potrebbe essere già stato applicato; verificare la risorsa e procedere manualmente (nessun rollback automatico)."
-          exit 1
+          printf '\nEsito: nuova revisione live/ready HTTP 200; esattamente una revisione attiva con il digest della release (API ACA 2024-03-01).\n' >> "$GITHUB_STEP_SUMMARY"
