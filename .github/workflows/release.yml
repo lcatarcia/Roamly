@@ -61,6 +61,8 @@ jobs:
       plan_hash: ${{ steps.whatif.outputs.plan_hash }}
       sql_secret_url: ${{ steps.preflight.outputs.sql_secret_url }}
       login_hmac_secret_url: ${{ steps.preflight.outputs.login_hmac_secret_url }}
+      maps_enabled: ${{ steps.preflight.outputs.maps_enabled }}
+      maps_account_client_id: ${{ steps.preflight.outputs.maps_account_client_id }}
     steps:
       - name: Checkout dello SHA selezionato
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -116,6 +118,8 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          MAPS_ENABLED: ${{ vars.MAPS_ENABLED || 'false' }}
+          MAPS_ACCOUNT_CLIENT_ID: ${{ vars.MAPS_ACCOUNT_CLIENT_ID }}
         run: |
           set -euo pipefail
           fail() { echo "::error::Preflight OIDC: $1" >&2; exit 1; }
@@ -124,6 +128,16 @@ jobs:
             [[ "$value" =~ $guid_pattern ]] || fail "ID OIDC configurato assente o non valido."
           done
           [[ "$AZURE_RESOURCE_GROUP" =~ ^[a-zA-Z0-9_-]+$ ]] || fail "Resource group non valido."
+          case "$MAPS_ENABLED" in
+            true)
+              [[ "$MAPS_ACCOUNT_CLIENT_ID" =~ $guid_pattern && "$MAPS_ACCOUNT_CLIENT_ID" != "00000000-0000-0000-0000-000000000000" ]] ||
+                fail "MAPS_ACCOUNT_CLIENT_ID deve essere il client ID pubblico dell account Maps, non della managed identity."
+              ;;
+            false) MAPS_ACCOUNT_CLIENT_ID="" ;;
+            *) fail "MAPS_ENABLED deve essere true o false (default false)." ;;
+          esac
+          printf 'maps_enabled=%s\n' "$MAPS_ENABLED" >> "$GITHUB_OUTPUT"
+          printf 'maps_account_client_id=%s\n' "$MAPS_ACCOUNT_CLIENT_ID" >> "$GITHUB_OUTPUT"
 
           az account show --only-show-errors --output json |
             jq -e --arg client "$AZURE_CLIENT_ID" --arg tenant "$AZURE_TENANT_ID" \
@@ -188,6 +202,11 @@ jobs:
             (.properties.principalId | type == "string" and test($guid)) and
             ((.properties.tenantId | ascii_downcase) == ($tenant | ascii_downcase))
           ' > /dev/null || fail "Identificativi della managed identity runtime assenti o non validi."
+          if [[ "$MAPS_ENABLED" == "true" ]]; then
+            printf '%s\n' "$identity" | jq -e --arg maps "$MAPS_ACCOUNT_CLIENT_ID" '
+              (.properties.clientId | ascii_downcase) != ($maps | ascii_downcase)
+            ' > /dev/null || fail "Il client ID Maps e quello della managed identity devono essere distinti."
+          fi
           echo "Preflight OIDC read-only riuscito: account atteso e GET app/revisioni/environment/identity verificati."
 
       - name: Build e push dell'immagine identificata dallo SHA
@@ -248,6 +267,8 @@ jobs:
           ROLLBACK_DIGEST: ${{ inputs.rollback_digest }}
           SQL_SECRET_URL: ${{ steps.preflight.outputs.sql_secret_url }}
           LOGIN_HMAC_SECRET_URL: ${{ steps.preflight.outputs.login_hmac_secret_url }}
+          MAPS_ENABLED: ${{ steps.preflight.outputs.maps_enabled }}
+          MAPS_ACCOUNT_CLIENT_ID: ${{ steps.preflight.outputs.maps_account_client_id }}
         run: |
           set -euo pipefail
           container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
@@ -271,6 +292,8 @@ jobs:
               containerAppsEnvironmentResourceId="$container_apps_environment_id" \
               runtimeIdentityResourceId="$runtime_identity_id" \
               runtimeIdentityClientId="$runtime_identity_client_id" \
+              mapsEnabled="$MAPS_ENABLED" \
+              mapsAccountClientId="$MAPS_ACCOUNT_CLIENT_ID" \
               image="$RELEASE_IMAGE" \
               sqlConnectionSecretUrl="$SQL_SECRET_URL" \
               loginHmacSecretUrl="$LOGIN_HMAC_SECRET_URL" \
@@ -344,6 +367,8 @@ jobs:
           APPROVED_PLAN_HASH: ${{ needs.prepare.outputs.plan_hash }}
           SQL_SECRET_URL: ${{ needs.prepare.outputs.sql_secret_url }}
           LOGIN_HMAC_SECRET_URL: ${{ needs.prepare.outputs.login_hmac_secret_url }}
+          MAPS_ENABLED: ${{ needs.prepare.outputs.maps_enabled }}
+          MAPS_ACCOUNT_CLIENT_ID: ${{ needs.prepare.outputs.maps_account_client_id }}
         run: |
           set -euo pipefail
           container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
@@ -367,6 +392,8 @@ jobs:
               containerAppsEnvironmentResourceId="$container_apps_environment_id" \
               runtimeIdentityResourceId="$runtime_identity_id" \
               runtimeIdentityClientId="$runtime_identity_client_id" \
+              mapsEnabled="$MAPS_ENABLED" \
+              mapsAccountClientId="$MAPS_ACCOUNT_CLIENT_ID" \
               image="$RELEASE_IMAGE" \
               sqlConnectionSecretUrl="$SQL_SECRET_URL" \
               loginHmacSecretUrl="$LOGIN_HMAC_SECRET_URL" \
@@ -410,6 +437,8 @@ jobs:
           RELEASE_IMAGE: ${{ needs.prepare.outputs.image }}
           SQL_SECRET_URL: ${{ needs.prepare.outputs.sql_secret_url }}
           LOGIN_HMAC_SECRET_URL: ${{ needs.prepare.outputs.login_hmac_secret_url }}
+          MAPS_ENABLED: ${{ needs.prepare.outputs.maps_enabled }}
+          MAPS_ACCOUNT_CLIENT_ID: ${{ needs.prepare.outputs.maps_account_client_id }}
         run: |
           set -euo pipefail
           container_apps_environment_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/cae-roamly-live"
@@ -433,6 +462,8 @@ jobs:
               containerAppsEnvironmentResourceId="$container_apps_environment_id" \
               runtimeIdentityResourceId="$runtime_identity_id" \
               runtimeIdentityClientId="$runtime_identity_client_id" \
+              mapsEnabled="$MAPS_ENABLED" \
+              mapsAccountClientId="$MAPS_ACCOUNT_CLIENT_ID" \
               image="$RELEASE_IMAGE" \
               sqlConnectionSecretUrl="$SQL_SECRET_URL" \
               loginHmacSecretUrl="$LOGIN_HMAC_SECRET_URL" \

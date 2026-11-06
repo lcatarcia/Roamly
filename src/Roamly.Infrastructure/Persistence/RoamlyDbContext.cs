@@ -63,6 +63,9 @@ public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
     /// <summary>Luoghi salvati dell'utente corrente.</summary>
     public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
 
+    /// <summary>Registro locale grant/revoke di Identity.</summary>
+    public DbSet<ConsentTransition> ConsentTransitions => Set<ConsentTransition>();
+
     /// <summary>Ricevute di cancellazione, non owned.</summary>
     public DbSet<ErasureReceipt> ErasureReceipts => Set<ErasureReceipt>();
 
@@ -71,6 +74,9 @@ public class RoamlyDbContext : RoamlyDbContextBase, IDataProtectionKeyContext
 
     /// <summary>Contatori infrastrutturali condivisi per il rate limit login.</summary>
     public DbSet<LoginAttemptCounter> LoginAttemptCounters => Set<LoginAttemptCounter>();
+
+    /// <summary>Global non-personal Maps admission and suspension latch.</summary>
+    public DbSet<MapsEconomicState> MapsEconomicStates => Set<MapsEconomicState>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

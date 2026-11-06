@@ -6,6 +6,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/fie
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Input } from '@/components/ui/input'
 import { SAVED_PLACES_QUERY_KEY } from '@/features/places/queryKeys'
+import { SavedPlacesMapPanel } from './SavedPlacesMapPanel'
 import { t } from '@/i18n/catalog'
 import { createCombGuid } from '@/lib/comb-guid.mjs'
 import {
@@ -326,15 +327,25 @@ function SavedPlaceCollection({
   onRetry: () => void
   onLoadMore: () => void
 }) {
+  const [view, setView] = useState<'list' | 'map'>('list')
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null)
+  const selectedId = places.some(place => place.id === selectedPlaceId) ? selectedPlaceId : null
   if (loading) return <CollectionMessage>{t('neutral.savedPlaces.loading')}</CollectionMessage>
-  if (error) return <CollectionError onRetry={onRetry} />
-  if (places.length === 0) return <CollectionMessage>{t('neutral.savedPlaces.empty')}</CollectionMessage>
+  if (error && places.length === 0) return <CollectionError onRetry={onRetry} />
 
   return (
     <section aria-label={t('narrative.savedPlaces.title')} className="min-w-0 space-y-4">
-      <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
-        {places.map((place) => <SavedPlaceCard key={place.id} place={place} actions={actions} />)}
-      </ul>
+      <div role="group" aria-label={t('neutral.maps.view')} className="flex gap-2">
+        <Button variant={view === 'list' ? 'default' : 'outline'} aria-pressed={view === 'list'} onClick={() => setView('list')}>{t('neutral.maps.list')}</Button>
+        <Button variant={view === 'map' ? 'default' : 'outline'} aria-pressed={view === 'map'} onClick={() => setView('map')}>{t('neutral.maps.map')}</Button>
+      </div>
+      {error && <CollectionError onRetry={onRetry} />}
+      {view === 'map' ? <SavedPlacesMapPanel places={places} categoryLabel={categoryLabel} selectedId={selectedId} onSelect={setSelectedPlaceId} /> : (
+        places.length === 0 ? <CollectionMessage>{t('neutral.savedPlaces.empty')}</CollectionMessage> :
+          <ul className="grid min-w-0 gap-3 sm:grid-cols-2">
+            {places.map((place) => <SavedPlaceCard key={place.id} place={place} actions={actions} />)}
+          </ul>
+      )}
       {hasMore && (
         <Button variant="outline" onClick={onLoadMore} disabled={loadingMore}>
           {loadingMore ? t('neutral.savedPlaces.loadingMore') : t('neutral.savedPlaces.loadMore')}
@@ -587,7 +598,11 @@ function validationMessage(error: 'required' | 'coordinates'): string {
 }
 
 function savedPlaceError(error: unknown, fallback: string): string {
-  if (error instanceof ApiError && error.status === 409) return t('neutral.savedPlaces.referenced')
+  if (error instanceof ApiError && error.status === 409) {
+    return fallback === t('neutral.savedPlaces.error')
+      ? t('neutral.savedPlaces.conflict')
+      : t('neutral.savedPlaces.referenced')
+  }
   if (error instanceof ApiError && error.status === 412) return t('neutral.savedPlaces.stale')
   return fallback
 }

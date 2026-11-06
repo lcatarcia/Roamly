@@ -4,6 +4,7 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { localMapsStyles } from './src/features/places/map-sdk-style.mjs'
 
 // Porta reale letta da src/Roamly.Api/Properties/launchSettings.json (profilo "https").
 // Vedi ADR-0003: frontend e API devono stare same-site in produzione; in sviluppo
@@ -15,7 +16,15 @@ export default defineConfig({
   // Il cookie di sessione e' Secure: il browser lo scarta se il dev server e' su http.
   // basicSsl genera un certificato self-signed al volo cosi' anche il frontend gira su
   // https://localhost, mantenendo il cookie Secure valido durante lo sviluppo (ADR-0003).
-  plugins: [react(), tailwindcss(), basicSsl()],
+  plugins: [react(), {
+    name: 'azure-maps-local-fonts',
+    enforce: 'pre',
+    transform(code, id) {
+      if (id.replaceAll('\\', '/').split('?')[0].endsWith('/azure-maps-control/dist/atlas.min.css')) {
+        return { code: localMapsStyles(code), map: null }
+      }
+    },
+  }, tailwindcss(), basicSsl()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),

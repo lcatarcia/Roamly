@@ -1,0 +1,30 @@
+.saved-places-map {
+  height: 28rem;
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.saved-place-map-pin {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 15rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0.4rem 0.6rem;
+  background: var(--color-card);
+  color: var(--color-card-foreground);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.saved-place-map-pin > span:first-child { font-size: 1.4rem; }
+.saved-place-map-pin:is(:focus-visible, [aria-pressed="true"]) {
+  outline: 3px solid var(--color-ring);
+  outline-offset: 2px;
+}

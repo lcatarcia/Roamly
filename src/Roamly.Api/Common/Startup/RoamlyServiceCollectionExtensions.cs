@@ -21,6 +21,7 @@ public static class RoamlyServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.TryAddSingleton(TimeProvider.System);
+        services.Configure<Roamly.Api.Features.Maps.MapsRenderOptions>(configuration.GetSection("Maps"));
         services.TryAddSingleton<IIdGenerator>(provider =>
             new SequentialGuidGenerator(provider.GetRequiredService<TimeProvider>()));
 

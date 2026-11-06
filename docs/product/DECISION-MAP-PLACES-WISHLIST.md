@@ -2,9 +2,9 @@
 
 ## #1: Scegliere la composizione della sezione
 
-Bloccato da: Nessuno  
-Tipo: Discuss  
-Severità: LOW  
+Bloccato da: Nessuno\
+Tipo: Discuss\
+Severità: LOW\
 Stato: Answered
 
 ### Domanda
@@ -29,9 +29,9 @@ Scelta dell'utente (2026-11-03): **mappa ed elenco sincronizzati**. La mappa è 
 
 ## #2: Verificare l'esperienza mappa + elenco
 
-Bloccato da: Nessuno  
-Tipo: Prototype  
-Severità: MEDIUM  
+Bloccato da: Nessuno\
+Tipo: Prototype\
+Severità: MEDIUM\
 Stato: Answered
 
 ### Domanda
@@ -76,11 +76,15 @@ La verifica locale copre interazioni sincronizzate, aggiunta senza posizione, va
 - [Pagina del prototipo](../../frontend/roamly-web/src/features/places/prototype/PlacesWishlistPrototypePage.tsx)
 - [Selettore delle varianti](../../frontend/roamly-web/src/features/places/prototype/PrototypeSwitcher.tsx)
 
+### Precisazione del 2026-11-06
+
+L'utente approva l'impostazione visiva attuale della sezione «Da visitare» e richiede consultazione sia come lista sia su mappa reale, con pin distinti per categoria e label corrispondente al nome salvato dall'utente. Ha scelto di procedere partendo dai gate mancanti della mappa reale, non con un prototipo o un placeholder. Restano validi il caricamento volontario, la selezione sincronizzata e la disponibilita' della lista per i luoghi senza coordinate; nessuna attivazione o spesa e' autorizzata da questa scelta.
+
 ## #3: Definire il comportamento dei link Google Maps
 
-Bloccato da: Nessuno  
-Tipo: Discuss  
-Severità: MEDIUM  
+Bloccato da: Nessuno\
+Tipo: Discuss\
+Severità: MEDIUM\
 Stato: Answered
 
 ### Domanda
@@ -122,9 +126,9 @@ Decisione sul piano del 2026-11-03, sulla delega dell'utente: **opzione 1**, lin
 
 ## #4: Verificare il provider geografico per Maps & Places
 
-Bloccato da: decisione #3 di [`OPEN-DECISIONS.md`](../OPEN-DECISIONS.md) e relativo spike/ADR  
-Tipo: Research  
-Severità: HIGH  
+Bloccato da: decisione #3 di [`OPEN-DECISIONS.md`](../OPEN-DECISIONS.md) e relativo spike/ADR\
+Tipo: Research\
+Severità: HIGH\
 Stato: Open
 
 ### Domanda
@@ -167,14 +171,25 @@ Prima dell'integrazione: verificare termini di rendering/coordinate, trattamento
 
 **Autenticazione e modello di consenso confermati per il piano:** l'utente ha scelto «Token Entra tramite API esistente (Raccomandata)» e «Registro unico grant/revoke (Raccomandata)» in Identity, senza autorizzare implementazione, migration, modifiche cloud o spesa. Restano da definire schema dettagliato, testo e retention della prova, oltre a licenza, configurazione concreta, limiti economici e spike. Il disegno di consenso e le prove richieste sono nel [piano](PLACES-WISHLIST-PLAN.md#consenso-trasversale-modello-scelto-e-dettagli-aperti).
 
+**Retention tecnica per l'alpha scelta il 2026-11-06:** storico completo grant/revoke fino all'erasure dell'account, incluso nell'export ed eliminato senza residui personali post-erasure. Questa scelta risolve il dettaglio tecnico di retention indicato sopra; restano la validazione privacy prima dell'attivazione e il riesame prima dell'estensione oltre l'alpha. Non autorizza schema, migration, implementazione o cloud.
+
 ### Assets
 
 - [`OPEN-DECISIONS.md` #3](../OPEN-DECISIONS.md)
 - [`AZURE-MAPS-RESEARCH.md`](AZURE-MAPS-RESEARCH.md)
 - [`PLACES-MAP-PROVIDER-COST-RESEARCH.md`](PLACES-MAP-PROVIDER-COST-RESEARCH.md): confronto documentale del 2026-11-03; l'utente ha scelto Azure Maps come candidato, senza autorizzare attivazione o spese.
 
+### Blocco locale approvato e implementato — 2026-11-06
+
+Successiva approvazione esplicita: **«Approva il registro locale e la migration non applicata»**. Il registro unico Identity `ConsentTransition` è implementato con API autenticate di lettura/grant/revoca, retry per ID COMB, revisioni monotone tra versioni, serializzazione sulla riga account e inclusione nello storico export/erasure. Migration generata, non applicata al database applicativo; le prove usano SQL Server Testcontainers isolato.
+
+**Registro locale implementato, gate esterni ancora aperti.** `azure-maps-render` è `DRAFT-1`/inattiva: un nuovo grant è rifiutato, nessun consenso apparente può abilitare token o mappe. Il test host esercita il registro con definizioni sintetiche senza attivazione esterna. Retention alpha invariata: tutto lo storico fino all'erasure, nessun purge periodico né residui personali del registro; validazione privacy prima dell'attivazione e riesame oltre l'alpha.
+
+Nessuna UX consenso, testo privacy definitivo, credenziale Maps, SDK, nuova dipendenza o modifica cloud è introdotta. Licenza/privacy, token, consumo, configurazione cloud e spike/ADR restano gate aperti; la richiesta di mantenere il visual attuale, lista e mappa reale con pin per categoria e label `SavedPlace.Name` resta intatta. [Contratto locale](PLACES-WISHLIST-PLAN.md#registro-locale-implementato--2026-11-06).
+
 ## Perimetro corrente
 
+- **Aggiornamento del 2026-11-06 per uso personale:** l'utente ha chiesto meno gate preventivi e di procedere con l'implementazione reale. Si realizza lista/mappa Azure su richiesta con categorie e titoli salvati, senza attendere ulteriori discussioni sulle normali scelte di codice. Il gate economico rigoroso gia' implementato resta distinto e non e' un prerequisito della vista personale; 1 EUR/mese resta riferimento operativo, non hard cap o arresto automatico promesso. Autenticazione, ownership e registro Identity restano riutilizzati. Nessun deploy, prova a consumo o applicazione di migration e' implicito. Questo aggiornamento supera i precedenti blocchi alla scrittura dell'integrazione manuale, non chiude il tema geografico generale, Search o routing camper. Dettagli nel [piano aggiornato](PLACES-WISHLIST-PLAN.md#aggiornamento-percorso-personale-semplice--2026-11-06).
 - [Piano della prima versione](PLACES-WISHLIST-PLAN.md): decisioni su delega, compromessi economici, sequenza e criteri di accettazione.
 - La sezione è una wishlist personale indipendente da un viaggio; riusa il concetto e lo schema strutturale di `SavedPlace` già descritti in [`architecture/CONTEXT.md`](../architecture/CONTEXT.md), evitando un secondo catalogo personale parallelo.
 - Le categorie devono coprire città, paesi, locali, musei e attrazioni, oltre ai tipi di sosta e servizio già previsti.

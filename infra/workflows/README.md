@@ -1,5 +1,28 @@
 # Workflow OIDC di release
 
+## Wiring Maps locale — 6 novembre 2026
+
+Il candidato aggiunge `mapsEnabled` e `mapsAccountClientId` al solo
+template ACA. Le variabili Environment non segrete `MAPS_ENABLED`
+(default `false`) e `MAPS_ACCOUNT_CLIENT_ID` vengono validate nel
+preflight e trasferite come output ai due what-if e al deployment.
+`Maps__ManagedIdentityClientId` usa il client ID della MI runtime gia
+letto dal workflow, non l'ID account Maps. La copia workflow in questa
+directory resta identica a `.github/workflows/release.yml`.
+
+Per ID verificati, migration, grants minimi e preservazione del runtime
+corrente vedere [il runbook Maps](../README.md#preparazione-locale-maps--6-novembre-2026).
+Non eseguire il bootstrap storico o `main.bicep`. La patch non configura
+variabili live, non applica SQL e non esegue dispatch.
+
+La run `41854167437` ha applicato ARM con successo ma e fallita nel gate
+revisioni post-deploy, prima dei probe HTTPS. Oggi la revisione `0000009`
+e Healthy e usa il digest atteso dalla run. Il dettaglio della causa
+del gate fallito non e recuperabile dai log, che sopprimono stderr CLI:
+non considerare provati RBAC, timeout o cold start e non ampliare
+permessi automaticamente. Lo stato e i digest del 2 novembre riportati
+sotto sono storici, non il target corrente da ripristinare.
+
 ## Runtime GHCR — trasferimento completato il 2 novembre 2026
 
 La configurazione di release su `main` usa ora `ghcr.io/lcatarcia/roamly`.

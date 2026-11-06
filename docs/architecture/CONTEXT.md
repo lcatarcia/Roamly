@@ -28,7 +28,8 @@ User
  │         └── JournalEntry (→ TripStop, opzionale)
  │              └── JournalEntryAttachment
  │
- └── SavedPlace                                ← Phase 3 (figlio diretto di User)
+ ├── SavedPlace                                ← Phase 3 (figlio diretto di User)
+ └── ConsentTransition                         ← Identity, registro locale grant/revoke
 
 PublicPlace   ← Phase 6, non-owned, fuori dal grafo di ownership
 ErasureReceipt ← non-owned, sopravvive all'utente
@@ -233,6 +234,20 @@ Indice `(OwnerId, CamperId, TakenOnUtc DESC)` — è insieme la query "lettura c
 > ⚠️ Il vincolo unique è una semplificazione arbitraria: correggere una lettura appena inserita significa aggiornarla, non inserirne un'altra. Reversibile, ma è un limite scelto, non derivato.
 > ⚠️ Una lettura **senza data mente**: "94.120 km" inseriti a marzo sembrerebbero di oggi. Per questo non esiste un campo `CurrentOdometerKm` su `Camper`.
 > **Nessuna estrapolazione.** Se la lettura più recente è vecchia, il server la espone com'è (con la sua data) e la marca `stale` oltre i 90 giorni. Se non esiste alcuna lettura, il `Ribbon` degrada sul solo asse temporale (R25). La qualifica del dato è lecita; la stima no.
+
+### 2.2.1 Identity — registro locale delle autorizzazioni facoltative
+
+**ConsentTransition**: prova di una scelta esplicita di autorizzazione o revoca per una finalità e una versione del testo. Identity possiede lo storico unico; Places non ne mantiene una copia. Evitare «consenso Maps attivo» per indicare la sola ricevuta storica, e non confonderla con `PrivacyPolicyVersionSeen`.
+
+Blocco locale approvato il 2026-11-06: entità owned con PK `(OwnerId, Id)`, `OwnerScope` e FK `OwnerId → AspNetUsers.Id` **NO ACTION**, inclusa nei modelli applicativo e FullSchema. `Id` è l'operazione COMB client-side; `Purpose` (64), `Version` (64), `TextReference` (256), `Action` (`grant`/`revoke`), `Revision` positiva e `CreatedAtUtc` server ricostruiscono la prova. La revisione è unica e crescente per `(OwnerId, Purpose)`, anche tra versioni; l'ultima transizione determina lo stato senza proiezione persistente. `UpdatedAtUtc` resta nullo: le transizioni non si aggiornano.
+
+Lo storico completo entra nell'export e viene eliminato dall'erasure, senza purge periodico nell'alpha né residui personali del registro dopo l'erasure. Questa retention tecnica non deriva dai 30 giorni di grazia e non è una prescrizione legale; richiede validazione privacy prima dell'attivazione e riesame oltre l'alpha. La finalità iniziale `azure-maps-render` è **DRAFT/inattiva**: il registro locale implementato non autorizza token, SDK o traffico Maps. Migration generata, non applicata al database applicativo; [contratto e gate](../product/PLACES-WISHLIST-PLAN.md#registro-locale-implementato--2026-11-06).
+
+### 2.2.2 Stato infrastrutturale globale del gate economico Maps
+
+`MapsEconomicState` è **non-owned per progetto (R10)**, approvato il 2026-11-06: una riga per `ResourceId`, nel modello applicativo e FullSchema, senza FK Identity, `OwnerId` o filtro personale. Contiene soltanto periodo mensile, revisione, costo aggregato EUR osservato/copertura, lease di aggiornamento e latch di sospensione con segnale allerta pendente. Nessun luogo, coordinata, identificativo utente, PII o bearer. Non è un'entità del dominio personale né una `Expense`; non entra in `DomainModelManifest`, export o erasure dell'account. Il verificatore R56 e i test dedicati rendono esplicita l'eccezione.
+
+Il latch a `>= 1 EUR` non viene riaperto da restart/cambio mese. Decorrenza locale a mesi di calendario UTC e intervalli di validità richiedono verifica/approvazione prima dell'attivazione; policy registrata inattiva e osservatore non configurato, senza integrazione remota. Migration `20261106105835_AddMapsEconomicGate` generata, non applicata al database applicativo. [Contratto, motivi di diniego e limiti](../product/PLACES-WISHLIST-PLAN.md#gate-economico-locale-implementato--2026-11-06).
 
 ### 2.3 Entità Phase 2+ — topologia e perimetro schema
 
@@ -442,12 +457,13 @@ graph TD
 
 | Categoria | Entità |
 |---|---|
-| **Owned** (R1, export e erasure R8/R9) | 🟢 `Camper`, `Equipment`, `MaintenanceItem`, `MaintenanceLog`, `OdometerReading` · 🟡 `Trip`, `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `JournalEntryAttachment`, `Expense`, `Document` · 🟡 `SavedPlace` |
+| **Owned** (R1, export e erasure R8/R9) | 🟢 `Camper`, `Equipment`, `MaintenanceItem`, `MaintenanceLog`, `OdometerReading` · 🟡 `Trip`, `TripStop`, `Checklist`, `ChecklistItem`, `JournalEntry`, `JournalEntryAttachment`, `Expense`, `Document` · 🟡 `SavedPlace` · Identity `ConsentTransition` |
 | **Non owned, whitelist R1/R10** | `ErasureReceipt` (motivazione in ADR-0004) · ⚪ `PublicPlace` (motivazione da scrivere in Phase 6) |
 | **Non entità** | `Money`, `Coordinates`, `Dimensions`, `Weights`, `Capacities` → complex type, colonne del padre, esportate col contenitore |
 | **Fuori da entrambi i grafi per costruzione** | catalogo dei seed (risorsa di codice, non tabella) |
 
 **Ordine di cancellazione derivato dal modello:** `MaintenanceLog` → `MaintenanceItem` → `OdometerReading` → `Equipment` → `ChecklistItem` → `Checklist` → `JournalEntryAttachment` → `JournalEntry` → `Expense` → `TripStop` → `Trip` → `Document` → `SavedPlace` → `Camper` → utente. Lo sweep degli oggetti Blob owner-prefixed precede la scrittura della `ErasureReceipt`.
+`ConsentTransition`, figlio diretto dell'account senza dipendenze di dominio, entra nello stesso ordine derivato e viene eliminato prima dell'utente.
 Le CASCADE farebbero gran parte del lavoro da sole; **il job non deve dipendere da questo**: deve derivare l'ordine dal modello e verificare `COUNT(*) = 0` (R9).
 
 ### 2.6 Perimetro delle migration e dei contesti

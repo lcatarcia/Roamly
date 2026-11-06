@@ -3,6 +3,7 @@ using Roamly.Api.Common.Security;
 using Roamly.Api.Features.Identity.AccountExport;
 using Roamly.Api.Features.Identity.AccountDeletion;
 using Roamly.Api.Features.Identity.GetMe;
+using Roamly.Api.Features.Identity.Consents;
 
 namespace Roamly.Api.Features.Identity;
 
@@ -21,6 +22,7 @@ public static class IdentityEndpoints
     public static IEndpointRouteBuilder MapIdentityEndpoints(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
+        ConsentEndpointMappings.MapConsentRegistry(app);
 
         app.MapGet("/api/v1/me", async (GetMeHandler handler, HttpContext context) =>
         {

@@ -35,6 +35,7 @@ public static class ModelConfigurationRegistry
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
         ApplyPhase1(modelBuilder, context);
+        modelBuilder.ApplyConfiguration(new MapsEconomicStateConfiguration());
         modelBuilder.ApplyConfiguration(new TripConfiguration(
             context,
             includeChecklistNavigations: true,
@@ -46,6 +47,7 @@ public static class ModelConfigurationRegistry
         modelBuilder.ApplyConfiguration(new JournalEntryAttachmentConfiguration(context));
         modelBuilder.ApplyConfiguration(new JournalAttachmentDeletionOutboxMessageConfiguration(context));
         modelBuilder.ApplyConfiguration(new SavedPlaceConfiguration(context));
+        modelBuilder.ApplyConfiguration(new ConsentTransitionConfiguration(context));
         modelBuilder.ApplyConfiguration(new ExpenseConfiguration(context));
     }
 
@@ -57,8 +59,10 @@ public static class ModelConfigurationRegistry
         ArgumentNullException.ThrowIfNull(modelBuilder);
 
         ApplyPhase1(modelBuilder, context);
+        modelBuilder.ApplyConfiguration(new MapsEconomicStateConfiguration());
         modelBuilder.ApplyConfiguration(new TripConfiguration(context));
         modelBuilder.ApplyConfiguration(new SavedPlaceConfiguration(context));
+        modelBuilder.ApplyConfiguration(new ConsentTransitionConfiguration(context));
         modelBuilder.ApplyConfiguration(new TripStopConfiguration(context));
         modelBuilder.ApplyConfiguration(new ChecklistConfiguration(context));
         modelBuilder.ApplyConfiguration(new ChecklistItemConfiguration(context));

@@ -16,7 +16,7 @@ Il planning originale è stato splittato e corretto il 2026-09-24 a seguito dell
 | [`product/FEATURES.md`](product/FEATURES.md) | Descrizione funzionale: dashboard, camper, trip planner, routing, checklist, costi, journal, intelligence, memory |
 | [`product/ROADMAP.md`](product/ROADMAP.md) | MVP 1.0, fasi con criteri di uscita, anti-scope, sequenza di lavoro |
 | [`product/DECISION-MAP-PLACES-WISHLIST.md`](product/DECISION-MAP-PLACES-WISHLIST.md) | Decisioni per la wishlist personale di luoghi da visitare, con mappa ed elenco sincronizzati |
-| [`product/PLACES-WISHLIST-PLAN.md`](product/PLACES-WISHLIST-PLAN.md) | Piano della wishlist a costo contenuto: variante A, dati manuali, link opachi e mappa Azure su richiesta; integrazione non attivata |
+| [`product/PLACES-WISHLIST-PLAN.md`](product/PLACES-WISHLIST-PLAN.md) | Wishlist personale lista/mappa implementata: pin per categoria, titoli salvati e Azure su richiesta; configurazione host non ancora attivata |
 | [`product/DECISION-MAP-PRE-PUBBLICAZIONE.md`](product/DECISION-MAP-PRE-PUBBLICAZIONE.md) | Decisioni aperte per la pubblicazione generale e la deroga alpha privata dopo la Phase 2 |
 | [`product/AZURE-MAPS-RESEARCH.md`](product/AZURE-MAPS-RESEARCH.md) | Quote gratuite, costi, autenticazione, privacy e limiti di Azure Maps; nessuna integrazione o risorsa attivata |
 | [`product/PLACES-MAP-PROVIDER-COST-RESEARCH.md`](product/PLACES-MAP-PROVIDER-COST-RESEARCH.md) | Confronto MapTiler, Azure Maps, Geoapify e servizi OSM pubblici per la wishlist: quote, addebiti, persistenza e privacy |

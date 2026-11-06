@@ -11,6 +11,8 @@
  * viene chiamato appena prima di ogni mutazione.
  */
 
+import { createCombGuid } from '@/lib/comb-guid.mjs'
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 const ROAMLY_HEADER = { 'X-Roamly-Request': '1' } as const
 
@@ -26,10 +28,11 @@ export class ApiError extends Error {
 }
 
 /** GET /api/v1/csrf-token — va richiamato prima di OGNI richiesta non-GET. */
-export async function fetchCsrfToken(): Promise<string> {
+export async function fetchCsrfToken(signal?: AbortSignal): Promise<string> {
   const response = await fetch('/api/v1/csrf-token', {
     method: 'GET',
     credentials: 'include',
+    signal,
   })
 
   if (!response.ok) {
@@ -44,14 +47,16 @@ interface MutationOptions {
   method: 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   body?: unknown
   etag?: string
+  signal?: AbortSignal
 }
 
 /** Esegue una richiesta non-GET con CSRF e precondizione opzionale gia' applicati. */
 async function sendMutation(path: string, options: MutationOptions): Promise<Response> {
-  const csrfToken = await fetchCsrfToken()
+  const csrfToken = await fetchCsrfToken(options.signal)
 
   const response = await fetch(path, {
     method: options.method,
+    signal: options.signal,
     credentials: 'include',
     headers: {
       ...JSON_HEADERS,
@@ -67,6 +72,44 @@ async function sendMutation(path: string, options: MutationOptions): Promise<Res
   }
 
   return response
+}
+
+export interface MapsConfiguration {
+  isConfigured: boolean
+  accountClientId: string | null
+  domain: string
+}
+
+export interface MapsConsent {
+  purpose: string
+  version: string
+  textReference: string
+  isActive: boolean
+  isGranted: boolean
+  revision: number
+}
+
+async function getMapsJson<T>(path: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(path, { credentials: 'include', cache: 'no-store', signal })
+  if (!response.ok) throw await toApiError(response, 'Mappa non disponibile.')
+  return response.json() as Promise<T>
+}
+
+export const fetchMapsConfiguration = (signal: AbortSignal) =>
+  getMapsJson<MapsConfiguration>('/api/v1/maps/config', signal)
+
+export const fetchMapsConsent = (signal: AbortSignal) =>
+  getMapsJson<MapsConsent>('/api/v1/me/consents/azure-maps-render', signal)
+
+export function recordMapsConsent(consent: MapsConsent, grant: boolean, signal: AbortSignal) {
+  return mutate('/api/v1/me/consents/azure-maps-render/' + (grant ? 'grants' : 'revocations'), {
+    method: 'POST', signal,
+    body: { id: createCombGuid(), version: consent.version, textReference: consent.textReference },
+  })
+}
+
+export function issueMapsToken(signal: AbortSignal) {
+  return mutate<{ accessToken: string; expiresAtUtc: string }>('/api/v1/maps/token', { method: 'POST', signal })
 }
 
 /** Esegue una richiesta non-GET e deserializza il corpo quando presente. */

@@ -62,7 +62,34 @@ for (const [name, source] of [['active', active], ['review', review]]) {
     assert.equal([...source.matchAll(/LOGIN_HMAC_SECRET_URL: \$\{\{ needs\.prepare\.outputs\.login_hmac_secret_url \}\}/g)].length, 2)
     assert.doesNotMatch(source, /az keyvault secret show|listSecrets/)
   })
+
+  test(`${name}: Maps is opt-in and the same nonsecret parameters reach both previews and deployment`, () => {
+    assert.match(source, /MAPS_ENABLED: \$\{\{ vars\.MAPS_ENABLED \|\| 'false' \}\}/)
+    assert.match(source, /MAPS_ACCOUNT_CLIENT_ID: \$\{\{ vars\.MAPS_ACCOUNT_CLIENT_ID \}\}/)
+    assert.match(source, /case "\$MAPS_ENABLED" in/)
+    assert.match(source, /false\) MAPS_ACCOUNT_CLIENT_ID="" ;;/)
+    assert.match(source, /\[\[ "\$MAPS_ACCOUNT_CLIENT_ID" =~ \$guid_pattern/)
+    assert.match(source, /"\$MAPS_ACCOUNT_CLIENT_ID" != "00000000-0000-0000-0000-000000000000"/)
+    assert.match(source, /\(\.properties\.clientId \| ascii_downcase\) != \(\$maps \| ascii_downcase\)/)
+    assert.match(source, /maps_enabled: \$\{\{ steps\.preflight\.outputs\.maps_enabled \}\}/)
+    assert.match(source, /maps_account_client_id: \$\{\{ steps\.preflight\.outputs\.maps_account_client_id \}\}/)
+    assert.equal([...source.matchAll(/mapsEnabled="\$MAPS_ENABLED"/g)].length, 3)
+    assert.equal([...source.matchAll(/mapsAccountClientId="\$MAPS_ACCOUNT_CLIENT_ID"/g)].length, 3)
+    assert.equal([...source.matchAll(/MAPS_ENABLED: \$\{\{ needs\.prepare\.outputs\.maps_enabled \}\}/g)].length, 2)
+    assert.equal([...source.matchAll(/MAPS_ACCOUNT_CLIENT_ID: \$\{\{ needs\.prepare\.outputs\.maps_account_client_id \}\}/g)].length, 2)
+    assert.doesNotMatch(source, /mapsAccountClientId="\$runtime_identity_client_id"|az maps .*keys/)
+  })
 }
+
+test('Maps uses distinct account and managed identity IDs without new resources', () => {
+  assert.match(containerApp, /param mapsEnabled bool = false/)
+  assert.match(containerApp, /param mapsAccountClientId string = ''/)
+  assert.match(containerApp, /name: 'Maps__Enabled'\s+value: string\(mapsEnabled\)/)
+  assert.match(containerApp, /name: 'Maps__AccountClientId'\s+value: mapsAccountClientId/)
+  assert.match(containerApp, /name: 'Maps__ManagedIdentityClientId'\s+value: runtimeIdentityClientId/)
+  assert.equal([...containerApp.matchAll(/^resource /gm)].length, 1)
+  assert.doesNotMatch(containerApp, /Microsoft\.Sql|Microsoft\.Maps\/accounts|Microsoft\.ContainerRegistry/)
+})
 
 test('public image deployment does not configure registry credentials', () => {
   assert.match(containerApp, /registries: \[\]/)

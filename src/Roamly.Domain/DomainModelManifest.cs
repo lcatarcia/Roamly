@@ -38,6 +38,7 @@ public static class DomainModelManifest
     public static IReadOnlyList<Type> ApplicationEntityTypes { get; } =
     [
         .. Phase1EntityTypes,
+        typeof(ConsentTransition),
         typeof(Trip),
         typeof(TripStop),
         typeof(Checklist),
@@ -51,5 +52,6 @@ public static class DomainModelManifest
 
     /// <summary>Tutte le entita' di dominio e dell'outbox nel modello completo.</summary>
     public static IReadOnlyList<Type> AllEntityTypes { get; } =
-        [.. Phase1EntityTypes, .. LaterPhaseEntityTypes, typeof(JournalAttachmentDeletionOutboxMessage)];
+        [.. Phase1EntityTypes, .. LaterPhaseEntityTypes, typeof(JournalAttachmentDeletionOutboxMessage),
+            typeof(ConsentTransition)];
 }

@@ -45,11 +45,11 @@ public sealed class AccountErasurePlanTests(ModelFixture model)
 
         if (fullSchema)
         {
-            Assert.Equal(15, plan.Count);
+            Assert.Equal(16, plan.Count);
         }
         else
         {
-            Assert.Equal(14, plan.Count);
+            Assert.Equal(15, plan.Count);
         }
     }
 

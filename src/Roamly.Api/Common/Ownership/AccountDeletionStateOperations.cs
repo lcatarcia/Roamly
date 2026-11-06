@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Roamly.Infrastructure.Persistence;
+using Roamly.Infrastructure.Identity;
 
 namespace Roamly.Api.Common.Ownership;
 
@@ -9,6 +10,13 @@ namespace Roamly.Api.Common.Ownership;
 /// </summary>
 internal static class AccountDeletionStateOperations
 {
+    /// <summary>Stesso lock della cancellazione: il chiamante mantiene la transazione fino alla scrittura.</summary>
+    public static Task<ApplicationUser?> LockAsync(
+        RoamlyDbContext db, Guid userId, CancellationToken cancellationToken) =>
+        db.Users.FromSqlInterpolated(
+            $"SELECT * FROM [dbo].[AspNetUsers] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {userId}")
+            .AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+
     public static Task<int> TryScheduleAsync(
         RoamlyDbContext db,
         Guid userId,

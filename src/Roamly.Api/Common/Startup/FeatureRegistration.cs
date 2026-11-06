@@ -25,6 +25,7 @@ using Roamly.Api.Features.Campers.UpdateCamperProfile;
 using Roamly.Api.Features.Identity.GetMe;
 using Roamly.Api.Features.Identity.AccountDeletion;
 using Roamly.Api.Features.Identity.AccountExport;
+using Roamly.Api.Features.Identity.Consents;
 using Roamly.Api.Features.Trips.CreateTrip;
 using Roamly.Api.Features.Trips.GetTrip;
 using Roamly.Api.Features.Trips.ListTrips;
@@ -55,6 +56,11 @@ using Roamly.Api.Features.Journal.UploadJournalAttachment;
 using Roamly.Api.Features.Journal.DeleteJournalAttachment;
 using Roamly.Api.Features.Places;
 using Roamly.Common.Email;
+using Roamly.Api.Features.Maps;
+using Roamly.Infrastructure.Maps;
+using Azure.Core;
+using Azure.Identity;
+using Microsoft.Extensions.Options;
 
 namespace Roamly.Api.Common.Startup;
 
@@ -82,6 +88,24 @@ public static class FeatureRegistration
         services.AddScoped<ResendEmailConfirmationHandler>();
 
         // Features/Identity/
+        services.AddOptions<MapsRenderOptions>();
+        services.AddSingleton(provider => provider.GetRequiredService<IOptions<MapsRenderOptions>>().Value.IsConfigured
+            ? ConsentPurposeDefinition.AzureMapsV1 : ConsentPurposeDefinition.AzureMapsDraft);
+        services.AddKeyedSingleton<TokenCredential>("MapsRendering", (provider, _) =>
+        {
+            var clientId = provider.GetRequiredService<IOptions<MapsRenderOptions>>().Value.ManagedIdentityClientId;
+            return string.IsNullOrWhiteSpace(clientId)
+                ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+                : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(clientId));
+        });
+        services.AddScoped<IssueMapsTokenHandler>();
+        services.AddScoped<GetConsentHandler>();
+        services.AddScoped<RecordConsentHandler>();
+        // Economic evidence gate intentionally inactive: no bound policy, Azure observer or scheduler.
+        services.AddSingleton(new MapsEconomicPolicy());
+        services.AddSingleton<IMapsCostObserver, UnavailableMapsCostObserver>();
+        services.AddScoped<MapsEconomicGate>();
+        services.AddScoped<MapsAdmissionService>();
         services.AddScoped<GetMeHandler>();
         services.AddScoped<AccountExportHandler>();
         services.AddScoped<GetAccountDeletionPreviewHandler>();

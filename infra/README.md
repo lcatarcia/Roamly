@@ -1,5 +1,119 @@
 # Provisioning Azure
 
+## Preparazione locale Maps — 6 novembre 2026
+
+Il wiring candidato modifica solo `container-app.bicep` e il workflow
+applicativo con la sua copia in `workflows/`. Non crea risorse Maps, SQL,
+registry, identita o assegnazioni RBAC; non applica migration.
+`main.bicep` e il bootstrap hardcoded sul server SQL storico **non sono
+percorsi di questo rilascio**. Le altre modifiche gia presenti nel checkout
+dirty non sono automaticamente autorizzate alla pubblicazione.
+
+### Configurazione non segreta
+
+Il template mantiene `mapsEnabled=false` e `mapsAccountClientId=''` per
+default. Il workflow acquisisce una volta dal GitHub Environment
+`azure-release` le variabili non segrete e passa gli stessi valori ai due
+what-if e al deployment:
+
+| Variabile Environment | Valore per il prossimo rilascio Maps autorizzato | Configurazione ACA |
+| --- | --- | --- |
+| `MAPS_ENABLED` | `true` (assente = `false`) | `Maps__Enabled` |
+| `MAPS_ACCOUNT_CLIENT_ID` | `4eb100cc-1466-484e-a78e-aa6ae42734b8` | `Maps__AccountClientId` |
+| Nessuna nuova variabile MI | client ID letto dall'identita runtime esistente: `3533c727-acac-4061-a82d-39550a6788fa` | `Maps__ManagedIdentityClientId` |
+
+I valori sono stati verificati con GET ARM, senza token Maps o lettura di
+chiavi. L'API ARM Maps `2023-06-01` restituisce il client ID pubblico
+dell'account in **`properties.uniqueId`**; `properties.clientId` e assente.
+Non usare il client ID della managed identity come ID account Maps.
+Il preflight rifiuta flag diversi da `true`/`false`, GUID vuoti/non validi
+quando abilitato e l'uguaglianza fra ID account e ID MI. Non aggiunge
+permessi al principal OIDC per leggere l'account Maps.
+
+L'identita `id-roamly-runtime-prod` e gia associata a `ca-roamly-prod`.
+Gli scope runtime esistenti includono Render Reader e Metrics Reader
+sul solo account `maps-roamly-dev`, e Cost Query Reader su `rg-roamly-dev`.
+Questo wiring non modifica RBAC, non abilita Search e non attiva
+l'observer economico: il codice personale usa il consenso e legge il latch
+di sospensione persistito.
+
+### Migration e grants prima del rilascio del codice
+
+Il percorso supportato resta lo script SQL EF **idempotente revisionato**,
+con applicazione amministrativa separata e autorizzata al database
+`roamly` su `sql-roamly-free-we-wse7wit7fzpja`. Non passare credenziali al
+tooling e non eseguire `database update`, bootstrap o `Down()` automatici.
+Generazione offline dalla factory design-time (`Server=none;Database=none`),
+usando un build aggiornato che contenga tutte le migration:
+
+```powershell
+dotnet ef migrations script 20261028134346_AddCamperManualSpecifications 20261106105835_AddMapsEconomicGate --idempotent --no-build --project src/Roamly.Infrastructure --startup-project src/Roamly.Infrastructure --context RoamlyDbContext --output "$env:TEMP/roamly-maps-release-20261106.sql"
+```
+
+Le quattro migration attese nello script sono:
+
+- `20261104084728_AddSavedPlaceGoogleMapsUrl`;
+- `20261104093558_AddSavedPlaceRowVersion` (gia' presente su `main`);
+- `20261106091448_AddIdentityConsentRegistry`;
+- `20261106105835_AddMapsEconomicGate`.
+
+Lo script generato e revisionato offline aggiunge la colonna nullable
+`SavedPlaces.GoogleMapsUrl` e `SavedPlaces.RowVersion`, `ConsentTransitions` (PK owned e indice
+univoco per revisione) e `MapsEconomicStates` con i relativi vincoli.
+Non contiene drop, copie dati, credenziali o cambi di principal.
+La generazione non attesta lo schema live: verificare separatamente
+destinazione e history prima dell'applicazione. Nessuna connessione SQL
+e stata aperta per questa preparazione.
+
+Aggiornamento minimo dell'allowlist **esistente** `RoamlyRuntime`, dopo
+verifica di membership e permessi sul database corrente:
+
+```sql
+GRANT SELECT, INSERT, DELETE ON OBJECT::[dbo].[ConsentTransitions] TO [RoamlyRuntime];
+GRANT SELECT ON OBJECT::[dbo].[MapsEconomicStates] TO [RoamlyRuntime];
+```
+
+`DELETE` sul consenso serve all'account-erasure; non serve `UPDATE`.
+Il token issuer personale legge soltanto lo stato economico. `INSERT,
+UPDATE` su `MapsEconomicStates` saranno necessari solo a un futuro gate
+economico attivo, non a questo rilascio. `SavedPlaces` ha gia i grants
+allowlist `SELECT, INSERT, UPDATE, DELETE`: aggiungere una colonna non
+richiede nuovi grants. Non assegnare ruoli database ampi, non creare un
+nuovo principal e non rilanciare il vecchio bootstrap, che punta al server
+storico e richiede un principal non ancora esistente.
+
+Le migration sono prerequisito anche con Maps disabilitato: il nuovo
+modello Places/consenso e usato dalle query e dai flussi privacy.
+
+### Runtime verificato e limite della precedente release
+
+La run `41854167437` del 4 novembre, SHA
+`8f6a514e8ea2ed8d6051cf76275d1594f9111e78`, ha completato build/push,
+entrambi i what-if e il deployment ARM. Il deployment
+`roamly-release-41854167437-1` e `Succeeded`. Oggi la sola revisione
+attiva e `ca-roamly-prod--0000009`, Healthy/ScaledToZero, con immagine
+`ghcr.io/lcatarcia/roamly@sha256:f5a0b70cf0e199cd9840e922ff7f0eec2990b094d2fcbbf50747d6f7f62f2f43`.
+Non ripristinare il digest del 2 novembre come se fosse ancora corrente.
+
+La run e fallita **dopo** ARM: il gate sulle revisioni non ha confermato
+il digest atteso nei sei tentativi; non ha raggiunto i probe HTTPS.
+I log scartano stderr della CLI e trattano gli errori come risposta vuota:
+non consentono di distinguere errore CLI/RBAC, timeout o stato transitorio
+al momento della run. Nessuna di queste cause viene dichiarata provata
+e nessuna correzione di permessi/polling e introdotta in questa patch.
+Il digest live oggi coincide con quello atteso dalla run: il fallimento
+workflow non implica che il deployment non sia avvenuto.
+
+Preservare Single, min 0/max 1, GHCR pubblico senza credenziali, environment,
+MI, Blob, risorse/probe e riferimenti Key Vault correnti. Il preflight
+conserva la versione SQL pinned e l'HMAC esistente. SQL e West Europe,
+Free/AutoPause, 0,5-1 vCore, 32 GiB e pausa inattivita 60 minuti; lo stato
+ARM letto e `Paused`. Nessun rilascio locale o modifica cloud e stato
+eseguito. Prima della pubblicazione servono autorizzazione esplicita
+all'insieme di file selezionato, PR su `main` con i quattro check,
+migration/grants autorizzati e configurazione Environment; dispatch e
+verifica operativa restano azioni successive distinte.
+
 `main.bicep` descrive le fondamenta del singolo ambiente Roamly in Italy North:
 
 - Log Analytics con retention di 30 giorni;
