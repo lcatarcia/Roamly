@@ -4,6 +4,8 @@
 - **Stato:** ricerca preliminare; nessun provider selezionato e nessuna integrazione autorizzata
 - **Perimetro:** costi mensili, Maps/Search/Routing per un possibile MVP della Phase 3, privacy, autenticazione, limiti d'uso e licenza
 
+**Lettura cronologica:** l'intestazione e le prime sezioni descrivono la ricerca iniziale. La sezione 12 registra le successive scelte Azure, letture control-plane e modifiche RBAC approvate del 2026-11-06. Nella stessa data l'utente ha richiesto un'implementazione piu' semplice per uso personale: il contratto economico rigoroso resta distinto e non blocca la nuova vista manuale. La soglia di 1 EUR/mese non viene presentata come controllo automatico attivo o tetto alla fattura. Non sono autorizzati nuovi deploy o test Maps a consumo; [perimetro corrente](PLACES-WISHLIST-PLAN.md#aggiornamento-percorso-personale-semplice--2026-11-06).
+
 > Questa ricerca usa esclusivamente fonti documentali pubbliche Microsoft/Azure e il repository del wrapper React gestito dal team Azure Maps. Non sono stati creati account o risorse, usate credenziali o API live, né trasmessi dati o coordinate di Roamly. Non è stata implementata alcuna integrazione. Le stime sono modelli ipotetici, non garanzie di prezzo o di consumo.
 
 ## 1. Sintesi esecutiva
@@ -161,3 +163,125 @@ Documentazione pubblica Microsoft/Azure verificata il **2026-10-22**; le pagine 
 - Non si è concluso quali limiti di caching/storage/retention si applichino ai singoli dati Azure Maps in un caso Roamly; consultare i Product Terms e condizioni specifiche prima dell'uso.
 - Non sono state provate dal vivo accuratezza, aggiornamento o completezza delle restrizioni truck/camper; la copertura tabellare non è un test di qualità su strada.
 - Non sono stati effettuati test con coordinate reali o sintetiche verso servizi live, né creati risorse, account o credenziali.
+
+## 11. Approfondimento per la wishlist manuale — 2026-11-03
+
+Questo aggiornamento riguarda il [piano ristretto della wishlist](PLACES-WISHLIST-PLAN.md): mappa base e dati inseriti dall'utente, senza Search o routing. Non approva attivazione, spesa o conformità legale.
+
+### Rendering senza chiamate Search implicite
+
+La reference `atlas.ServiceOptions` documenta `enableAccessibilityLocationFallback`, attivo per default: se l'estrazione dai dati vettoriali fallisce, può chiamare il geocoder REST. Per il perimetro senza Search occorre impostarlo esplicitamente a `false`, mantenendo `enableAccessibility` e un elenco/dettaglio accessibili. Impostare anche `disableTelemetry: true`, usare dominio UE, e verificare nella versione SDK concreta gli endpoint realmente richiesti. Non basta omettere il campo di ricerca per dimostrare assenza di chiamate Search.
+
+Caricare codice/stili SDK dagli asset dell'app, su apertura volontaria della mappa; niente CDN remota prima del consenso, preconnect o geolocalizzazione automatica. `domain` permette di scegliere il dominio dei servizi; va verificato con cattura di rete che stile, tile, sprite e glyph rispettino il perimetro previsto. Non dedurre la residenza di tutte le richieste dal solo endpoint di un esempio Search.
+
+Fonti: [ServiceOptions](https://learn.microsoft.com/en-us/javascript/api/azure-maps-control/atlas.serviceoptions?view=azure-maps-typescript-latest), [lazy loading e best practice](https://learn.microsoft.com/en-us/azure/azure-maps/web-sdk-best-practices), [geographic scope](https://learn.microsoft.com/en-us/azure/azure-maps/geographic-scope).
+
+### Accesso senza chiave permanente nel browser
+
+La documentazione conferma Entra, managed identity, SAS e ruoli custom limitati a `Microsoft.Maps/accounts/services/render/read`. Un ruolo Search+Render ammetterebbe anche Search e non va descritto come render-only.
+
+**Flusso confermato dall'utente per il piano il 2026-11-03:** «Token Entra tramite API esistente (Raccomandata)». Il disegno prevede managed identity dell'API e endpoint same-site autenticato che distribuisce un token Entra al controllo mappa, con ruolo render-only sul singolo account Maps. La conferma non autorizza provisioning, modifica RBAC, implementazione o traffico live; configurazione concreta e prova restano da approvare. Non aggiungere login Entra agli utenti Roamly, una nuova app di autenticazione utenti o una chiave permanente nel bundle. Applicare consenso corrente, flag, restrizioni di sessione e controllo emissione prima di restituire il token; risposta non memorizzabile, token soltanto in memoria e mai nei log.
+
+Il browser riceve comunque una credenziale bearer riutilizzabile fino alla scadenza. La durata effettiva del token Entra non è liberamente abbreviabile impostando un TTL locale: chiudere la mappa, revocare il consenso o spegnere il flag impedisce nuova emissione ma non garantisce invalidazione immediata di token già rilasciati. CORS non è un presidio contro client non-browser. Il rischio residuo va esplicitato, non trasformato in una promessa di costo massimo.
+
+SAS è un'alternativa con durata configurabile, regioni consentite e rate limit approssimativo per token/region. La reference List Sas richiede una user-assigned managed identity associata all'account; la durata massima documentata è 24 ore. Token multipli possono ampliare il consumo e il rate non è un plafond mensile. Non copiare il tutorial che usa un anno come durata: contrasta con la reference corrente. La scelta del flusso definitivo richiede conferma prima di modificare identità o RBAC.
+
+Fonti: [authentication e ruolo render-only](https://learn.microsoft.com/en-us/azure/azure-maps/azure-maps-authentication), [best practice autenticazione](https://learn.microsoft.com/en-us/azure/azure-maps/authentication-best-practices), [endpoint token per Web SDK](https://learn.microsoft.com/en-us/azure/azure-maps/how-to-secure-webapp-users), [List Sas](https://learn.microsoft.com/en-us/rest/api/maps-management/accounts/list-sas?view=rest-maps-management-2023-06-01), [tutorial SAS](https://learn.microsoft.com/en-us/azure/azure-maps/how-to-secure-sas-app).
+
+### Licenza e consenso: evidenza e limiti
+
+I [Product Terms MCA, sezione Azure Maps](https://www.microsoft.com/licensing/terms/productoffering/MicrosoftAzure/MCA) distinguono dati del cliente sovrapposti, restrizioni sui database e risultati API; prevedono limiti di conservazione dei risultati e un'eccezione per i geocodici con account Azure attivo. Non risolvono automaticamente la classificazione contrattuale di ogni dato ottenuto selezionando un punto sulla mappa. La wishlist manuale non deve copiare nomi, indirizzi o metadati dai tile né importarli come catalogo POI; serve comunque verificare il contratto effettivamente applicabile. Questa analisi non certifica la conformità legale.
+
+L'attribuzione non può essere coperta dai pannelli o eliminata. Per Render la documentazione richiede attribuzione coerente con area/zoom: verificarla nel controllo scelto, senza hardcodare un unico copyright per ogni vista. [Guida attribuzione](https://learn.microsoft.com/en-us/azure/azure-maps/how-to-show-attribution).
+
+Nel repository, il trigger 1 di ADR-0004 richiede consensi con finalità versionate e prova del consenso al primo trasferimento pertinente. Il controllo del viewport può rivelare zone scelte dall'utente anche senza inviare i marker. La sola informativa vista (`PrivacyPolicyVersionSeen`) o il pulsante «Apri mappa» non sostituiscono il consenso richiesto dal progetto. Nella ricognizione del runtime non è stato trovato un meccanismo di consensi già implementato. L'utente ha poi scelto per il piano un **registro unico grant/revoke in Identity**: [disegno e limiti](PLACES-WISHLIST-PLAN.md#consenso-trasversale-modello-scelto-e-dettagli-aperti). Schema dettagliato, testo, retention, base giuridica e implementazione restano aperti; revoca, export ed erasure fanno parte del disegno richiesto, non di funzionalità già presenti.
+
+### Ricognizione cloud: accesso ripristinato e inventario read-only
+
+La subscription e il tenant di destinazione sono stati letti dalle variabili **non segrete** del GitHub Environment `azure-release`. Il primo tentativo era fallito con `Subscription ... not found`: quel risultato non dimostrava l'assenza di risorse. Dopo autorizzazione esplicita dell'utente e accesso interattivo completato, `account show` sul target ha confermato subscription e tenant corrispondenti e stato `Enabled`. Tutte le letture successive hanno indicato esplicitamente la subscription, senza cambiare quella predefinita.
+
+Risultati osservati il 2026-11-03:
+
+- L'inventario ARM di `Microsoft.Maps/accounts` ha restituito **zero account** nell'intera subscription target, non soltanto nel resource group. Non ci sono account Maps restituiti dall'inventario da riutilizzare; non è una verifica di altre subscription o di risorse non visibili all'identità corrente.
+- `id-roamly-runtime-prod` esiste in `rg-roamly-dev`, regione Italy North, ed è già associata a `ca-roamly-prod` come user-assigned managed identity. Il suo riuso per Maps resta una proposta soggetta ad autorizzazione RBAC separata.
+- La lettura ARM delle assegnazioni per il principal runtime nella subscription ha restituito soltanto scope Storage e singoli segreti Key Vault; nessuno scope Maps. La lista dei ruoli custom visibili non contiene permessi che nominino esplicitamente `Microsoft.Maps`. Non è un audit completo dei permessi effettivi ereditati o attribuiti tramite gruppi.
+- Non essendoci un account Maps restituito dall'inventario, non sono stati verificati SKU, CORS, configurazione di autenticazione, metriche o quota residua di un account. Il prezzo applicabile all'offerta e la disponibilità effettiva delle quote gratuite restano da verificare prima dell'attivazione.
+
+Non sono stati letti valori Key Vault, richieste chiavi, emessi token Maps, assegnati ruoli, create risorse o chiamate API tile/Search. L'autorizzazione ricevuta copriva login e ricognizione read-only, non provisioning o spesa. Il blocco di accesso è risolto; rimangono i gate di licenza, consenso, autenticazione, consumi e spike/ADR.
+
+## 12. Verifica aggiornata dei gate — 2026-11-06
+
+L'utente ha chiesto di proseguire con i prerequisiti della mappa reale dopo l'implementazione del registro locale Identity. Le verifiche seguenti sono documentali e ARM/Monitor read-only: nessuna modifica cloud, acquisizione di token Maps o chiamata al data plane.
+
+### Stato cloud osservato
+
+- Subscription e tenant sono stati nuovamente confrontati con le variabili non segrete di `azure-release`; il target corrisponde ed e' `Enabled`. Nessun cambio della subscription predefinita.
+- L'inventario attuale restituisce **un account esistente**, `maps-roamly-dev`, SKU `G2`, location ARM `global`. Supera il solo dato storico "zero account" del 3 novembre; questa sessione non ha creato la risorsa. La location ARM non prova il dominio geografico usato dal futuro SDK.
+- `disableLocalAuth: true`: le credenziali locali sono disabilitate; non sono state lette chiavi. `properties.cors` e' un oggetto vuoto: non risulta una allowlist esplicita nella risposta osservata, senza dedurne l'effetto sulle singole richieste browser.
+- La lista ARM delle assegnazioni allo scope Maps restituisce un'assegnazione per `id-roamly-runtime-prod`: **Azure Maps Data Reader**, con `DataActions: ["Microsoft.Maps/accounts/*/read"]`. Non e' render-only e non soddisfa il minimo privilegio previsto dal piano. Prima di distribuire bearer al browser, restringere l'assegnazione a `Microsoft.Maps/accounts/services/render/read`, previa autorizzazione esplicita. La lettura non e' un audit completo di gruppi o permessi effettivi ereditati.
+- Azure Monitor espone la metrica `Usage` e le dimensioni `ApiCategory`, `ApiName`, `ResultType`, `ResponseCode`. La lettura `Count`, aggregazione oraria delle ultime 24 ore, non restituisce campioni non nulli: **dato assente, non consumo verificato pari a zero**, ne' prova di gratuita' o di monitoraggio pronto.
+
+### Evidenze documentali riconfermate
+
+- [Autenticazione Azure Maps](https://learn.microsoft.com/en-us/azure/azure-maps/azure-maps-authentication): managed identity supportata; ruolo custom render-only e scope sul singolo account. Il bearer Entra resta riutilizzabile fino alla scadenza; il registro Roamly non lo revoca presso Azure.
+- [Geographic scope](https://learn.microsoft.com/en-us/azure/azure-maps/geographic-scope): usare `eu.atlas.microsoft.com` per il perimetro geografico europeo delle richieste. Stili, tile e asset effettivi vanno comunque osservati nella versione SDK scelta.
+- [Pricing pubblico](https://azure.microsoft.com/en-us/pricing/details/azure-maps/) e [transazioni](https://learn.microsoft.com/en-us/azure/azure-maps/understanding-azure-maps-transactions): 5.000 transazioni mensili gratuite Base Map Tiles, con 15 richieste tile per transazione. Non equivalgono a 5.000 aperture della mappa. La pagina pubblica letta mostra prezzi di overage non risolti (`$-`): nessun prezzo numerico applicabile all'offerta e' verificato.
+- [Budget Cost Management](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/tutorial-acm-create-budgets): il budget non arresta il consumo; i dati di costo hanno ritardi e la valutazione e' periodica. Non sostituisce un hard cap.
+- [Product Terms MCA, Azure Maps](https://www.microsoft.com/licensing/terms/productoffering/MicrosoftAzure/MCA): overlay proprietari e risultati del provider hanno condizioni diverse; restano restrizioni su database derivati, conservazione dei risultati e attribuzione. L'applicabilita' di MCA alla subscription non e' stata verificata. La lettura non costituisce approvazione legale; nessuna licenza del provider e' stata accettata per conto dell'utente.
+- La pagina Microsoft [consent management](https://learn.microsoft.com/en-us/azure/azure-maps/consent-management) riguarda anche la configurazione geografica del servizio: non e' il consenso personale versionato di Roamly e non lo sostituisce.
+
+### Gate ancora aperti
+
+Registro locale implementato, finalita' Maps ancora DRAFT/inattiva. Restano testo e flusso privacy approvati, condizioni applicabili, restringimento RBAC autorizzato, contratto del rilascio token e controlli anti-abuso, riscontro di metriche e prezzi effettivi, soglie economiche concordate e autorizzazione separata dello spike live. Nessuna evidenza qui autorizza implicitamente attivazione, spesa, modifica RBAC o applicazione di migration.
+
+### Restringimento RBAC autorizzato ed eseguito — 2026-11-06
+
+Dopo la verifica read-only, l'utente ha scelto **«Approva il restringimento RBAC render-only sul solo account Maps»**. Vulcan ha verificato che l'assegnazione ampia fosse diretta sul singolo account e ha eseguito soltanto:
+
+1. Creazione del ruolo custom `Roamly Maps Render Reader`, con `Actions`, `NotActions` e `NotDataActions` vuoti e unica `DataAction` `Microsoft.Maps/accounts/services/render/read`. `AssignableScopes` limitato alla singola risorsa `maps-roamly-dev`.
+2. Assegnazione alla managed identity `id-roamly-runtime-prod` sul solo account Maps, seguita da rilettura della definizione e del grant.
+3. Rimozione dell'assegnazione diretta originale `Azure Maps Data Reader`, solo dopo la verifica della nuova.
+
+La rilettura ARM finale conferma nuova assegnazione presente, vecchia assente e altre assegnazioni sull'account invariate. Non sono state modificate definizioni built-in o assegnazioni su altre risorse. Nessuna assegnazione diretta per il principal e' stata rilevata su subscription/resource group; non e' un audit completo dei gruppi e dell'ereditarieta'.
+
+Questa e' una verifica **control-plane**, non una prova funzionale: propagazione RBAC e cache possono ritardare l'effetto. La modifica non garantisce revoca immediata di credenziali gia' emesse. Non sono stati emessi token Maps, chiamati tile/Search, attivati servizi, modificate CORS/identita' dell'app o applicate migration. Il solo restringimento RBAC del gate precedente e' completato; consenso, token, consumi, SDK, spike e autorizzazione all'attivazione restano aperti.
+
+### Soglia scelta e approfondimento economico — 2026-11-06
+
+L'utente ha scelto **1 EUR/mese aggiuntivo come soglia operativa di allerta e sospensione dei nuovi accessi**, non come tetto garantito alla fattura. Ha poi approvato **il controllo all'apertura con diniego se i dati non sono affidabili**, autorizzando il blocco locale SQL/API con osservazioni simulate e migration generata ma non applicata. Non sono approvati adapter Azure attivi, nuove autorizzazioni cloud, token Maps o traffico live.
+
+**Metadati dell'offerta letti sul solo target verificato:** `Microsoft.Billing/billingProperty/default`, API `2024-04-01`, restituisce `billingAccountAgreementType: MicrosoftCustomerAgreement` e `billingCurrency: EUR`. Questo aggiorna il precedente limite sulla famiglia contrattuale non verificata: MCA e' coerente con i metadati osservati. Non sono stati letti o pubblicati identificativi dei profili di fatturazione, prezzi negoziati o dettagli di altre subscription. Il tipo di accordo non certifica la conformita' dell'applicazione o il prezzo effettivamente fatturato.
+
+**Listino pubblico numerico ottenuto:** la [Retail Prices API](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices), interrogata in EUR con filtri `serviceName = Azure Maps`, `meterName = Maps Base Map Tiles`, `armRegionName = Global` e `priceType = Consumption`, restituisce due righe, senza ulteriori pagine:
+
+| Unita' API | Soglia minima della fascia | Retail price EUR per unita' | Data di efficacia restituita |
+|---|---|---|---|
+| `1K` | `0` | `0` | `2023-06-01` |
+| `1K` | `5` | `4.039679` | `2023-06-01` |
+
+Il meter pubblico e' `d6513bb0-9af1-5abb-8e29-14c150138878`, prodotto `Azure Maps`, SKU `Maps`. Le soglie sono espresse nell'unita' `1K`, non in aperture della mappa. La documentazione Microsoft precisa che i prezzi non USD sono **riferimenti per stime**: questi dati superano il solo limite dei placeholder della pagina web, non la verifica del prezzo applicabile alla subscription. Non vengono usati automaticamente per impostare il gate o convertire `Usage` in costo.
+
+**Contratto della futura lettura economica:** la [Cost Management Query API](https://learn.microsoft.com/en-us/rest/api/cost-management/query/usage?view=rest-cost-management-2025-03-01) documenta anche lo scope resource group e un filtro per risorsa; il filtro non restringe i privilegi dell'identita'. Lo scope piu' ristretto effettivamente utilizzabile va provato senza estendere implicitamente l'RBAC runtime. L'operazione puo' rispondere `204 No Content`: non interpretarlo come costo pari a zero.
+
+La guida [Understand Cost Management data](https://learn.microsoft.com/en-us/azure/cost-management-billing/costs/understand-cost-mgt-data) distingue costi stimati prima della fattura, esclusione dei crediti e delle imposte, risorse gratuite non rappresentate nei dati economici e periodi di fatturazione dipendenti dall'offerta. Il gate non deve confondere osservazione acquisita ora con copertura aggiornata, sommare due volte stima e costo riportato, o considerare l'assenza di righe una prova di gratuita'. Decorrenza del periodo, validita' e riconciliazione delle evidenze reali restano da approvare prima dell'attivazione.
+
+### Prova read-only Cost Management sul target — 2026-11-06
+
+Eseguita con l'identita' operatore gia' autenticata, non con la managed identity runtime, una Query `ActualCost`/`MonthToDate`, granularita' giornaliera, aggregazione `Cost/Sum`, allo scope del resource group dell'account Maps e filtro `ResourceId` esatto su `maps-roamly-dev`. Il POST e' un'operazione di lettura: non crea budget o altre risorse.
+
+Il primo tentativo ha restituito `429 Too Many Requests`; un solo successivo tentativo, dopo altre verifiche, ha restituito le colonne `Cost`, `UsageDate`, `Currency`, **nessuna riga** e nessuna pagina aggiuntiva. Non sono stati dedotti costo zero, copertura temporale o disponibilita' di evidenze sufficienti per aprire il gate. La prova verifica il funzionamento della query filtrata allo scope resource group con l'operatore, non l'accesso runtime o l'aggiornamento dei dati.
+
+Le operazioni RBAC di sola lettura sono state confermate nell'inventario dei provider: `Microsoft.CostManagement/query/read` e `Microsoft.Insights/Metrics/Read` sono entrambe Actions control-plane, non DataActions. La managed identity runtime non ha ricevuto questi permessi durante la prova. Per Cost Management il minimo scope documentato e qui provato e' il resource group: il filtro Maps dell'applicazione **non impedirebbe all'identita' di interrogare i costi delle altre risorse del gruppo** se le venisse concesso quel permesso. Tale estensione richiede approvazione esplicita, distinta dal ruolo render-only.
+
+### Successiva estensione RBAC di sola lettura approvata — 2026-11-06
+
+Dopo aver ricevuto la spiegazione degli scope e dell'accesso ai costi delle altre risorse del gruppo, l'utente ha selezionato **«Approva i due permessi di sola lettura agli scope indicati»**. Vulcan ha creato e assegnato alla managed identity `id-roamly-runtime-prod` due ruoli custom separati:
+
+| Ruolo | Unica Action | Unico AssignableScope e scope del grant |
+|---|---|---|
+| `Roamly Maps Metrics Reader` | `Microsoft.Insights/Metrics/Read` | Solo account `maps-roamly-dev` |
+| `Roamly Maps Cost Query Reader` | `Microsoft.CostManagement/query/read` | Solo resource group `rg-roamly-dev` |
+
+Per entrambi `NotActions`, `DataActions` e `NotDataActions` sono vuoti. Tenant/subscription sono stati riconfermati contro le variabili dell'ambiente GitHub `azure-release`, senza modificare il contesto Azure predefinito. La rilettura ARM ha verificato definizioni, principal e grant: preservate tutte le 30 assegnazioni preesistenti e le definizioni inventariate, aggiunte solo le due definizioni e le due assegnazioni approvate. Ruolo e grant render-only invariati.
+
+La verifica riguarda esclusivamente lo stato **control-plane**: non dimostra propagazione o accesso effettivo della managed identity. Nessun token Maps, chiamata data-plane, deploy, modifica CORS o applicazione di migration. Mappa e gate economico restano inattivi; i nuovi permessi non risolvono l'assenza di campioni o la verifica di completezza e aggiornamento delle evidenze economiche.

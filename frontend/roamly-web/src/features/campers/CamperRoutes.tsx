@@ -33,6 +33,8 @@ const CreateTripPage = lazy(() => import('@/features/trips/TripsPages')
   .then((module) => ({ default: module.CreateTripPage })))
 const TripJournalPage = lazy(() => import('@/features/trips/TripsPages')
   .then((module) => ({ default: module.TripJournalPage })))
+const SavedPlacesPage = lazy(() => import('@/features/places/SavedPlacesPage')
+  .then((module) => ({ default: module.SavedPlacesPage })))
 
 /** Flusso autenticato di selezione, creazione e dashboard, senza schermate Phase 2. */
 export function CamperRoutes() {
@@ -64,6 +66,14 @@ export function CamperRoutes() {
         element={(
           <Suspense fallback={<FlowMessage message={t('neutral.trips.loading')} />}>
             <TripJournalPage />
+          </Suspense>
+        )}
+      />
+      <Route
+        path="/places"
+        element={(
+          <Suspense fallback={<FlowMessage message={t('neutral.savedPlaces.loading')} />}>
+            <SavedPlacesPage />
           </Suspense>
         )}
       />

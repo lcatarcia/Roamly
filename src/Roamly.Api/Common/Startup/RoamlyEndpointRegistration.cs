@@ -6,6 +6,8 @@ using Roamly.Api.Features.Trips;
 using Roamly.Api.Features.Checklists;
 using Roamly.Api.Features.Expenses;
 using Roamly.Api.Features.Journal;
+using Roamly.Api.Features.Places;
+using Roamly.Api.Features.Maps;
 
 namespace Roamly.Api.Common.Startup;
 
@@ -27,6 +29,8 @@ public static class RoamlyEndpointRegistration
         app.MapChecklistEndpoints();
         app.MapExpenseEndpoints();
         app.MapJournalEndpoints();
+        app.MapSavedPlaceEndpoints();
+        app.MapMapsEndpoints();
 
         return app;
     }

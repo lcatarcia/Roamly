@@ -18,6 +18,12 @@ param runtimeIdentityResourceId string
 @description('Client ID della managed identity runtime, usato da Azure.Identity per selezionarla.')
 param runtimeIdentityClientId string
 
+@description('Abilita il rendering Maps personale solo dopo migration, grants e consenso. Disabilitato per default.')
+param mapsEnabled bool = false
+
+@description('Client ID pubblico dell account Maps (ARM properties.uniqueId), NON della managed identity.')
+param mapsAccountClientId string = ''
+
 @description('Immagine OCI gia pubblicata, preferibilmente identificata da SHA immutabile.')
 param image string
 
@@ -121,6 +127,18 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'AZURE_CLIENT_ID'
+              value: runtimeIdentityClientId
+            }
+            {
+              name: 'Maps__Enabled'
+              value: string(mapsEnabled)
+            }
+            {
+              name: 'Maps__AccountClientId'
+              value: mapsAccountClientId
+            }
+            {
+              name: 'Maps__ManagedIdentityClientId'
               value: runtimeIdentityClientId
             }
           ]

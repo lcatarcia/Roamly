@@ -69,6 +69,9 @@ public class FullSchemaDbContext : RoamlyDbContextBase
     /// <summary>Luoghi salvati.</summary>
     public DbSet<SavedPlace> SavedPlaces => Set<SavedPlace>();
 
+    /// <summary>Registro locale grant/revoke di Identity.</summary>
+    public DbSet<ConsentTransition> ConsentTransitions => Set<ConsentTransition>();
+
     /// <summary>Documenti.</summary>
     public DbSet<Document> Documents => Set<Document>();
 

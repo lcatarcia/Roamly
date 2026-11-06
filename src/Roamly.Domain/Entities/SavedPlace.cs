@@ -31,6 +31,9 @@ public class SavedPlace : IOwnedResource
     /// <summary>Note libere.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>Link HTTPS inserito dall'utente, conservato senza risolverlo.</summary>
+    public string? GoogleMapsUrl { get; set; }
+
     /// <summary>Provider esterno di provenienza. Colonna senza FK: e' uno snapshot.</summary>
     public string? ExternalProvider { get; set; }
 

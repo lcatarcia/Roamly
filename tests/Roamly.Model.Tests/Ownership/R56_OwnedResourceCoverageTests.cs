@@ -30,6 +30,9 @@ public sealed class R56_OwnedResourceCoverageTests(ModelFixture model)
     /// </summary>
     private static readonly IReadOnlyDictionary<Type, string> NotOwnedByDesign = new Dictionary<Type, string>
     {
+        [typeof(MapsEconomicState)] =
+            "R10: stato globale per risorsa Maps, solo costi aggregati tecnici; nessun account, " +
+            "OwnerId, luogo, coordinata o bearer. Non appartiene a export/erasure personali.",
         [typeof(ErasureReceipt)] =
             "Prova della cancellazione: sopravvive per definizione oltre la cancellazione dell'account " +
             "che l'ha generata (ADR-0004). Una FK verso OwnerId non avrebbe senso su un record che esiste " +

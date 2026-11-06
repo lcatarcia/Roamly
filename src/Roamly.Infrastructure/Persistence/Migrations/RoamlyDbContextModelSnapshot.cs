@@ -380,6 +380,62 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.ToTable("ChecklistItems");
                 });
 
+            modelBuilder.Entity("Roamly.Domain.Entities.ConsentTransition", b =>
+                {
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(6)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TextReference")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("OwnerId", "Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("OwnerId", "Id"));
+
+                    b.HasIndex("OwnerId", "Purpose", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("ConsentTransitions", t =>
+                        {
+                            t.HasCheckConstraint("CK_ConsentTransition_Action", "[Action] IN (N'grant', N'revoke')");
+
+                            t.HasCheckConstraint("CK_ConsentTransition_Revision", "[Revision] > 0");
+                        });
+                });
+
             modelBuilder.Entity("Roamly.Domain.Entities.Equipment", b =>
                 {
                     b.Property<Guid>("OwnerId")
@@ -869,6 +925,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .IsUnicode(true)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("GoogleMapsUrl")
+                        .HasMaxLength(2048)
+                        .IsUnicode(true)
+                        .HasColumnType("nvarchar(2048)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -1181,6 +1242,63 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                     b.ToTable("LoginAttemptCounters", (string)null);
                 });
 
+            modelBuilder.Entity("Roamly.Infrastructure.Persistence.MapsEconomicState", b =>
+                {
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("AlertPending")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("CoveredThroughUtc")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ObservedAtUtc")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<DateTime>("PeriodEndUtc")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<DateTime>("PeriodStartUtc")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<double?>("ReportedAmountEur")
+                        .HasColumnType("float");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("SuspendedAtUtc")
+                        .HasColumnType("datetime2(7)");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("ResourceId");
+
+                    b.ToTable("MapsEconomicStates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MapsEconomicState_Evidence", "([ReportedAmountEur] IS NULL AND [ObservedAtUtc] IS NULL AND [CoveredThroughUtc] IS NULL) OR ([ReportedAmountEur] IS NOT NULL AND [ReportedAmountEur] >= 0 AND [ObservedAtUtc] IS NOT NULL AND [CoveredThroughUtc] IS NOT NULL AND [CoveredThroughUtc] >= [PeriodStartUtc] AND [CoveredThroughUtc] <= [ObservedAtUtc] AND [ObservedAtUtc] < [PeriodEndUtc])");
+
+                            t.HasCheckConstraint("CK_MapsEconomicState_Lease", "([LeaseId] IS NULL AND [LeaseExpiresAtUtc] IS NULL) OR ([LeaseId] IS NOT NULL AND [LeaseExpiresAtUtc] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_MapsEconomicState_Period", "[PeriodEndUtc] > [PeriodStartUtc] AND [Revision] >= 1 AND LEN([ResourceId]) > 0");
+
+                            t.HasCheckConstraint("CK_MapsEconomicState_Suspension", "([SuspensionReason] IS NULL AND [SuspendedAtUtc] IS NULL AND [AlertPending] = 0) OR ([SuspensionReason] IS NOT NULL AND [SuspensionReason] = 'ThresholdReached' AND [SuspendedAtUtc] IS NOT NULL AND [AlertPending] = 1 AND [ReportedAmountEur] IS NOT NULL AND [ReportedAmountEur] >= 1)");
+
+                            t.HasCheckConstraint("CK_MapsEconomicState_Threshold", "[ReportedAmountEur] IS NULL OR [ReportedAmountEur] < 1 OR [SuspensionReason] IS NOT NULL");
+                        });
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -1273,6 +1391,15 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Checklist");
+                });
+
+            modelBuilder.Entity("Roamly.Domain.Entities.ConsentTransition", b =>
+                {
+                    b.HasOne("Roamly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Roamly.Domain.Entities.Equipment", b =>

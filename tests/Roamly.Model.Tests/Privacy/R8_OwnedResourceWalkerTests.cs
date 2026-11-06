@@ -14,6 +14,7 @@ public sealed class R8_OwnedResourceWalkerTests(ModelFixture model)
 {
     private static readonly Type[] ExpectedApplicationManifestTypes =
     [
+        typeof(ConsentTransition),
         typeof(Camper),
         typeof(Equipment),
         typeof(ErasureReceipt),
@@ -33,6 +34,7 @@ public sealed class R8_OwnedResourceWalkerTests(ModelFixture model)
 
     private static readonly Type[] ExpectedApplicationOwnedTypes =
     [
+        typeof(ConsentTransition),
         typeof(Camper),
         typeof(Equipment),
         typeof(MaintenanceItem),

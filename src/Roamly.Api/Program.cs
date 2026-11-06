@@ -77,6 +77,33 @@ builder.Services.AddOpenApi("v1", options =>
             ];
         }
 
+        if (document.Components?.Schemas is { } placeSchemas
+            && placeSchemas.TryGetValue("SavedPlaceCategory", out var placeCategory)
+            && placeCategory is OpenApiSchema savedPlaceCategory)
+        {
+            savedPlaceCategory.Enum =
+            [
+                JsonValue.Create(0),
+                JsonValue.Create(1),
+                JsonValue.Create(2),
+                JsonValue.Create(3),
+                JsonValue.Create(4),
+                JsonValue.Create(5),
+                JsonValue.Create(6),
+                JsonValue.Create(7),
+                JsonValue.Create(8),
+                JsonValue.Create(9),
+                JsonValue.Create(10),
+                JsonValue.Create(11),
+                JsonValue.Create(12),
+                JsonValue.Create(13),
+            ];
+            savedPlaceCategory.Description =
+                "Categorie persistite: 0 area di sosta, 1 campeggio, 2 parcheggio, 3 punto panoramico, "
+                + "4 ristorante, 5 distributore, 6 officina, 7 supermercato, 8 punto di interesse, "
+                + "9 citta', 10 paese, 11 museo, 12 locale, 13 attrazione.";
+        }
+
         if (document.Components?.Schemas is { } expenseSchemas)
         {
             SetExpenseRequestContracts(expenseSchemas);

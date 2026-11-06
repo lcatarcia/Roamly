@@ -15,6 +15,8 @@
     "design:r21": "node scripts/r21-i18n-check.mjs",
     "design:axe": "node scripts/axe-check.mjs",
     "test:camper-flow": "node scripts/camper-flow-check.mjs",
+    "test:saved-places-flow": "npm run build && node scripts/saved-places-flow-check.mjs",
+    "test:saved-places-map": "node --test scripts/tests/places-map.test.mjs && node scripts/saved-places-map-check.mjs",
     "test:fuel-estimate-flow": "node scripts/fuel-estimate-flow-check.mjs",
     "test:fuel-estimate": "node --test scripts/tests/fuel-estimate.test.mjs",
     "test:trip-journal-flow": "node scripts/trip-journal-flow-check.mjs",
@@ -24,6 +26,7 @@
     "design:check": "npm run design:contrast && npm run design:coverage && npm run design:lint-colors && npm run design:guard-r11 && npm run design:r21 && npm run design:axe && npm run design:guard-font-assets"
   },
   "dependencies": {
+    "azure-maps-control": "^3.7.4",
     "@base-ui/react": "^1.8.0",
     "@tanstack/react-query": "^5.104.0",
     "class-variance-authority": "^0.7.1",

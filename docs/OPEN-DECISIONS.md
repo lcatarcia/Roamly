@@ -17,7 +17,7 @@ Quando una decisione è chiusa: si scrive l'ADR corrispondente in `docs/adr/`, s
 |---|---|---|---|---|---|
 | 1 | Conferma SQL Server + libreria spatial — chiude C1 | HIGH | @oracle | [`adr/0001-use-sql-server.md`](adr/0001-use-sql-server.md) | ✅ **chiusa 2026-09-24** |
 | 2 | Modello di autenticazione e autorizzazione owner-scoped — chiude C3 | HIGH | @sentinel | [`adr/0003-auth-and-ownership.md`](adr/0003-auth-and-ownership.md) | ✅ **chiusa 2026-09-24** |
-| 3 | Provider dati geografici e routing — chiude C2 | HIGH | @archimedes | `product/FEATURES.md` §4 | ⏸ **differita 2026-10-20** — nessun provider selezionato |
+| 3 | Provider dati geografici e routing — chiude C2 | HIGH | @archimedes | `product/FEATURES.md` §4 | ⏸ **aperta** — Phase 3 differita il 2026-10-20; il 2026-11-03 Azure Maps è scelto come candidato per la sola wishlist con mappa base e dati manuali ([piano](product/PLACES-WISHLIST-PLAN.md)). Spike, ADR e gate privacy/autenticazione/consumi restano aperti; nessuna attivazione o spesa autorizzata, routing non deciso |
 | 4 | Requisiti privacy/GDPR minimi per l'MVP — chiude C4 | HIGH | @sentinel | [`adr/0004-privacy-and-erasure.md`](adr/0004-privacy-and-erasure.md) | ✅ **chiusa 2026-09-24** |
 
 > **Esito #1:** SQL Server confermato; **NetTopologySuite e tipi spaziali rimandati**, coordinate come `decimal` WGS84 in **complex type** `Coordinates`, upgrade a `geography` pre-approvato su 4 trigger documentati. *Emendato il 2026-09-24 dal domain model: complex type invece di owned type, perché un value object non deve comparire nei verificatori di ownership ed erasure.*

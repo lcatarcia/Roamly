@@ -175,11 +175,7 @@ public sealed partial class AccountErasureJob
     }
 
     private Task<ApplicationUser?> LockCandidateAsync(Guid candidateId, CancellationToken cancellationToken) =>
-        _db.Users
-            .FromSqlInterpolated(
-                $"SELECT * FROM [dbo].[AspNetUsers] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {candidateId}")
-            .AsNoTracking()
-            .SingleOrDefaultAsync(cancellationToken);
+        AccountDeletionStateOperations.LockAsync(_db, candidateId, cancellationToken);
 
     private static bool IsDue(ApplicationUser? user, DateTime nowUtc) =>
         user?.DeletionRequestedAtUtc is not null

@@ -104,6 +104,8 @@ Ogni fase ha un criterio di uscita verificabile. Nessuna fase inizia prima che @
 
 **Stato al 2026-10-20: rinviata su scelta dell'utente.** La decisione geo #3 resta aperta/differita; non è stato selezionato un provider né autorizzato alcun test live o trasferimento di coordinate. La fase non è completata. Prima di riprenderla serviranno la decisione `geo-data-strategy` e lo spike previsto. Le attività di fasi successive che dipendono da provider, posizioni o routing restano sospese; quelle indipendenti vanno valutate separatamente.
 
+**Aggiornamento del piano, 2026-11-03:** Azure Maps è il candidato scelto per la wishlist «Da visitare», con [prima versione manuale e mappa base su richiesta](PLACES-WISHLIST-PLAN.md), senza Search o routing. La scelta non autorizza risorse, prove live o spese e non chiude il gate geo #3: spike, ADR e controlli privacy/autenticazione/consumo restano prerequisiti dell'integrazione. La Phase 3 non è dichiarata avviata o completata.
+
 - mappa e geolocalizzazione;
 - places, search, saved places;
 - dati geografici.

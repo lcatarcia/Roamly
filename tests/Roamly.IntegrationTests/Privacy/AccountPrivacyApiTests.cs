@@ -482,6 +482,11 @@ public sealed class AccountPrivacyApiTests(SqlServerFixture sqlServer) : IAsyncL
         var journalEntryId = Guid.NewGuid();
         var journalAttachmentId = Guid.NewGuid();
         var createdAtUtc = ClockNow.UtcDateTime;
+        db.ConsentTransitions.Add(new ConsentTransition
+        {
+            Id = Guid.NewGuid(), OwnerId = ownerId, Purpose = "synthetic-render", Version = "test-v1",
+            TextReference = $"{marker}-synthetic-text", Action = "grant", Revision = 1, CreatedAtUtc = createdAtUtc,
+        });
         db.Campers.Add(new Camper
         {
             Id = camperId,
