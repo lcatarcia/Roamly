@@ -27,8 +27,9 @@ const fixture = {
   }],
 }
 
-test('smoke metadata budget stays at six attempts, ten-second timeout and five-second delay', () => {
+test('only revision reads gain one measured drain attempt; all other budgets stay unchanged', () => {
   assert.match(smoke, /metadata_max_attempts=6\n/)
+  assert.match(smoke, /revision_max_attempts=7\n/)
   assert.match(smoke, /metadata_timeout_seconds=10\n/)
   assert.match(smoke, /metadata_retry_delay_seconds=5\n/)
   assert.match(smoke, /max_attempts=5\n/)
@@ -38,7 +39,7 @@ test('smoke metadata budget stays at six attempts, ten-second timeout and five-s
 
 function runSmoke({
   revisions = fixture, rawRevisions, azExit = 0, fqdnExit = 0, cliError = '',
-  transitionUntilRevisionProbed = false, healthStatus = 200,
+  transitionUntilRevisionProbed = false, healthStatus = 200, drainSeconds = 0,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'roamly-release-smoke-'))
   const files = {
@@ -48,6 +49,7 @@ function runSmoke({
     script: join(directory, 'smoke.sh'),
     transition: join(directory, 'transition.json'),
     ready: join(directory, 'ready'),
+    clock: join(directory, 'clock'),
   }
   try {
     writeFileSync(files.fixture, rawRevisions ?? JSON.stringify(revisions))
@@ -58,6 +60,7 @@ function runSmoke({
     }))
     writeFileSync(files.calls, '')
     writeFileSync(files.summary, '')
+    writeFileSync(files.clock, '0')
     const mocks = {
       az: `#!/usr/bin/env bash
 set -eu
@@ -71,7 +74,10 @@ case "$1" in
     exit "$FQDN_EXIT" ;;
   rest)
     printf 'revisions\\n' >> "$CALLS"
-    if [[ "$TRANSITION" == "true" && ! -f "$READY" ]]; then cat "$TRANSITION_FIXTURE"; else cat "$FIXTURE"; fi
+    elapsed="$(cat "$CLOCK")"
+    if [[ "$TRANSITION" == "true" && ! -f "$READY" ]] || (( elapsed < DRAIN_SECONDS )); then
+      cat "$TRANSITION_FIXTURE"
+    else cat "$FIXTURE"; fi
     printf '%s' "$CLI_ERROR" >&2
     exit "$AZ_EXIT" ;;
   *) exit 99 ;;
@@ -83,7 +89,7 @@ printf 'probe\\n' >> "$CALLS"
 case "\${@: -1}" in *ca-roamly-prod--fixture.example.test/health/*) printf ready > "$READY" ;; esac
 printf '%s' "$HEALTH_STATUS"
 `,
-      sleep: '#!/usr/bin/env bash\nexit 0\n',
+      sleep: '#!/usr/bin/env bash\nelapsed="$(cat "$CLOCK")"\nprintf "%d" "$((elapsed + $1))" > "$CLOCK"\n',
     }
     for (const [name, content] of Object.entries(mocks)) {
       writeFileSync(join(directory, name), content, { mode: 0o755 })
@@ -112,6 +118,8 @@ ${smoke}`)
         TRANSITION_FIXTURE: shellPath(files.transition),
         READY: shellPath(files.ready),
         HEALTH_STATUS: String(healthStatus),
+        CLOCK: shellPath(files.clock),
+        DRAIN_SECONDS: String(drainSeconds),
       },
     })
     assert.equal(result.error, undefined,
@@ -138,10 +146,24 @@ test('Single rollout waits for the new revision readiness before requiring old r
   assert.deepEqual(result.calls, ['fqdn', 'probe', 'probe', 'revisions', 'jq'])
 })
 
+test('Single revision drain can span thirty seconds after health is already green', () => {
+  const result = runSmoke({ drainSeconds: 30 })
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  assert.equal(result.calls.filter(call => call === 'revisions').length, 7)
+  assert.equal(result.calls.filter(call => call === 'probe').length, 2)
+})
+
+test('drain beyond the measured window still fails closed at seven reads', () => {
+  const result = runSmoke({ drainSeconds: 35 })
+  assert.equal(result.status, 1)
+  assert.equal(result.calls.filter(call => call === 'revisions').length, 7)
+  assert.equal(result.calls.filter(call => call === 'probe').length, 2)
+})
+
 test('failed revision CLI cannot admit its stdout even when it contains the expected digest', () => {
   const result = runSmoke({ azExit: 17 })
   assert.equal(result.status, 1, result.stdout + result.stderr)
-  assert.equal(result.calls.filter(call => call === 'revisions').length, 6)
+  assert.equal(result.calls.filter(call => call === 'revisions').length, 7)
   assert.equal(result.calls.filter(call => call === 'probe').length, 2)
   assert.equal(result.calls.filter(call => call === 'jq').length, 0)
   assert.match(result.stdout, /CLI exit=17; errore=redacted/)
@@ -166,11 +188,11 @@ test('CLI diagnostics expose only an allowlisted error category, never raw error
   assert.equal(result.calls.filter(call => call === 'probe').length, 2)
 })
 
-test('metadata timeout retains the six-attempt budget and is never admitted', () => {
+test('metadata timeout retains the bounded seven-read budget and is never admitted', () => {
   const result = runSmoke({ azExit: 124 })
   assert.equal(result.status, 1)
   assert.match(result.stdout, /CLI exit=124; errore=Timeout/)
-  assert.equal(result.calls.filter(call => call === 'revisions').length, 6)
+  assert.equal(result.calls.filter(call => call === 'revisions').length, 7)
   assert.equal(result.calls.filter(call => call === 'probe').length, 2)
 })
 
@@ -190,7 +212,7 @@ for (const [name, revisions] of [
   test(`healthy revision endpoints cannot override the final gate rejecting ${name}`, () => {
     const result = runSmoke({ revisions })
     assert.equal(result.status, 1, result.stdout + result.stderr)
-    assert.equal(result.calls.filter(call => call === 'revisions').length, 6)
+    assert.equal(result.calls.filter(call => call === 'revisions').length, 7)
     assert.equal(result.calls.filter(call => call === 'probe').length, 2)
     assert.match(result.stdout, /CLI exit=0; jq exit=/)
     assert.doesNotMatch(result.stdout + result.stderr + result.summary, /DO-NOT-LOG/)
@@ -201,7 +223,7 @@ test('malformed JSON fails with parser status, without disclosing the response b
   const result = runSmoke({ rawRevisions: '{"secret": "DO-NOT-LOG-invalid-json"' })
   assert.equal(result.status, 1)
   assert.match(result.stdout, /CLI exit=0; jq exit=[45]/)
-  assert.equal(result.calls.filter(call => call === 'revisions').length, 6)
+  assert.equal(result.calls.filter(call => call === 'revisions').length, 7)
   assert.equal(result.calls.filter(call => call === 'probe').length, 2)
   assert.doesNotMatch(result.stdout + result.stderr + result.summary, /DO-NOT-LOG/)
 })

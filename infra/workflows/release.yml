@@ -481,6 +481,8 @@ jobs:
           set -euo pipefail
 
           metadata_max_attempts=6
+          # Observed Single drain ended 3 s after the six-read gate; one extra read spans 30 s.
+          revision_max_attempts=7
           metadata_timeout_seconds=10
           metadata_retry_delay_seconds=5
           report_metadata_error() {
@@ -582,7 +584,7 @@ jobs:
 
           revisions_url="https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/containerApps/ca-roamly-prod/revisions?api-version=2024-03-01"
           expected_revision_active=false
-          for ((attempt = 1; attempt <= metadata_max_attempts; attempt++)); do
+          for ((attempt = 1; attempt <= revision_max_attempts; attempt++)); do
             if revisions_json="$(timeout "${metadata_timeout_seconds}s" az rest \
               --method get \
               --url "$revisions_url" \
@@ -622,8 +624,8 @@ jobs:
               fi
             fi
 
-            printf 'Tentativo %d/%d: revisione attiva attesa non ancora confermata\n' "$attempt" "$metadata_max_attempts"
-            if (( attempt < metadata_max_attempts )); then
+            printf 'Tentativo %d/%d: revisione attiva attesa non ancora confermata\n' "$attempt" "$revision_max_attempts"
+            if (( attempt < revision_max_attempts )); then
               sleep "$metadata_retry_delay_seconds"
             fi
           done
@@ -632,7 +634,7 @@ jobs:
             {
               printf '## Smoke test post-deploy non riuscito\n\n'
               printf 'La metadata ACA non ha confermato entro %d tentativi (timeout CLI %d s, pausa %d s) esattamente una revisione attiva, con immagine identica al digest della release. Le revisioni attive ambigue o con digest precedente non superano il gate. Il deployment ARM potrebbe essere già stato applicato; verificare manualmente la risorsa e procedere con fix-forward o recovery manuale. Nessun rollback automatico viene eseguito.\n' \
-                "$metadata_max_attempts" "$metadata_timeout_seconds" "$metadata_retry_delay_seconds"
+                "$revision_max_attempts" "$metadata_timeout_seconds" "$metadata_retry_delay_seconds"
             } >> "$GITHUB_STEP_SUMMARY"
             echo "::error::La revisione ACA attiva non coincide in modo univoco con il digest della release; verificare manualmente la risorsa."
             exit 1
