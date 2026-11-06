@@ -70,8 +70,8 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Verifica il contratto JSON del what-if
-        run: node --test infra/workflows/tests/release-what-if.test.mjs
+      - name: Verifica i contratti what-if e smoke test
+        run: node --test infra/workflows/tests/release-*.test.mjs
 
       - name: Validazione modalità e digest di rollback
         id: rollback
@@ -483,6 +483,22 @@ jobs:
           metadata_max_attempts=6
           metadata_timeout_seconds=10
           metadata_retry_delay_seconds=5
+          report_metadata_error() {
+            local operation="$1" status="$2" details="$3" category="redacted"
+            # Never echo arbitrary CLI stderr: it can contain resource bodies or credentials.
+            case "$details" in
+              *AuthorizationFailed*) category="AuthorizationFailed" ;;
+              *InvalidAuthenticationToken*) category="InvalidAuthenticationToken" ;;
+              *AuthenticationFailed*) category="AuthenticationFailed" ;;
+              *SubscriptionNotFound*) category="SubscriptionNotFound" ;;
+              *ResourceNotFound*) category="ResourceNotFound" ;;
+              *TooManyRequests*) category="TooManyRequests" ;;
+              *"unrecognized arguments"*) category="InvalidArguments" ;;
+            esac
+            if [[ "$status" == "124" ]]; then category="Timeout"; fi
+            printf 'Metadata ACA %s: CLI exit=%d; errore=%s (dettagli redatti)\n' \
+              "$operation" "$status" "$category"
+          }
           if [[ ! "$RELEASE_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
             echo "::error::Il riferimento immagine della release non è un digest OCI valido."
             exit 1
@@ -490,12 +506,18 @@ jobs:
 
           app_fqdn=""
           for ((attempt = 1; attempt <= metadata_max_attempts; attempt++)); do
-            app_fqdn="$(timeout "${metadata_timeout_seconds}s" az containerapp show \
+            if app_fqdn="$(timeout "${metadata_timeout_seconds}s" az containerapp show \
               --name ca-roamly-prod \
               --resource-group "$AZURE_RESOURCE_GROUP" \
               --query properties.configuration.ingress.fqdn \
               --output tsv \
-              --only-show-errors 2>/dev/null || true)"
+              --only-show-errors 2>&1)"; then
+              fqdn_cli_status=0
+            else
+              fqdn_cli_status=$?
+              report_metadata_error "FQDN" "$fqdn_cli_status" "$app_fqdn"
+              app_fqdn=""
+            fi
             if [[ "$app_fqdn" =~ ^[[:alnum:].-]+$ && "$app_fqdn" == *.* ]]; then
               break
             fi
@@ -519,12 +541,19 @@ jobs:
           revisions_url="https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/containerApps/ca-roamly-prod/revisions?api-version=2024-03-01"
           expected_revision_active=false
           for ((attempt = 1; attempt <= metadata_max_attempts; attempt++)); do
-            revisions_json="$(timeout "${metadata_timeout_seconds}s" az rest \
+            if revisions_json="$(timeout "${metadata_timeout_seconds}s" az rest \
               --method get \
               --url "$revisions_url" \
               --output json \
-              --only-show-errors 2>/dev/null || true)"
-            if [[ -n "$revisions_json" ]] && printf '%s\n' "$revisions_json" | jq -e --arg expected_image "$RELEASE_IMAGE" '
+              --only-show-errors 2>&1)"; then
+              revisions_cli_status=0
+            else
+              revisions_cli_status=$?
+              report_metadata_error "revisioni" "$revisions_cli_status" "$revisions_json"
+              revisions_json=""
+            fi
+            if [[ "$revisions_cli_status" == "0" && -n "$revisions_json" ]]; then
+              if revision_check="$(printf '%s\n' "$revisions_json" | jq -e --arg expected_image "$RELEASE_IMAGE" '
               if type == "object" and (.value | type == "array") and (.nextLink == null) then
                 [.value[] | select(.properties.active == true)] as $active
                 | ($active | length) == 1
@@ -532,9 +561,23 @@ jobs:
               else
                 false
               end
-            ' >/dev/null 2>&1; then
-              expected_revision_active=true
-              break
+              ' 2>&1)"; then
+                expected_revision_active=true
+                break
+              else
+                revision_check_status=$?
+                printf 'Metadata ACA revisioni: CLI exit=0; jq exit=%d (dettagli redatti)\n' "$revision_check_status"
+                if revision_metadata="$(printf '%s\n' "$revisions_json" | jq -c --arg expected_image "$RELEASE_IMAGE" '
+                  if type == "object" and (.value | type == "array") then
+                    {hasNextLink: (.nextLink != null),
+                     activeCount: ([.value[] | select(.properties.active == true)] | length),
+                     expectedImageCount: ([.value[] | select(.properties.active == true)
+                       | .properties.template.containers[]? | select(.image == $expected_image)] | length)}
+                  else {invalidRevisionResponse: true} end
+                ' 2>/dev/null)"; then
+                  printf 'Metadata ACA selezionata: %s\n' "$revision_metadata"
+                fi
+              fi
             fi
 
             printf 'Tentativo %d/%d: revisione attiva attesa non ancora confermata\n' "$attempt" "$metadata_max_attempts"
