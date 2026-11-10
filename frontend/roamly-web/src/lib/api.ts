@@ -447,7 +447,29 @@ export interface CreateMaintenanceInput {
   intervalKm?: number
   intervalMonths?: number
   performedOnUtc?: string
+  odometerKm?: number
+  cost?: { amount: number; currency: string }
+  workshop?: string
+  notes?: string
   isUnderWarranty?: boolean
+}
+
+export type UpdateMaintenanceInput = Omit<CreateMaintenanceInput, 'id'>
+
+export interface MaintenanceDetail {
+  id: string
+  name: string
+  category: number
+  intervalKm: number | null
+  intervalMonths: number | null
+  performedOnUtc: string | null
+  odometerKm: number | null
+  cost: { amount: number; currency: string } | null
+  workshop: string | null
+  notes: string | null
+  isUnderWarranty: boolean
+  nextDueOnUtc: string | null
+  nextDueOdometerKm: number | null
 }
 
 export interface TripSummary {
@@ -1186,6 +1208,52 @@ export function createMaintenance(
     method: 'POST',
     body: input,
   })
+}
+
+/** GET .../maintenance/{id} — dettaglio e ETag per modifica o rimozione. */
+export async function fetchMaintenanceItem(
+  camperId: string,
+  maintenanceItemId: string,
+): Promise<{ maintenance: MaintenanceDetail; etag: string }> {
+  const response = await fetch(
+    `/api/v1/campers/${encodeURIComponent(camperId)}/maintenance/${encodeURIComponent(maintenanceItemId)}`,
+    { method: 'GET', credentials: 'include' },
+  )
+  if (!response.ok) {
+    throw await toApiError(response, 'Impossibile leggere questa manutenzione.')
+  }
+
+  const etag = response.headers.get('ETag')
+  if (!etag) {
+    throw new ApiError(response.status, 'La manutenzione non contiene il token di aggiornamento.', null)
+  }
+
+  return { maintenance: (await response.json()) as MaintenanceDetail, etag }
+}
+
+/** PUT .../maintenance/{id} — modifica con If-Match obbligatorio. */
+export function updateMaintenance(
+  camperId: string,
+  maintenanceItemId: string,
+  input: UpdateMaintenanceInput,
+  etag: string,
+): Promise<{ value: MaintenanceDetail; etag: string }> {
+  return mutateVersioned(
+    `/api/v1/campers/${encodeURIComponent(camperId)}/maintenance/${encodeURIComponent(maintenanceItemId)}`,
+    { method: 'PUT', body: input, etag },
+  )
+}
+
+/** DELETE .../maintenance/{id} — rimozione fisica con If-Match obbligatorio. */
+export function deleteMaintenance(
+  camperId: string,
+  maintenanceItemId: string,
+  etag: string,
+): Promise<void> {
+  return mutate(
+    `/api/v1/campers/${encodeURIComponent(camperId)}/maintenance/${encodeURIComponent(maintenanceItemId)}`,
+    { method: 'DELETE', etag },
+  )
 }
 
 /** POST .../maintenance/{id}/logs — registra un intervento immutabile. */

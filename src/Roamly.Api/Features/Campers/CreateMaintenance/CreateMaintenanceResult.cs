@@ -17,4 +17,7 @@ public enum CreateMaintenanceOutcome
 
     /// <summary>Camper assente o non posseduto.</summary>
     NotFound,
+
+    /// <summary>La lettura del contachilometri del giorno indicato ha un valore diverso.</summary>
+    OdometerConflict,
 }

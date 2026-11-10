@@ -983,6 +983,139 @@ public sealed class MaintenanceApiTests(SqlServerFixture sqlServer) : IAsyncLife
             TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task owner_can_create_with_full_service_details_read_edit_and_delete_maintenance()
+    {
+        var camperId = await CreateCamperAsync();
+        var itemId = NewId();
+        var today = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().UtcDateTime);
+
+        using var createResponse = await _client.PostJsonAsync(
+            $"/api/v1/campers/{camperId:D}/maintenance",
+            new
+            {
+                id = itemId,
+                name = "Richiamo isofix",
+                category = (int)MaintenanceCategory.Bodywork,
+                performedOnUtc = today.AddDays(-10),
+                odometerKm = 42_500,
+                cost = new { amount = 0m, currency = "EUR" },
+                workshop = "Concessionaria Ufficiale",
+                notes = "Intervento su richiamo casa madre",
+                isUnderWarranty = true,
+            },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var itemPath = $"/api/v1/campers/{camperId:D}/maintenance/{itemId:D}";
+        using var detailResponse = await _client.GetAsync(itemPath, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        var etag = HttpEtagAssertions.StrongRowVersion(detailResponse.Headers.ETag?.ToString());
+        var detail = await detailResponse.Content.ReadFromJsonAsync<MaintenanceDetailTestResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(detail);
+        Assert.Equal("Richiamo isofix", detail.Name);
+        Assert.Equal((int)MaintenanceCategory.Bodywork, detail.Category);
+        Assert.Null(detail.IntervalKm);
+        Assert.Null(detail.IntervalMonths);
+        Assert.Equal(today.AddDays(-10), detail.PerformedOnUtc);
+        Assert.Equal(42_500, detail.OdometerKm);
+        Assert.Equal(0m, detail.Cost!.Amount);
+        Assert.Equal("EUR", detail.Cost.Currency);
+        Assert.Equal("Concessionaria Ufficiale", detail.Workshop);
+        Assert.Equal("Intervento su richiamo casa madre", detail.Notes);
+        Assert.True(detail.IsUnderWarranty);
+
+        using var missingIfMatchPut = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put,
+            itemPath,
+            new
+            {
+                name = "Richiamo isofix aggiornato",
+                category = (int)MaintenanceCategory.Bodywork,
+                performedOnUtc = today.AddDays(-5),
+                isUnderWarranty = true,
+            },
+            ifMatch: null,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.PreconditionRequired, missingIfMatchPut.StatusCode);
+
+        using var weakIfMatchPut = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put,
+            itemPath,
+            new
+            {
+                name = "Richiamo isofix aggiornato",
+                category = (int)MaintenanceCategory.Bodywork,
+                performedOnUtc = today.AddDays(-5),
+                isUnderWarranty = true,
+            },
+            ifMatch: HttpEtagAssertions.AsWeak(etag),
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, weakIfMatchPut.StatusCode);
+
+        using var updateResponse = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put,
+            itemPath,
+            new
+            {
+                name = "Controllo freno a mano e isofix",
+                category = (int)MaintenanceCategory.Brakes,
+                intervalKm = 20_000,
+                intervalMonths = 24,
+                performedOnUtc = today.AddDays(-10),
+                odometerKm = 43_000,
+                cost = new { amount = 85.50m, currency = "EUR" },
+                workshop = "Officina Autorizzata",
+                notes = "Regolazione cavo e verifica attacchi",
+                isUnderWarranty = false,
+            },
+            ifMatch: etag,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+        var updatedEtag = HttpEtagAssertions.StrongRowVersion(updateResponse.Headers.ETag?.ToString());
+        Assert.NotEqual(etag, updatedEtag);
+        var updated = await updateResponse.Content.ReadFromJsonAsync<MaintenanceDetailTestResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(updated);
+        Assert.Equal("Controllo freno a mano e isofix", updated.Name);
+        Assert.Equal((int)MaintenanceCategory.Brakes, updated.Category);
+        Assert.Equal(20_000, updated.IntervalKm);
+        Assert.Equal((short)24, updated.IntervalMonths);
+        Assert.Equal(today.AddDays(-10), updated.PerformedOnUtc);
+        Assert.Equal(43_000, updated.OdometerKm);
+        Assert.Equal(85.50m, updated.Cost!.Amount);
+        Assert.Equal("Officina Autorizzata", updated.Workshop);
+        Assert.Equal("Regolazione cavo e verifica attacchi", updated.Notes);
+        Assert.False(updated.IsUnderWarranty);
+        Assert.Equal(today.AddDays(-10).AddMonths(24), updated.NextDueOnUtc);
+        Assert.Equal(63_000, updated.NextDueOdometerKm);
+
+        using var staleDelete = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Delete,
+            itemPath,
+            body: null,
+            ifMatch: etag,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, staleDelete.StatusCode);
+
+        using var deleteResponse = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Delete,
+            itemPath,
+            body: null,
+            ifMatch: updatedEtag,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        using var afterDelete = await _client.GetAsync(itemPath, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
+
+        await using var context = CreateOwnerContext();
+        Assert.Equal(0, await context.MaintenanceLogs.CountAsync(
+            log => log.MaintenanceItemId == itemId,
+            TestContext.Current.CancellationToken));
+    }
+
     private Task<HttpResponseMessage> PostMaintenanceLogAsync(
         Guid camperId,
         Guid itemId,
@@ -1202,4 +1335,19 @@ public sealed class MaintenanceApiTests(SqlServerFixture sqlServer) : IAsyncLife
     private sealed record MaintenanceLogHistoryItem(DateOnly PerformedOnUtc, bool IsUnderWarranty = false);
 
     private sealed record CostResponse(decimal Amount, string Currency);
+
+    private sealed record MaintenanceDetailTestResponse(
+        Guid Id,
+        string Name,
+        int Category,
+        int? IntervalKm,
+        short? IntervalMonths,
+        DateOnly? PerformedOnUtc,
+        int? OdometerKm,
+        CostResponse? Cost,
+        string? Workshop,
+        string? Notes,
+        bool IsUnderWarranty,
+        DateOnly? NextDueOnUtc,
+        int? NextDueOdometerKm);
 }
