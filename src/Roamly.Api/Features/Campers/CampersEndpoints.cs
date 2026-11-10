@@ -2,14 +2,17 @@ using Roamly.Api.Common.Http;
 using Roamly.Api.Common.Security;
 using Roamly.Api.Features.Campers.CreateCamper;
 using Roamly.Api.Features.Campers.CreateMaintenance;
+using Roamly.Api.Features.Campers.DeleteMaintenance;
 using Roamly.Api.Features.Campers.GetCamperDashboard;
 using Roamly.Api.Features.Campers.GetCamperProfile;
+using Roamly.Api.Features.Campers.GetMaintenance;
 using Roamly.Api.Features.Campers.ListMaintenance;
 using Roamly.Api.Features.Campers.ListMaintenanceLogs;
 using Roamly.Api.Features.Campers.ListCampers;
 using Roamly.Api.Features.Campers.ParseCamperManual;
 using Roamly.Api.Features.Campers.RecordMaintenanceLog;
 using Roamly.Api.Features.Campers.UpdateCamperProfile;
+using Roamly.Api.Features.Campers.UpdateMaintenance;
 
 namespace Roamly.Api.Features.Campers;
 
@@ -270,7 +273,124 @@ public static class CampersEndpoints
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status404NotFound);
 
+        MapMaintenanceItemEndpoints(app);
+
         return app;
+    }
+
+    private static void MapMaintenanceItemEndpoints(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/v1/campers/{camperId:guid}/maintenance/{maintenanceItemId:guid}", GetMaintenanceAsync)
+            .RequireAuthorization()
+            .WithRateLimitPolicy("None")
+            .WithName("GetMaintenance")
+            .WithTags("Maintenance")
+            .WithSummary("Legge il dettaglio di una manutenzione e dell'ultimo intervento")
+            .Produces<MaintenanceDetailResponse>(StatusCodes.Status200OK)
+            .WithEtagResponseOpenApi()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        app.MapPut("/api/v1/campers/{camperId:guid}/maintenance/{maintenanceItemId:guid}", UpdateMaintenanceAsync)
+            .RequireAuthorization()
+            .WithRateLimitPolicy("None")
+            .WithName("UpdateMaintenance")
+            .WithTags("Maintenance")
+            .WithSummary("Modifica una manutenzione e l'intervento associato")
+            .Produces<MaintenanceDetailResponse>(StatusCodes.Status200OK)
+            .WithIfMatchOpenApi()
+            .WithEtagResponseOpenApi()
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status412PreconditionFailed)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired);
+
+        app.MapDelete("/api/v1/campers/{camperId:guid}/maintenance/{maintenanceItemId:guid}", DeleteMaintenanceAsync)
+            .RequireAuthorization()
+            .WithRateLimitPolicy("None")
+            .WithName("DeleteMaintenance")
+            .WithTags("Maintenance")
+            .WithSummary("Rimuove una manutenzione e il relativo storico")
+            .Produces(StatusCodes.Status204NoContent)
+            .WithIfMatchOpenApi()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status412PreconditionFailed)
+            .ProducesProblem(StatusCodes.Status428PreconditionRequired);
+    }
+
+    private static async Task<IResult> GetMaintenanceAsync(
+        Guid camperId,
+        Guid maintenanceItemId,
+        GetMaintenanceHandler handler,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(camperId, maintenanceItemId, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+        {
+            return NotFound(context);
+        }
+
+        SetEtag(context, result.RowVersion);
+        return Results.Ok(result.Maintenance);
+    }
+
+    private static async Task<IResult> UpdateMaintenanceAsync(
+        Guid camperId,
+        Guid maintenanceItemId,
+        UpdateMaintenanceRequest request,
+        UpdateMaintenanceHandler handler,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(
+            camperId,
+            maintenanceItemId,
+            request,
+            context.Request.Headers.IfMatch.ToString(),
+            cancellationToken).ConfigureAwait(false);
+        return result.Outcome switch
+        {
+            UpdateMaintenanceOutcome.Updated => MaintenanceUpdated(context, result),
+            UpdateMaintenanceOutcome.NotFound => NotFound(context),
+            UpdateMaintenanceOutcome.MissingPrecondition => PreconditionRequired(context),
+            UpdateMaintenanceOutcome.OdometerConflict => Results.Problem(ProblemFactory.Create(
+                context,
+                StatusCodes.Status409Conflict,
+                "La lettura del contachilometri di quel giorno ha un valore diverso.",
+                OdometerConflictProblemType)),
+            _ => PreconditionFailed(context),
+        };
+    }
+
+    private static async Task<IResult> DeleteMaintenanceAsync(
+        Guid camperId,
+        Guid maintenanceItemId,
+        DeleteMaintenanceHandler handler,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var outcome = await handler.HandleAsync(
+            camperId,
+            maintenanceItemId,
+            context.Request.Headers.IfMatch.ToString(),
+            cancellationToken).ConfigureAwait(false);
+        return outcome switch
+        {
+            DeleteMaintenanceOutcome.Deleted => Results.NoContent(),
+            DeleteMaintenanceOutcome.NotFound => NotFound(context),
+            DeleteMaintenanceOutcome.MissingPrecondition => PreconditionRequired(context),
+            _ => PreconditionFailed(context),
+        };
+    }
+
+    private static IResult MaintenanceUpdated(HttpContext context, UpdateMaintenanceResult result)
+    {
+        SetEtag(context, result.RowVersion);
+        return Results.Ok(result.Maintenance);
     }
 
     private static async Task<IResult> GetCamperProfileAsync(
@@ -409,6 +529,11 @@ public static class CampersEndpoints
                 StatusCodes.Status404NotFound,
                 "Risorsa non trovata.",
                 NotFoundProblemType)),
+            CreateMaintenanceOutcome.OdometerConflict => Results.Problem(ProblemFactory.Create(
+                context,
+                StatusCodes.Status409Conflict,
+                "La lettura del contachilometri di quel giorno ha un valore diverso.",
+                OdometerConflictProblemType)),
             _ => Results.Problem(ProblemFactory.Create(
                 context,
                 StatusCodes.Status409Conflict,

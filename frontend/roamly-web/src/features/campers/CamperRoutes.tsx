@@ -11,8 +11,8 @@ import { CamperProfileForm } from '@/features/campers/CamperProfileForm'
 import { EquipmentInventory } from '@/features/campers/EquipmentInventory'
 import {
   CreateMaintenanceForm,
+  MaintenanceItemActions,
   MaintenanceLogHistory,
-  RecordMaintenanceLogForm,
 } from '@/features/campers/MaintenanceForms'
 import {
   fetchCamperDashboard,
@@ -519,7 +519,11 @@ function MaintenanceItemCard({
         </div>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <RecordMaintenanceLogForm camperId={camperId} maintenanceItemId={item.id} />
+        <MaintenanceItemActions
+          camperId={camperId}
+          maintenanceItemId={item.id}
+          maintenanceName={item.name}
+        />
         <MaintenanceLogHistory camperId={camperId} maintenanceItemId={item.id} />
       </div>
     </li>

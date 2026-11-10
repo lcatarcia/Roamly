@@ -34,6 +34,9 @@ GET    /api/v1/campers/{camperId}/dashboard
 
 POST   /api/v1/campers/{id}/maintenance
 GET    /api/v1/campers/{id}/maintenance
+GET    /api/v1/campers/{camperId}/maintenance/{maintenanceItemId}
+PUT    /api/v1/campers/{camperId}/maintenance/{maintenanceItemId}
+DELETE /api/v1/campers/{camperId}/maintenance/{maintenanceItemId}
 POST   /api/v1/campers/{camperId}/maintenance/{maintenanceItemId}/logs
 GET    /api/v1/campers/{camperId}/maintenance/{maintenanceItemId}/logs?limit=&after=
 
