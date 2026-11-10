@@ -401,6 +401,8 @@ export interface CamperDashboardResponse {
     name: string
     hasServiceHistory: boolean
     lastServiceOnUtc: string | null
+    isRecurring?: boolean
+    lastServiceIsUnderWarranty?: boolean | null
     timeAxis: {
       status: CamperDashboardAxisStatus
       dueOnUtc: string | null
@@ -420,6 +422,7 @@ export interface MaintenanceLog {
   cost: { amount: number; currency: string } | null
   workshop: string | null
   notes: string | null
+  isUnderWarranty: boolean
 }
 
 export interface MaintenanceLogInput {
@@ -429,6 +432,7 @@ export interface MaintenanceLogInput {
   cost?: { amount: number; currency: string }
   workshop?: string
   notes?: string
+  isUnderWarranty?: boolean
 }
 
 export interface Money {
@@ -442,6 +446,8 @@ export interface CreateMaintenanceInput {
   category: number
   intervalKm?: number
   intervalMonths?: number
+  performedOnUtc?: string
+  isUnderWarranty?: boolean
 }
 
 export interface TripSummary {

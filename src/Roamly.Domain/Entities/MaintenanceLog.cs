@@ -33,6 +33,9 @@ public class MaintenanceLog : IOwnedResource
     /// <summary>Note libere.</summary>
     public string? Notes { get; set; }
 
+    /// <summary>Indica se l'intervento e' stato eseguito in garanzia.</summary>
+    public bool IsUnderWarranty { get; set; }
+
     /// <inheritdoc />
     public DateTime CreatedAtUtc { get; set; }
 

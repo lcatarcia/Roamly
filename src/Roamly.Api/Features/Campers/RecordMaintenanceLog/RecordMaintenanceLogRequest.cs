@@ -13,7 +13,8 @@ public sealed record RecordMaintenanceLogRequest(
     [property: Range(0, int.MaxValue)] int? OdometerKm,
     CostRequest? Cost,
     [property: StringLength(80)] string? Workshop,
-    [property: StringLength(1000)] string? Notes) : IValidatableObject
+    [property: StringLength(1000)] string? Notes,
+    bool? IsUnderWarranty = null) : IValidatableObject
 {
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

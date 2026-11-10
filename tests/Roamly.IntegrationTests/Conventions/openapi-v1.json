@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost/"
+      "url": "http://127.0.0.1:5198/"
     }
   ],
   "paths": {
@@ -5525,6 +5525,84 @@
         }
       }
     },
+    "/api/v1/auth/email/resend-confirmation": {
+      "post": {
+        "tags": [
+          "Roamly.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendEmailConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationMessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Roamly.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationMessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/email/confirm": {
       "post": {
         "tags": [
@@ -5895,9 +5973,19 @@
           },
           "odometerAxis": {
             "$ref": "#/components/schemas/CamperDashboardOdometerAxis"
+          },
+          "isRecurring": {
+            "type": "boolean",
+            "default": true
+          },
+          "lastServiceIsUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "Una manutenzione attiva con i due assi di scadenza indipendenti."
+        "description": "Una manutenzione attiva con i due assi di scadenza indipendenti o intervento non periodico."
       },
       "CamperDashboardOdometer": {
         "required": [
@@ -7153,6 +7241,19 @@
               "string"
             ],
             "format": "int16"
+          },
+          "performedOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "isUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "description": "Corpo di \u0060POST /api/v1/campers/{camperId}/maintenance\u0060."
@@ -7235,9 +7336,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastServiceIsUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "Rappresentazione API di una regola di manutenzione ricorrente."
+        "description": "Rappresentazione API di una regola di manutenzione ricorrente o intervento non periodico."
       },
       "CreateSavedPlaceRequest": {
         "required": [
@@ -7803,6 +7910,10 @@
               "null",
               "string"
             ]
+          },
+          "isUnderWarranty": {
+            "type": "boolean",
+            "default": false
           }
         },
         "description": "Voce dello storico immutabile degli interventi."
@@ -7885,6 +7996,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastServiceIsUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "description": "Voce di una pagina della collection delle manutenzioni."
@@ -8451,6 +8568,12 @@
               "null",
               "string"
             ]
+          },
+          "isUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "description": "Corpo di \u0060POST /api/v1/campers/{camperId}/maintenance/{itemId}/logs\u0060."
@@ -8509,9 +8632,39 @@
               "null",
               "string"
             ]
+          },
+          "isUnderWarranty": {
+            "type": "boolean",
+            "default": false
           }
         },
         "description": "Rappresentazione API del fatto immutabile registrato."
+      },
+      "RegisterRequest": {
+        "required": [
+          "email",
+          "password",
+          "displayName"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Indirizzo email, diventa anche lo username."
+          },
+          "password": {
+            "type": "string",
+            "description": "Password in chiaro sul solo canale HTTPS: hashing a carico di ASP.NET Identity."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Nome visualizzato, opzionale."
+          }
+        },
+        "description": "Corpo di \u0060POST /api/v1/auth/register\u0060. Nessun \u0060OwnerId\u0060 bindabile (R58): l\u0027identita\u0027 nasce qui, non la possiede ancora nessuno."
       },
       "ReorderChecklistItemsRequest": {
         "required": [
@@ -8540,6 +8693,19 @@
           }
         },
         "description": "Richiesta di conferma della cancellazione dell\u0027account."
+      },
+      "ResendEmailConfirmationRequest": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Indirizzo email dell\u0027account."
+          }
+        },
+        "description": "Richiesta di reinvio della conferma email locale."
       },
       "SavedPlaceCategory": {
         "enum": [

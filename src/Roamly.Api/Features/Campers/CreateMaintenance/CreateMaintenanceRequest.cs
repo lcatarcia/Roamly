@@ -13,7 +13,9 @@ public sealed record CreateMaintenanceRequest(
     [property: Required, StringLength(80)] string? Name,
     [property: Required, EnumDataType(typeof(MaintenanceCategory))] MaintenanceCategory? Category,
     [property: Range(1, int.MaxValue)] int? IntervalKm,
-    [property: Range(1, short.MaxValue)] short? IntervalMonths) : IValidatableObject
+    [property: Range(1, short.MaxValue)] short? IntervalMonths,
+    DateOnly? PerformedOnUtc = null,
+    bool? IsUnderWarranty = null) : IValidatableObject
 {
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
@@ -28,11 +30,20 @@ public sealed record CreateMaintenanceRequest(
             yield return new ValidationResult("Il nome e' obbligatorio.", [nameof(Name)]);
         }
 
-        if (IntervalKm is null && IntervalMonths is null)
+        if (IntervalKm is null && IntervalMonths is null && PerformedOnUtc is null)
         {
             yield return new ValidationResult(
-                "Indica almeno una ricorrenza in chilometri o in mesi.",
+                "Indica almeno una ricorrenza in chilometri o in mesi, oppure la data dell'intervento non periodico.",
                 [nameof(IntervalKm), nameof(IntervalMonths)]);
+        }
+
+        if (PerformedOnUtc is { } performedOn
+            && IntervalMonths is { } intervalMonths and >= 1
+            && performedOn > DateOnly.MaxValue.AddMonths(-intervalMonths))
+        {
+            yield return new ValidationResult(
+                "La data dell'intervento produce una scadenza fuori dal range supportato.",
+                [nameof(PerformedOnUtc)]);
         }
     }
 }

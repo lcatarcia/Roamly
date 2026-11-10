@@ -93,6 +93,7 @@ public sealed class GetCamperDashboardHandler(RoamlyDbContext db, TimeProvider c
                 item.IntervalMonths,
                 item.IntervalKm,
                 item.LastServiceOnUtc,
+                item.LastServiceIsUnderWarranty,
                 item.NextDueOnUtc,
                 item.NextDueOdometerKm))
             .ToListAsync(cancellationToken);
@@ -104,10 +105,18 @@ public sealed class GetCamperDashboardHandler(RoamlyDbContext db, TimeProvider c
         int? currentOdometer)
     {
         var hasHistory = item.LastServiceOnUtc.HasValue;
+        var isRecurring = item.IntervalMonths.HasValue || item.IntervalKm.HasValue;
         var timeAxis = ProjectTimeAxis(item, today, hasHistory);
         var odometerAxis = ProjectOdometerAxis(item, currentOdometer, hasHistory);
         return new CamperDashboardMaintenance(
-            item.Id, item.Name, hasHistory, item.LastServiceOnUtc, timeAxis, odometerAxis);
+            item.Id,
+            item.Name,
+            hasHistory,
+            item.LastServiceOnUtc,
+            timeAxis,
+            odometerAxis,
+            isRecurring,
+            item.LastServiceIsUnderWarranty);
     }
 
     private static CamperDashboardTimeAxis ProjectTimeAxis(
@@ -187,6 +196,7 @@ public sealed class GetCamperDashboardHandler(RoamlyDbContext db, TimeProvider c
         short? IntervalMonths,
         int? IntervalKm,
         DateOnly? LastServiceOnUtc,
+        bool? LastServiceIsUnderWarranty,
         DateOnly? NextDueOnUtc,
         int? NextDueOdometerKm);
 }

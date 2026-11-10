@@ -34,7 +34,7 @@ const CATEGORIES = [
   '8',
 ] as const
 
-/** Form essenziale per aggiungere una ricorrenza senza inventare uno storico. */
+/** Form essenziale per aggiungere una ricorrenza o un intervento non periodico. */
 export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
   const client = useQueryClient()
   const [isOpen, setIsOpen] = useState(false)
@@ -42,6 +42,8 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
   const [category, setCategory] = useState('')
   const [intervalKm, setIntervalKm] = useState('')
   const [intervalMonths, setIntervalMonths] = useState('')
+  const [performedOnUtc, setPerformedOnUtc] = useState('')
+  const [isUnderWarranty, setIsUnderWarranty] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const submissionRef = useRef<{ fingerprint: string; id: string } | null>(null)
   const mutation = useMutation({
@@ -52,18 +54,22 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
       setCategory('')
       setIntervalKm('')
       setIntervalMonths('')
+      setPerformedOnUtc('')
+      setIsUnderWarranty(false)
       setSubmitted(false)
       setIsOpen(false)
       await client.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY })
     },
   })
-  const recurrenceInvalid = intervalKm.trim() === '' && intervalMonths.trim() === ''
+  const recurrenceInvalid =
+    intervalKm.trim() === '' && intervalMonths.trim() === '' && performedOnUtc.trim() === ''
+  const warrantyWithoutDate = isUnderWarranty && performedOnUtc.trim() === ''
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitted(true)
     mutation.reset()
-    if (!name.trim() || !category || recurrenceInvalid) {
+    if (!name.trim() || !category || recurrenceInvalid || warrantyWithoutDate) {
       return
     }
     const draft: RecurrenceDraft = {
@@ -71,6 +77,9 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
       category: Number(category),
       ...(intervalKm.trim() ? { intervalKm: Number(intervalKm) } : {}),
       ...(intervalMonths.trim() ? { intervalMonths: Number(intervalMonths) } : {}),
+      ...(performedOnUtc.trim()
+        ? { performedOnUtc: performedOnUtc.trim(), isUnderWarranty }
+        : {}),
     }
     const fingerprint = JSON.stringify(draft)
     const previous = submissionRef.current
@@ -87,7 +96,7 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
             {t('neutral.camper.maintenance.createTitle')}
           </h3>
           <p className="text-xs text-muted-foreground">
-            Imposta una scadenza chilometrica o temporale per tagliandi, revisioni o controlli impianti.
+            Imposta una scadenza chilometrica o temporale, oppure registra un intervento non periodico o richiamo indicando la data.
           </p>
         </div>
         <Button
@@ -146,6 +155,37 @@ export function CreateMaintenanceForm({ camperId }: { camperId: string }) {
                 <Input id="maintenance-interval-months" type="number" min="1" max="32767" step="1" disabled={mutation.isPending} value={intervalMonths} onChange={(event) => setIntervalMonths(event.target.value)} />
               </FieldContent>
             </Field>
+            <Field>
+              <FieldLabel htmlFor="maintenance-performed-on">{t('neutral.camper.maintenance.performedOn')}</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="maintenance-performed-on"
+                  type="date"
+                  disabled={mutation.isPending}
+                  value={performedOnUtc}
+                  onChange={(event) => setPerformedOnUtc(event.target.value)}
+                />
+                {submitted && warrantyWithoutDate && (
+                  <FieldError>{t('neutral.camper.maintenance.dateRequired')}</FieldError>
+                )}
+              </FieldContent>
+            </Field>
+            <Field className="flex flex-col justify-end">
+              <label
+                htmlFor="maintenance-under-warranty"
+                className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-input bg-card px-3.5 text-sm font-medium text-foreground shadow-2xs"
+              >
+                <input
+                  id="maintenance-under-warranty"
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  disabled={mutation.isPending}
+                  checked={isUnderWarranty}
+                  onChange={(event) => setIsUnderWarranty(event.target.checked)}
+                />
+                <span>{t('neutral.camper.maintenance.isUnderWarranty')}</span>
+              </label>
+            </Field>
             <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
               {submitted && recurrenceInvalid && <p className="w-full rounded-lg bg-background px-2 py-1 text-sm text-danger-text">{t('neutral.camper.maintenance.recurrenceRequired')}</p>}
               <Button type="submit" disabled={mutation.isPending}>
@@ -176,6 +216,7 @@ export function RecordMaintenanceLogForm({
   const [currency, setCurrency] = useState('')
   const [workshop, setWorkshop] = useState('')
   const [notes, setNotes] = useState('')
+  const [isUnderWarranty, setIsUnderWarranty] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const submissionRef = useRef<{ fingerprint: string; id: string } | null>(null)
   const mutation = useMutation({
@@ -188,6 +229,7 @@ export function RecordMaintenanceLogForm({
       setCurrency('')
       setWorkshop('')
       setNotes('')
+      setIsUnderWarranty(false)
       setSubmitted(false)
       setIsOpen(false)
       await Promise.all([
@@ -213,6 +255,7 @@ export function RecordMaintenanceLogForm({
         : {}),
       ...(workshop.trim() ? { workshop: workshop.trim() } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
+      isUnderWarranty,
     }
     const fingerprint = JSON.stringify(draft)
     const previous = submissionRef.current
@@ -300,6 +343,22 @@ export function RecordMaintenanceLogForm({
                 />
               </FieldContent>
             </Field>
+            <Field>
+              <label
+                htmlFor={`service-warranty-${maintenanceItemId}`}
+                className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-input bg-card px-3.5 text-sm font-medium text-foreground shadow-2xs"
+              >
+                <input
+                  id={`service-warranty-${maintenanceItemId}`}
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  disabled={mutation.isPending}
+                  checked={isUnderWarranty}
+                  onChange={(event) => setIsUnderWarranty(event.target.checked)}
+                />
+                <span>{t('neutral.camper.maintenance.isUnderWarranty')}</span>
+              </label>
+            </Field>
             <Button type="submit" disabled={mutation.isPending}>
               {mutation.isPending ? t('neutral.camper.maintenance.recording') : t('neutral.camper.maintenance.record')}
             </Button>
@@ -347,6 +406,7 @@ export function MaintenanceLogHistory({
                   .format(new Date(`${log.performedOnUtc}T00:00:00Z`))}
                 {log.odometerKm !== null && ` · ${new Intl.NumberFormat('it-IT').format(log.odometerKm)} km`}
                 {log.cost !== null && ` · ${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 4 }).format(log.cost.amount)} ${log.cost.currency}`}
+                {log.isUnderWarranty && ` · ${t('neutral.camper.maintenance.underWarrantyBadge')}`}
               </p>
               {(log.workshop || log.notes) && <p className="text-muted-foreground">{[log.workshop, log.notes].filter(Boolean).join(' · ')}</p>}
             </li>

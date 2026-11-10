@@ -147,17 +147,18 @@ FK: `(OwnerId, CamperId) → Camper(OwnerId, Id)` **CASCADE**. Indice `(OwnerId,
 
 #### `MaintenanceItem` — owned, figlio di `Camper`, **CASCADE**
 
-È la **regola** di una manutenzione ricorrente **più lo stato di scadenza denormalizzato**.
+È la **regola** di una manutenzione ricorrente **oppure un intervento non periodico** (es. controllo freno a mano, richiamo della casa come Isofix), **più lo stato di scadenza e garanzia denormalizzato**.
 
 | Campo | Tipo | Null | Note |
 |---|---|---|---|
 | `Id`, `OwnerId`, `CamperId`, `CreatedAtUtc`, `UpdatedAtUtc` | — | — | |
-| `Name` | `nvarchar(80)` | no | "Cambio olio" |
+| `Name` | `nvarchar(80)` | no | "Cambio olio", "Richiamo Isofix" |
 | `Category` | `tinyint` | no | |
 | `IntervalKm` | `int` | sì | ≥ 1 |
 | `IntervalMonths` | `smallint` | sì | ≥ 1 |
 | `LastServiceOnUtc` | `date` | sì | denormalizzato dall'ultimo `MaintenanceLog` |
 | `LastServiceOdometerKm` | `int` | sì | idem |
+| `LastServiceIsUnderWarranty` | `bit` | sì | denormalizzato dall'ultimo `MaintenanceLog` |
 | `NextDueOnUtc` | `date` | sì | **persistito**, calcolato dal dominio |
 | `NextDueOdometerKm` | `int` | sì | **persistito**, calcolato dal dominio |
 | `Origin` | `tinyint` (`User=0`, `Seed=1`) | no | provenienza, **immutabile** |
@@ -167,7 +168,7 @@ FK: `(OwnerId, CamperId) → Camper(OwnerId, Id)` **CASCADE**. Indice `(OwnerId,
 | `RowVersion` | `rowversion` | no | |
 
 Constraint:
-- `CHECK (IntervalKm IS NOT NULL OR IntervalMonths IS NOT NULL)` — una manutenzione senza ricorrenza non è un `MaintenanceItem`, è una voce di storico;
+- `CHECK (IntervalKm IS NOT NULL OR IntervalMonths IS NOT NULL OR LastServiceOnUtc IS NOT NULL)` — una manutenzione richiede almeno un asse di ricorrenza oppure la data dell'intervento non periodico;
 - `CHECK ((Origin = 1 AND SeedTemplateKey IS NOT NULL) OR (Origin = 0 AND SeedTemplateKey IS NULL))`.
 
 Indici: `(OwnerId, CamperId)`, `(OwnerId, NextDueOnUtc) WHERE IsActive = 1`.
@@ -215,7 +216,7 @@ Il **catalogo dei seed** vive come **risorsa versionata nel codice** (JSON embed
 
 Il **fatto** che un intervento è stato eseguito. Immutabile.
 
-`Id`, `OwnerId`, `MaintenanceItemId`, `PerformedOnUtc date` NOT NULL, `OdometerKm int?`, `Cost` (**complex type `Money`, nullable**), `Workshop nvarchar(80)?`, `Notes nvarchar(1000)?`, `CreatedAtUtc`.
+`Id`, `OwnerId`, `MaintenanceItemId`, `PerformedOnUtc date` NOT NULL, `OdometerKm int?`, `Cost` (**complex type `Money`, nullable**), `Workshop nvarchar(80)?`, `Notes nvarchar(1000)?`, `IsUnderWarranty bit` NOT NULL (default 0), `CreatedAtUtc`.
 FK: `(OwnerId, MaintenanceItemId) → MaintenanceItem(OwnerId, Id)` **CASCADE**. Indice `(OwnerId, MaintenanceItemId, PerformedOnUtc DESC)`.
 
 > **Il costo dell'intervento vive qui, non in `Expense`.** Di conseguenza **la categoria `Maintenance` non esiste** tra le categorie di `Expense`: evita il doppio inserimento e il doppio conteggio. Il Cost Management legge da **entrambe** le fonti e le somma per valuta.

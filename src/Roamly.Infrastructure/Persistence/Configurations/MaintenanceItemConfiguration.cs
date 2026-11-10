@@ -21,6 +21,7 @@ public sealed class MaintenanceItemConfiguration(RoamlyDbContextBase context)
         builder.Property(e => e.IntervalMonths).HasColumnType("smallint");
         builder.Property(e => e.LastServiceOnUtc).HasDate();
         builder.Property(e => e.LastServiceOdometerKm).HasColumnType("int");
+        builder.Property(e => e.LastServiceIsUnderWarranty).HasColumnType("bit");
         builder.Property(e => e.NextDueOnUtc).HasDate();
         builder.Property(e => e.NextDueOdometerKm).HasColumnType("int");
         builder.Property(e => e.Origin).HasTinyint().IsRequired();
@@ -36,10 +37,10 @@ public sealed class MaintenanceItemConfiguration(RoamlyDbContextBase context)
 
         builder.ToTable(table =>
         {
-            // Una manutenzione senza ricorrenza non e' un MaintenanceItem, e' una voce di storico.
+            // Una manutenzione richiede almeno un asse di ricorrenza oppure la data dell'intervento non periodico.
             table.HasCheckConstraint(
                 "CK_MaintenanceItem_Recurrence",
-                "[IntervalKm] IS NOT NULL OR [IntervalMonths] IS NOT NULL");
+                "[IntervalKm] IS NOT NULL OR [IntervalMonths] IS NOT NULL OR [LastServiceOnUtc] IS NOT NULL");
 
             table.HasCheckConstraint(
                 "CK_MaintenanceItem_IntervalKm",

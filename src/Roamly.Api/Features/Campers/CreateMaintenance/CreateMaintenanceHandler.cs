@@ -32,7 +32,7 @@ public sealed class CreateMaintenanceHandler(RoamlyDbContext db, TimeProvider cl
         var existing = await FindAsync(request.Id!.Value, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
-            return Resolve(existing, camperId, name, category, request.IntervalKm, request.IntervalMonths);
+            return Resolve(existing, camperId, name, category, request);
         }
 
         return await InsertAsync(camperId, request, name, category, cancellationToken).ConfigureAwait(false);
@@ -45,6 +45,13 @@ public sealed class CreateMaintenanceHandler(RoamlyDbContext db, TimeProvider cl
         MaintenanceCategory category,
         CancellationToken cancellationToken)
     {
+        var createdAtUtc = clock.GetUtcNow().UtcDateTime;
+        var performedOnUtc = request.PerformedOnUtc;
+        var isUnderWarranty = performedOnUtc.HasValue ? (request.IsUnderWarranty ?? false) : (bool?)null;
+        var nextDueOnUtc = performedOnUtc.HasValue && request.IntervalMonths.HasValue
+            ? performedOnUtc.Value.AddMonths(request.IntervalMonths.Value)
+            : (DateOnly?)null;
+
         var item = new MaintenanceItem
         {
             Id = request.Id!.Value,
@@ -53,11 +60,26 @@ public sealed class CreateMaintenanceHandler(RoamlyDbContext db, TimeProvider cl
             Category = category,
             IntervalKm = request.IntervalKm,
             IntervalMonths = request.IntervalMonths,
+            LastServiceOnUtc = performedOnUtc,
+            LastServiceIsUnderWarranty = isUnderWarranty,
+            NextDueOnUtc = nextDueOnUtc,
             Origin = MaintenanceOrigin.User,
             IsActive = true,
-            CreatedAtUtc = clock.GetUtcNow().UtcDateTime,
+            CreatedAtUtc = createdAtUtc,
         };
         db.MaintenanceItems.Add(item);
+
+        if (performedOnUtc.HasValue)
+        {
+            db.MaintenanceLogs.Add(new MaintenanceLog
+            {
+                Id = item.Id,
+                MaintenanceItemId = item.Id,
+                PerformedOnUtc = performedOnUtc.Value,
+                IsUnderWarranty = request.IsUnderWarranty ?? false,
+                CreatedAtUtc = createdAtUtc,
+            });
+        }
 
         try
         {
@@ -66,13 +88,14 @@ public sealed class CreateMaintenanceHandler(RoamlyDbContext db, TimeProvider cl
         }
         catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
         {
+            db.ChangeTracker.Clear();
             var existing = await FindAsync(item.Id, cancellationToken).ConfigureAwait(false);
             if (existing is null)
             {
                 throw;
             }
 
-            return Resolve(existing, camperId, name, category, request.IntervalKm, request.IntervalMonths);
+            return Resolve(existing, camperId, name, category, request);
         }
     }
 
@@ -87,14 +110,18 @@ public sealed class CreateMaintenanceHandler(RoamlyDbContext db, TimeProvider cl
         Guid camperId,
         string name,
         MaintenanceCategory category,
-        int? intervalKm,
-        short? intervalMonths)
+        CreateMaintenanceRequest request)
     {
+        var expectedWarranty = request.PerformedOnUtc.HasValue
+            ? (request.IsUnderWarranty ?? false)
+            : (bool?)null;
         var sameContent = existing.CamperId == camperId
             && string.Equals(existing.Name.Trim(), name, StringComparison.Ordinal)
             && existing.Category == category
-            && existing.IntervalKm == intervalKm
-            && existing.IntervalMonths == intervalMonths;
+            && existing.IntervalKm == request.IntervalKm
+            && existing.IntervalMonths == request.IntervalMonths
+            && existing.LastServiceOnUtc == request.PerformedOnUtc
+            && existing.LastServiceIsUnderWarranty == expectedWarranty;
         return sameContent
             ? new CreateMaintenanceResult(CreateMaintenanceOutcome.Replayed, CreateMaintenanceResponse.From(existing))
             : new CreateMaintenanceResult(CreateMaintenanceOutcome.Conflict, null);

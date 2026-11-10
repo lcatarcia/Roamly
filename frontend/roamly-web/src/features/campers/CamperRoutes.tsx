@@ -465,39 +465,59 @@ function MaintenanceItemCard({
   camperId: string
   item: CamperDashboardResponse['maintenance'][number]
 }) {
+  const isRecurring = item.isRecurring ?? true
   return (
     <li className="min-w-0 rounded-2xl border border-border bg-card p-5 shadow-2xs">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-base font-semibold">{item.name}</h3>
-        {item.hasServiceHistory ? (
-          <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
-            {t('neutral.camper.dashboard.lastService')}: {formatDate(item.lastServiceOnUtc)}
-          </span>
-        ) : (
-          <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
-            {t('neutral.camper.dashboard.neverServiced')}
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {!isRecurring && (
+            <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+              {t('neutral.camper.dashboard.nonPeriodicBadge')}
+            </span>
+          )}
+          {item.lastServiceIsUnderWarranty === true && (
+            <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+              {t('neutral.camper.maintenance.underWarrantyBadge')}
+            </span>
+          )}
+          {!isRecurring && item.lastServiceIsUnderWarranty === false && (
+            <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+              {t('neutral.camper.maintenance.outOfWarrantyBadge')}
+            </span>
+          )}
+          {item.hasServiceHistory ? (
+            <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+              {t('neutral.camper.dashboard.lastService')}: {formatDate(item.lastServiceOnUtc)}
+            </span>
+          ) : (
+            <span className="rounded-full bg-secondary px-3 py-0.5 text-xs font-medium text-secondary-foreground">
+              {t('neutral.camper.dashboard.neverServiced')}
+            </span>
+          )}
+        </div>
       </div>
       {!item.hasServiceHistory && (
         <p className="mt-1 text-xs text-muted-foreground">
           {t('neutral.camper.dashboard.noReminderBeforeService')}
         </p>
       )}
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <AxisPanel
-          title={t('neutral.camper.dashboard.timeAxis')}
-          status={item.timeAxis.status}
-          detail={item.timeAxis.dueOnUtc
-            ? `${t('neutral.camper.dashboard.dueOn')}: ${formatDate(item.timeAxis.dueOnUtc)}`
-            : null}
-        />
-        <AxisPanel
-          title={t('neutral.camper.dashboard.odometerAxis')}
-          status={item.odometerAxis.status}
-          detail={odometerDetail(item.odometerAxis.dueAtKm, item.odometerAxis.kmRemaining)}
-        />
-      </div>
+      {isRecurring && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <AxisPanel
+            title={t('neutral.camper.dashboard.timeAxis')}
+            status={item.timeAxis.status}
+            detail={item.timeAxis.dueOnUtc
+              ? `${t('neutral.camper.dashboard.dueOn')}: ${formatDate(item.timeAxis.dueOnUtc)}`
+              : null}
+          />
+          <AxisPanel
+            title={t('neutral.camper.dashboard.odometerAxis')}
+            status={item.odometerAxis.status}
+            detail={odometerDetail(item.odometerAxis.dueAtKm, item.odometerAxis.kmRemaining)}
+          />
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
         <RecordMaintenanceLogForm camperId={camperId} maintenanceItemId={item.id} />
         <MaintenanceLogHistory camperId={camperId} maintenanceItemId={item.id} />

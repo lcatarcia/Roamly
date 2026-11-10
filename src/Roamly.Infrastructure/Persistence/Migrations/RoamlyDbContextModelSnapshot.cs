@@ -734,6 +734,9 @@ namespace Roamly.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
+                    b.Property<bool?>("LastServiceIsUnderWarranty")
+                        .HasColumnType("bit");
+
                     b.Property<int?>("LastServiceOdometerKm")
                         .HasColumnType("int");
 
@@ -790,7 +793,7 @@ namespace Roamly.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_MaintenanceItem_IntervalMonths", "[IntervalMonths] IS NULL OR [IntervalMonths] >= 1");
 
-                            t.HasCheckConstraint("CK_MaintenanceItem_Recurrence", "[IntervalKm] IS NOT NULL OR [IntervalMonths] IS NOT NULL");
+                            t.HasCheckConstraint("CK_MaintenanceItem_Recurrence", "[IntervalKm] IS NOT NULL OR [IntervalMonths] IS NOT NULL OR [LastServiceOnUtc] IS NOT NULL");
 
                             t.HasCheckConstraint("CK_MaintenanceItem_SeedProvenance", "([Origin] = 1 AND [SeedTemplateKey] IS NOT NULL) OR ([Origin] = 0 AND [SeedTemplateKey] IS NULL)");
                         });
@@ -806,6 +809,11 @@ namespace Roamly.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2(3)");
+
+                    b.Property<bool>("IsUnderWarranty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<Guid>("MaintenanceItemId")
                         .HasColumnType("uniqueidentifier");

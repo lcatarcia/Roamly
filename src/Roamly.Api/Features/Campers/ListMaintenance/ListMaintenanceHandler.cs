@@ -69,7 +69,8 @@ public sealed class ListMaintenanceHandler(RoamlyDbContext db)
                 item.LastServiceOnUtc,
                 item.LastServiceOdometerKm,
                 item.NextDueOnUtc,
-                item.NextDueOdometerKm))
+                item.NextDueOdometerKm,
+                item.LastServiceIsUnderWarranty))
             .ToListAsync(cancellationToken);
     }
 
