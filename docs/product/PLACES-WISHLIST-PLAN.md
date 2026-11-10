@@ -2,6 +2,49 @@
 
 Stato: vista lista/mappa personale implementata e revisionata; integrazione non ancora attivata sull'host. Piano iniziale: 2026-11-03; aggiornamento del perimetro: 2026-11-06.
 
+## Aggiornamento richiesto e implementato localmente — 2026-11-10
+
+Richiesta esplicita: «vorrei che quando si inserisce il link di ggogle maps poi tali coordinate vengano estratte automaticamente per visualizzare il pin sulla mappa. Inoltre vorrei vedere la mappa subito disponibile senza autorizzare la visualizzazione in più procedimenti».
+
+Questo aggiornamento **supera**, per la vista personale, le precedenti scelte di link
+opaco/no estrazione e consenso manuale Maps riportate nelle sezioni storiche sotto.
+Lista resta il default; scegliere Mappa carica direttamente SDK/CSS e canvas, anche
+senza luoghi o coordinate, con vista iniziale Italia e avviso non bloccante. Niente
+GET/POST al registro all'apertura, niente grant automatici o azioni tecniche chiamate consenso.
+Resta una breve informativa sul trasferimento IP/viewport all'endpoint Azure EU;
+nomi e note sono overlay locali, non query Search. Attribuzione, accessibilità senza
+geocodifica implicita, telemetria disabilitata e teardown/abort restano invariati.
+
+L'estrattore locale accetta un solo luogo esplicito `!3d…!4d…`, oppure una coppia
+numerica `q` o `api=1&query`, da host allowlisted `google.{dominio}`,
+`www.google.{dominio}` e `maps.google.{dominio}` (com, it, fr, de, es, co.uk, nl, pt,
+ch, at, be, ca, com.au, co.jp). Un solo decode standard per componente, URL HTTPS
+senza userinfo, coordinate entro range; niente supposizioni da `@`, fetch, redirect,
+espansione short-link o import di nomi. Formati ambigui/non supportati restano
+salvabili come link e richiedono coordinate manuali.
+
+Create/edit mostrano coordinate correggibili: un cambio link aggiorna o svuota
+soltanto i campi automatici; un campo toccato manualmente resta protetto fino alla
+chiusura/reset del form. Le posizioni già salvate sono trattate come manuali,
+senza indovinarne la provenienza. API create/update derivano solo con posizione nulla.
+GET/list derivano la posizione effettiva dei vecchi luoghi senza modificarli né
+alterare RowVersion/ETag. Per Bunker Soratte si usano **42.2370252, 12.5117658**,
+non la viewport **42.2370291, 12.5091909**. Nessun backfill o migration.
+La precisione SQL esistente resta a sei decimali per le coordinate persistite:
+l'estrattore e i vecchi luoghi con fallback in lettura mantengono le cifre del link;
+il replay di una nuova creazione confronta alla precisione SQL, evitando conflitti
+spuri dopo l'arrotondamento del database.
+
+L'emissione token personale conserva autenticazione, CSRF, rate limit, `no-store`,
+managed identity e controllo account sotto lock prima/dopo Entra (nessuna rete sotto
+lock), incluse cancellazione e password obbligatoria. La sospensione economica
+persistita continua a negare l'accesso; 1 EUR non è un hard cap. Registro storico,
+export/erasure e percorso rigoroso MapsAdmissionService restano invariati.
+
+**Solo checkout locale:** nessun commit/push/deploy, mutation cloud, migration applicata
+al database applicativo o traffico Maps reale. I rilasci e le approvazioni precedenti
+qui sotto non attestano questa modifica.
+
 L'utente ha scelto mappa ed elenco sincronizzati, poi Azure Maps, e ha delegato le scelte restanti privilegiando il costo in denaro. Le decisioni seguenti esercitano tale delega sul piano; non sono una validazione d'usabilità né un'autorizzazione a provisioning, spese o trasferimenti di dati. La decisione geo #3 resta aperta fino a spike e ADR.
 
 ## Aggiornamento: percorso personale semplice — 2026-11-06

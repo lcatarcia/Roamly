@@ -7,6 +7,8 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Input } from '@/components/ui/input'
 import { SAVED_PLACES_QUERY_KEY } from '@/features/places/queryKeys'
 import { SavedPlacesMapPanel } from './SavedPlacesMapPanel'
+import { useLinkPosition } from './useLinkPosition'
+import { googleMapsPosition } from './google-maps-position.mjs'
 import { t } from '@/i18n/catalog'
 import { createCombGuid } from '@/lib/comb-guid.mjs'
 import {
@@ -88,7 +90,8 @@ export function SavedPlacesPage() {
         ? { id: deleteMutation.variables.id, error: deleteMutation.error }
         : null,
   }
-  const places = placesQuery.data?.pages.flatMap((page) => page.items) ?? []
+  const places = placesQuery.data?.pages.flatMap((page) => page.items)
+    .map(place => ({ ...place, position: place.position ?? googleMapsPosition(place.googleMapsUrl) })) ?? []
 
   return (
     <SavedPlacesLayout>
@@ -146,9 +149,7 @@ function SavedPlaceCreateForm({
   const [category, setCategory] = useState('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
-  const [latitude, setLatitude] = useState('')
-  const [longitude, setLongitude] = useState('')
-  const [googleMapsUrl, setGoogleMapsUrl] = useState('')
+  const { latitude, longitude, setLatitude, setLongitude, googleMapsUrl, setGoogleMapsUrl, reset } = useLinkPosition()
   const [validationError, setValidationError] = useState<'required' | 'coordinates' | null>(null)
   const createIdsByPayload = useRef(new Map<string, string>())
 
@@ -179,6 +180,7 @@ function SavedPlaceCreateForm({
       await onCreate({ ...place, id })
       createIdsByPayload.current.clear()
       clearForm(setName, setCategory, setAddress, setNotes, setLatitude, setLongitude, setGoogleMapsUrl)
+      reset()
     } catch {
       // L'errore della mutation resta visibile sotto il pulsante.
     }
@@ -476,9 +478,7 @@ function SavedPlaceEditForm({
   const [category, setCategory] = useState(String(place.category))
   const [address, setAddress] = useState(place.address ?? '')
   const [notes, setNotes] = useState(place.notes ?? '')
-  const [latitude, setLatitude] = useState(place.position ? String(place.position.latitude) : '')
-  const [longitude, setLongitude] = useState(place.position ? String(place.position.longitude) : '')
-  const [googleMapsUrl, setGoogleMapsUrl] = useState(place.googleMapsUrl ?? '')
+  const { latitude, longitude, setLatitude, setLongitude, googleMapsUrl, setGoogleMapsUrl } = useLinkPosition(place)
   const [validationError, setValidationError] = useState<'required' | 'coordinates' | null>(null)
   const idPrefix = `saved-place-edit-${place.id}`
 

@@ -1,5 +1,31 @@
 # Decision Map: Wishlist dei luoghi da visitare
 
+## Scelte supersedenti per uso personale — 2026-11-10
+
+Richiesta esplicita dell'utente: estrarre automaticamente le coordinate dal link
+Google Maps e vedere la mappa senza ripetute autorizzazioni. **Supera la risposta #3
+del 2026-11-03 (link opaco senza estrazione)** e il consenso manuale Maps della
+precedente integrazione personale. Le sezioni sotto restano la cronologia, non
+nuovi gate per questa modifica.
+
+- Parsing locale di coordinate esplicite del luogo (`!3d/!4d`, query numerica),
+  host Google allowlisted, un solo decode, validazione coppia/range e rifiuto
+  ambiguità. Mai viewport `@`, chiamate Google, espansione short-link o import nomi.
+- Coordinate visibili e correggibili nei form; campi toccati manualmente e posizioni
+  già salvate hanno priorità. Cambiare/rimuovere un link non lascia coordinate
+  automatiche obsolete. API deriva solo se posizione nulla; GET/list mostrano i
+  vecchi luoghi con posizione effettiva senza salvarli o cambiare ETag.
+- Lista predefinita; scegliendo Mappa, canvas subito disponibile anche vuoto,
+  centrato sull'Italia. Breve informativa IP/viewport Azure EU, nessun pulsante
+  consenso/revoca, nessuna lettura o scrittura fittizia del registro.
+- Storico consensi, export/erasure e percorso Maps rigoroso invariati.
+  Sessione, CSRF, limiti API, `no-store`, MI, lock/recheck account e sospensione
+  economica persistita preservati; 1 EUR non è un hard cap.
+
+Implementazione **locale, non distribuita**, senza mutation cloud o migration.
+Non costituisce attestazione di rendering live o validazione privacy/produzione.
+Dettagli e limiti nel [piano aggiornato](PLACES-WISHLIST-PLAN.md).
+
 ## #1: Scegliere la composizione della sezione
 
 Bloccato da: Nessuno\

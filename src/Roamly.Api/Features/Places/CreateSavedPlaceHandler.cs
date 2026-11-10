@@ -58,7 +58,7 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
             OwnerId = db.CurrentUserId,
             Name = request.Name!.Trim(),
             Category = request.Category!.Value,
-            Position = SavedPlaceContent.ToPosition(request.Position),
+            Position = SavedPlaceContent.ToPosition(request.Position, request.GoogleMapsUrl),
             Address = NormalizeOptional(request.Address),
             Notes = NormalizeOptional(request.Notes),
             GoogleMapsUrl = NormalizeOptional(request.GoogleMapsUrl),
@@ -85,20 +85,20 @@ public sealed class CreateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
     {
         return place.Name == request.Name!.Trim()
             && place.Category == request.Category!.Value
-            && PositionMatches(place.Position, request.Position)
+            && PositionMatches(place.Position ?? GoogleMapsPosition.Parse(place.GoogleMapsUrl),
+                SavedPlaceContent.ToPosition(request.Position, request.GoogleMapsUrl))
             && place.Address == NormalizeOptional(request.Address)
             && place.Notes == NormalizeOptional(request.Notes)
             && place.GoogleMapsUrl == NormalizeOptional(request.GoogleMapsUrl);
     }
 
-    private static bool PositionMatches(Coordinates? current, SavedPlacePositionRequest? requested)
-    {
-        return current is null
-            ? requested is null
+    private static bool PositionMatches(Coordinates? current, Coordinates? requested) =>
+        current is null ? requested is null
             : requested is not null
-                && current.Value.Latitude == requested.Latitude
-                && current.Value.Longitude == requested.Longitude;
-    }
+                && decimal.Round(current.Value.Latitude, 6, MidpointRounding.AwayFromZero)
+                    == decimal.Round(requested.Value.Latitude, 6, MidpointRounding.AwayFromZero)
+                && decimal.Round(current.Value.Longitude, 6, MidpointRounding.AwayFromZero)
+                    == decimal.Round(requested.Value.Longitude, 6, MidpointRounding.AwayFromZero);
 
     private static string? NormalizeOptional(string? value)
     {

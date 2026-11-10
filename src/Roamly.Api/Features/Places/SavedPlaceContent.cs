@@ -23,7 +23,7 @@ internal static class SavedPlaceContent
             yield return new ValidationResult("La categoria non e' valida.", ["Category"]);
         }
 
-        // Il link resta un riferimento opaco: si valida la forma, non si consulta alcun servizio.
+        // Il riferimento originale resta conservato; l'estrazione delle coordinate non usa rete.
         if (googleMapsUrl is not null
             && (!Uri.TryCreate(googleMapsUrl.Trim(), UriKind.Absolute, out var uri)
                 || uri.Scheme != Uri.UriSchemeHttps
@@ -40,10 +40,10 @@ internal static class SavedPlaceContent
     }
 
     /// <summary>Converte le coordinate validate nel complex type di dominio.</summary>
-    public static Coordinates? ToPosition(SavedPlacePositionRequest? position)
+    public static Coordinates? ToPosition(SavedPlacePositionRequest? position, string? googleMapsUrl)
     {
         return position is null
-            ? null
+            ? GoogleMapsPosition.Parse(googleMapsUrl)
             : new Coordinates(position.Latitude!.Value, position.Longitude!.Value);
     }
 }

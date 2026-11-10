@@ -11,8 +11,6 @@
  * viene chiamato appena prima di ogni mutazione.
  */
 
-import { createCombGuid } from '@/lib/comb-guid.mjs'
-
 const JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 const ROAMLY_HEADER = { 'X-Roamly-Request': '1' } as const
 
@@ -80,15 +78,6 @@ export interface MapsConfiguration {
   domain: string
 }
 
-export interface MapsConsent {
-  purpose: string
-  version: string
-  textReference: string
-  isActive: boolean
-  isGranted: boolean
-  revision: number
-}
-
 async function getMapsJson<T>(path: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(path, { credentials: 'include', cache: 'no-store', signal })
   if (!response.ok) throw await toApiError(response, 'Mappa non disponibile.')
@@ -97,16 +86,6 @@ async function getMapsJson<T>(path: string, signal: AbortSignal): Promise<T> {
 
 export const fetchMapsConfiguration = (signal: AbortSignal) =>
   getMapsJson<MapsConfiguration>('/api/v1/maps/config', signal)
-
-export const fetchMapsConsent = (signal: AbortSignal) =>
-  getMapsJson<MapsConsent>('/api/v1/me/consents/azure-maps-render', signal)
-
-export function recordMapsConsent(consent: MapsConsent, grant: boolean, signal: AbortSignal) {
-  return mutate('/api/v1/me/consents/azure-maps-render/' + (grant ? 'grants' : 'revocations'), {
-    method: 'POST', signal,
-    body: { id: createCombGuid(), version: consent.version, textReference: consent.textReference },
-  })
-}
 
 export function issueMapsToken(signal: AbortSignal) {
   return mutate<{ accessToken: string; expiresAtUtc: string }>('/api/v1/maps/token', { method: 'POST', signal })

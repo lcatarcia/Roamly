@@ -5745,7 +5745,7 @@
         "tags": [
           "Maps"
         ],
-        "summary": "Bearer Entra per rendering, dopo verifica account e consenso correnti",
+        "summary": "Rendering Maps personale, dopo verifica account e sospensione economica",
         "operationId": "IssueMapsToken",
         "responses": {
           "200": {

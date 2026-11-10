@@ -1,9 +1,9 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { t } from '@/i18n/catalog'
 import {
-  fetchMapsConfiguration, fetchMapsConsent, recordMapsConsent,
-  type MapsConfiguration, type MapsConsent, type SavedPlace,
+  fetchMapsConfiguration,
+  type MapsConfiguration, type SavedPlace,
 } from '@/lib/api'
 import { categorySymbols, positionedPlaces } from './map-model.mjs'
 
@@ -18,71 +18,31 @@ export function SavedPlacesMapPanel({ places, categoryLabel, selectedId, onSelec
   onSelect: (id: string) => void
 }) {
   const [configuration, setConfiguration] = useState<MapsConfiguration | null>(null)
-  const [consent, setConsent] = useState<MapsConsent | null>(null)
-  const [opened, setOpened] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
-  const lifetime = useRef<AbortController | null>(null)
   const selected = places.find(place => place.id === selectedId)
   const located = positionedPlaces(places)
 
   useEffect(() => {
     const controller = new AbortController()
-    lifetime.current = controller
-    void fetchMapsConfiguration(controller.signal).then(async config => {
+    void fetchMapsConfiguration(controller.signal).then(config => {
       if (controller.signal.aborted) return
       setConfiguration(config)
-      if (config.isConfigured) {
-        const state = await fetchMapsConsent(controller.signal)
-        if (!controller.signal.aborted) setConsent(state)
-      }
     }).catch(() => { if (!controller.signal.aborted) setError(true) })
     return () => controller.abort()
   }, [])
 
-  async function changeConsent(grant: boolean) {
-    const signal = lifetime.current?.signal
-    if (!consent || !signal || signal.aborted) return
-    if (!grant) setOpened(false) // Dispose first; do not wait for the registry request.
-    setBusy(true)
-    setError(false)
-    try {
-      if (!grant || !consent.isGranted) await recordMapsConsent(consent, grant, signal)
-      const current = await fetchMapsConsent(signal)
-      if (signal.aborted) return
-      setConsent(current)
-      setOpened(grant && current.isGranted)
-    } catch {
-      if (!signal.aborted) setError(true)
-    } finally {
-      if (!signal.aborted) setBusy(false)
-    }
-  }
-
   return (
     <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
       <p className="text-sm text-muted-foreground">{t('neutral.maps.explanation')}</p>
-      <p className="text-xs text-muted-foreground">{t('neutral.maps.costNotice')}</p>
       {error && <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{t('neutral.maps.error')}</p>}
       {!configuration && !error && <p role="status">{t('neutral.maps.loading')}</p>}
       {configuration && !configuration.isConfigured && <p role="status">{t('neutral.maps.notConfigured')}</p>}
-      {configuration?.isConfigured && consent?.isActive && !opened && (
-        <Button onClick={() => void changeConsent(true)} disabled={busy}>
-          {t('neutral.maps.consentOpen')}
-        </Button>
-      )}
-      {configuration?.isConfigured && consent && !consent.isActive && <p role="status">{t('neutral.maps.notConfigured')}</p>}
-      {opened && configuration?.accountClientId && (
+      {configuration?.isConfigured && configuration.accountClientId && (
         <>
-          <Button variant="outline" disabled={busy} onClick={() => void changeConsent(false)}>
-            {t('neutral.maps.revoke')}
-          </Button>
-          <p className="text-xs text-muted-foreground">{t('neutral.maps.revokeNotice')}</p>
-          {located.length > 0 ? (
-            <Suspense fallback={<p role="status">{t('neutral.maps.loading')}</p>}>
-              <MapsCanvas places={places} configuration={configuration} selectedId={selectedId} onSelect={onSelect} />
-            </Suspense>
-          ) : <p role="status">{t('neutral.maps.noCoordinates')}</p>}
+          <Suspense fallback={<p role="status">{t('neutral.maps.loading')}</p>}>
+            <MapsCanvas places={places} configuration={configuration} selectedId={selectedId} onSelect={onSelect} />
+          </Suspense>
+          {located.length === 0 && <p role="status">{t('neutral.maps.noCoordinates')}</p>}
         </>
       )}
       <p role="status" className="text-sm">{t('neutral.maps.loaded')}: {places.length} · {t('neutral.maps.located')}: {located.length}</p>

@@ -36,7 +36,7 @@ public sealed class UpdateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
 
         place.Name = request.Name!.Trim();
         place.Category = request.Category!.Value;
-        place.Position = SavedPlaceContent.ToPosition(request.Position);
+        place.Position = SavedPlaceContent.ToPosition(request.Position, request.GoogleMapsUrl);
         place.Address = SavedPlaceContent.NormalizeOptional(request.Address);
         place.Notes = SavedPlaceContent.NormalizeOptional(request.Notes);
         place.GoogleMapsUrl = SavedPlaceContent.NormalizeOptional(request.GoogleMapsUrl);
