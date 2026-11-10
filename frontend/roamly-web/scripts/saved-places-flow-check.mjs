@@ -12,6 +12,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const VITE_CLI = path.join(ROOT, 'node_modules/vite/bin/vite.js')
 const PORT = 4322
 const BASE_URL = `https://127.0.0.1:${PORT}`
+const BUNKER = 'https://www.google.com/maps/place/Bunker+Soratte/@42.2370291,12.5091909,805m/data=!3m2!1e3!4b1!4m6!3m5!1s0x132f14154ace8c1d:0x881d17f0b2739244!8m2!3d42.2370252!4d12.5117658!16s%2Fg%2F11gbfd5xfy?authuser=0&entry=tts'
 
 async function main() {
   const preview = spawn(process.execPath, [
@@ -59,21 +60,60 @@ async function main() {
     await page.getByRole('button', { name: 'Modifica', exact: true }).click()
     const editForm = page.getByRole('form', { name: 'Modifica luogo' })
     await editForm.getByLabel('Nome').fill('Borgo rinominato')
+    await editForm.getByLabel('Link Google Maps').fill(BUNKER)
+    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '42.2370252')
+    assert.equal(await editForm.getByLabel('Longitudine').inputValue(), '12.5117658')
+    await editForm.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=3,4')
+    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '3')
+    assert.equal(await editForm.getByLabel('Longitudine').inputValue(), '4')
+    await editForm.getByLabel('Link Google Maps').fill('')
+    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '')
+    assert.equal(await editForm.getByLabel('Longitudine').inputValue(), '')
+    await editForm.getByLabel('Link Google Maps').fill(BUNKER)
     await editForm.getByRole('button', { name: 'Salva modifiche' }).click()
     await page.getByRole('heading', { name: 'Borgo rinominato' }).waitFor()
     assert.equal(observed.updateIfMatch, '"1"', 'la modifica deve inviare l’ETag letto')
     assert.equal(observed.updated.name, 'Borgo rinominato')
+    assert.deepEqual(observed.updated.position, { latitude: 42.2370252, longitude: 12.5117658 })
+    assert.equal(observed.updated.googleMapsUrl, BUNKER)
     await page.getByRole('button', { name: 'Elimina', exact: true }).click()
     await page.getByRole('button', { name: 'Conferma eliminazione' }).click()
     await page.getByRole('heading', { name: 'Borgo rinominato' }).waitFor({ state: 'detached' })
     assert.equal(observed.deleteIfMatch, '"2"', 'l’eliminazione deve inviare l’ETag più recente')
     assert.equal(observed.savedPlaceCount, 0)
+
+    // The create form was reset: the next link can derive new coordinates.
+    await page.getByLabel('Nome').fill('Bunker automatico')
+    await page.getByLabel('Categoria').selectOption('8')
+    await page.getByLabel('Link Google Maps').fill(BUNKER)
+    assert.equal(await page.getByLabel('Latitudine').inputValue(), '42.2370252')
+    assert.equal(await page.getByLabel('Longitudine').inputValue(), '12.5117658')
+    await page.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=1,2')
+    assert.equal(await page.getByLabel('Latitudine').inputValue(), '1')
+    await page.getByLabel('Link Google Maps').fill('https://maps.app.goo.gl/example')
+    assert.equal(await page.getByLabel('Latitudine').inputValue(), '')
+    assert.equal(await page.getByLabel('Longitudine').inputValue(), '')
+    await page.getByLabel('Link Google Maps').fill(BUNKER)
+    await page.getByRole('button', { name: 'Aggiungi luogo' }).click()
+    await page.getByRole('heading', { name: 'Bunker automatico' }).waitFor()
+    assert.deepEqual(observed.created.position, { latitude: 42.2370252, longitude: 12.5117658 })
+    assert.equal(observed.created.googleMapsUrl, BUNKER)
+    await page.getByRole('button', { name: 'Modifica', exact: true }).click()
+    await editForm.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=3,4')
+    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '42.2370252', 'saved position is treated as manual')
+    await editForm.getByLabel('Latitudine').fill('9')
+    await editForm.getByLabel('Longitudine').fill('8')
+    await editForm.getByLabel('Link Google Maps').fill(BUNKER)
+    await editForm.getByRole('button', { name: 'Salva modifiche' }).click()
+    await page.getByRole('heading', { name: 'Bunker automatico' }).waitFor()
+    assert.deepEqual(observed.updated.position, { latitude: 9, longitude: 8 })
+    assert.deepEqual(remoteRequests, [], 'parsing and the default list never contact Google or Azure')
     await page.setViewportSize({ width: 390, height: 844 })
     assert.ok(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       'la pagina non deve avere overflow orizzontale su mobile',
     )
-    console.log('saved-places-flow-check: superato (creazione manuale, lista, modifica e eliminazione con If-Match, nessuna chiamata esterna).')
+    console.log('saved-places-flow-check: superato (autofill esatto create/edit, precedenza manuale, link brevi, CRUD If-Match e retry; nessuna chiamata esterna).')
   } finally {
     await browser.close()
     preview.kill()
@@ -168,7 +208,7 @@ async function mockApi(page) {
     if (!saved) {
       saved = {
         ...observed.created,
-        position: null,
+        position: observed.created.position ?? null,
         address: null,
         notes: null,
       }

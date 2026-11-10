@@ -25,7 +25,7 @@ public static class MapsEndpoints
         .RequireAuthorization().WithRateLimitPolicy("PerAccount")
         .WithMetadata(new IdempotencyPolicy(IdempotencyMode.NotRequired))
         .WithName("IssueMapsToken").WithTags("Maps")
-        .WithSummary("Bearer Entra per rendering, dopo verifica account e consenso correnti")
+        .WithSummary("Rendering Maps personale, dopo verifica account e sospensione economica")
         .Produces<MapsTokenResponse>()
         .ProducesProblem(401).ProducesProblem(403).ProducesProblem(429).ProducesProblem(503);
         return app;

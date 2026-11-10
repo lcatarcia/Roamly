@@ -86,6 +86,6 @@ public sealed class ListSavedPlacesHandler(RoamlyDbContext db)
         }
 
         var nextCursor = hasNextPage ? KeysetCursor.Encode(rows[^1].Id) : null;
-        return new Page<SavedPlaceResponse>(rows, nextCursor);
+        return new Page<SavedPlaceResponse>(rows.Select(place => place.WithEffectivePosition()).ToList(), nextCursor);
     }
 }

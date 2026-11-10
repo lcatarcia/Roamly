@@ -87,7 +87,7 @@ public sealed class MapsRenderingApiTests(SqlServerFixture sqlServer) : IAsyncLi
     }
 
     [Fact]
-    public async Task Token_needs_cookie_CSRF_and_current_consent_before_any_remote_acquisition()
+    public async Task Token_needs_cookie_and_CSRF_but_not_a_consent_transition()
     {
         using var anonymous = Client(_factory);
         using var noCookie = await anonymous.PostJsonAsync("/api/v1/maps/token", new { }, Ct);
@@ -95,9 +95,12 @@ public sealed class MapsRenderingApiTests(SqlServerFixture sqlServer) : IAsyncLi
         using var noCsrf = await _client.PostJsonWithCsrfHeadersAsync(
             "/api/v1/maps/token", new { }, true, false, Ct);
         Assert.Equal(HttpStatusCode.BadRequest, noCsrf.StatusCode);
-        using var noGrant = await TokenAsync();
-        Assert.Equal(HttpStatusCode.Forbidden, noGrant.StatusCode);
         Assert.Equal(0, _credential.Calls);
+        using var noGrant = await TokenAsync();
+        Assert.Equal(HttpStatusCode.OK, noGrant.StatusCode);
+        Assert.Equal(1, _credential.Calls);
+        using var consent = await _client.GetAsync("/api/v1/me/consents/azure-maps-render", Ct);
+        Assert.Equal(0, (await consent.Content.ReadFromJsonAsync<ConsentStateResponse>(Ct))!.Revision);
     }
 
     [Fact]
@@ -158,13 +161,32 @@ public sealed class MapsRenderingApiTests(SqlServerFixture sqlServer) : IAsyncLi
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Revoke_during_network_call_can_complete_and_prevents_release_even_after_regrant(bool regrant)
+    public async Task Historical_consent_changes_do_not_gate_personal_rendering(bool regrant)
     {
         await TransitionAsync(true);
         _credential.Acquire = async () =>
         {
             await TransitionAsync(false);
             if (regrant) await TransitionAsync(true);
+            return new AccessToken("personal-render-token", Now.AddMinutes(30));
+        };
+        using var token = await TokenAsync();
+        Assert.Equal(HttpStatusCode.OK, token.StatusCode);
+        Assert.Equal("personal-render-token", (await token.Content.ReadFromJsonAsync<MapsTokenResponse>(Ct))!.AccessToken);
+        _credential.Acquire = () => Task.FromResult(new AccessToken("next-render-token", Now.AddMinutes(30)));
+        using var next = await TokenAsync();
+        Assert.Equal(HttpStatusCode.OK, next.StatusCode); // Existing granted/revoked state is irrelevant too.
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Account_restriction_during_network_call_prevents_token_release(bool passwordChange)
+    {
+        await TransitionAsync(true);
+        _credential.Acquire = async () =>
+        {
+            await RestrictAsync(passwordChange);
             return new AccessToken("must-not-release", Now.AddMinutes(30));
         };
         using var token = await TokenAsync();
@@ -173,12 +195,20 @@ public sealed class MapsRenderingApiTests(SqlServerFixture sqlServer) : IAsyncLi
     }
 
     [Fact]
-    public async Task Deletion_during_network_call_prevents_token_release()
+    public async Task Economic_suspension_during_network_call_prevents_token_release()
     {
-        await TransitionAsync(true);
         _credential.Acquire = async () =>
         {
-            await RestrictAsync(false);
+            await using var scope = _factory.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<RoamlyDbContext>();
+            db.MapsEconomicStates.Add(new MapsEconomicState
+            {
+                ResourceId = "synthetic-resource", Revision = 1, SuspendedAtUtc = Now.UtcDateTime,
+                SuspensionReason = "ThresholdReached", PeriodStartUtc = Now.UtcDateTime,
+                PeriodEndUtc = Now.AddMonths(1).UtcDateTime, AlertPending = true,
+                ReportedAmountEur = 1, ObservedAtUtc = Now.UtcDateTime, CoveredThroughUtc = Now.UtcDateTime,
+            });
+            await db.SaveChangesAsync(Ct);
             return new AccessToken("must-not-release", Now.AddMinutes(30));
         };
         using var token = await TokenAsync();

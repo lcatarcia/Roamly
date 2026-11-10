@@ -16,7 +16,7 @@
     "design:axe": "node scripts/axe-check.mjs",
     "test:camper-flow": "node scripts/camper-flow-check.mjs",
     "test:saved-places-flow": "npm run build && node scripts/saved-places-flow-check.mjs",
-    "test:saved-places-map": "node --test scripts/tests/places-map.test.mjs && node scripts/saved-places-map-check.mjs",
+    "test:saved-places-map": "node --test scripts/tests/places-map.test.mjs scripts/tests/google-maps-position.test.mjs && node scripts/saved-places-map-check.mjs",
     "test:fuel-estimate-flow": "node scripts/fuel-estimate-flow-check.mjs",
     "test:fuel-estimate": "node --test scripts/tests/fuel-estimate.test.mjs",
     "test:trip-journal-flow": "node scripts/trip-journal-flow-check.mjs",

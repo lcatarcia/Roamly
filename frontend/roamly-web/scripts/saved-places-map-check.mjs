@@ -13,7 +13,7 @@ const origin = 'https://127.0.0.1:4323'
 const maliciousName = '<img src=x onerror=alert(1)> Posto salvato'
 const sdk = `
 export const AuthenticationType = { anonymous: 'anonymous' };
-const state = window.__maps = { created: 0, disposed: 0, live: 0, options: [], maps: [] };
+const state = window.__maps = { created: 0, disposed: 0, live: 0, options: [], maps: [], positions: [] };
 export class HtmlMarker {
   constructor(options) { this.options = options; }
 }
@@ -23,7 +23,7 @@ export class Map {
     state.created++; state.live++; state.options.push(options); state.maps.push(this);
     this.events = { add: (event, fn) => { this.handlers[event] = fn; } };
     this.markers = {
-      add: markers => markers.forEach(m => container.appendChild(m.options.htmlContent)),
+      add: markers => { state.positions = markers.map(m => m.options.position); markers.forEach(m => container.appendChild(m.options.htmlContent)); },
       remove: markers => markers.forEach(m => m.options.htmlContent.remove())
     };
     const attribution = document.createElement('span');
@@ -56,8 +56,7 @@ async function main() {
     const errors = []
     const external = []
     page.on('pageerror', error => errors.push(error.message))
-    let granted = false
-    let revision = 0
+    let consentCalls = 0
     let tokenCount = 0
     let sdkLoads = 0
     let cssLoads = 0
@@ -70,6 +69,9 @@ async function main() {
       id: `place-${category}`, name: category === 0 ? maliciousName : `Categoria ${category}`,
       category, position: { latitude: category, longitude: category }, notes: 'Nota locale', address: null,
     }))
+    places[0].position = null
+    places[0].googleMapsUrl = 'https://www.google.com/maps/place/Bunker/@42.2370291,12.5091909,805m/data=!3d42.2370252!4d12.5117658'
+    places[1].googleMapsUrl = 'https://maps.google.com/?q=9,8'
     await page.route('**/*', async route => {
       const request = route.request()
       const url = new URL(request.url())
@@ -88,19 +90,10 @@ async function main() {
         isConfigured: configured, accountClientId: configured ? 'maps-account-id' : null, domain: 'eu.atlas.microsoft.com',
       })
       if (url.pathname.startsWith('/api/v1/me/consents/')) {
-        if (request.method() === 'POST') {
-          const input = request.postDataJSON()
-          assert.equal(input.version, 'v1')
-          assert.equal(input.textReference, 'roamly:azure-maps-render:v1')
-          granted = url.pathname.endsWith('/grants')
-          revision++
-          return json({ revision }, 201)
-        }
-        return json({ purpose: 'azure-maps-render', version: 'v1',
-          textReference: 'roamly:azure-maps-render:v1', isActive: true, isGranted: granted, revision })
+        consentCalls++
+        return json({ title: 'Consent must not be required' }, 503)
       }
       if (url.pathname === '/api/v1/maps/token') {
-        assert.equal(granted, true, 'token only after explicit consent')
         assert.equal(request.headers()['x-xsrf-token'], 'csrf')
         tokenCount++
         if (delayToken) await delayToken
@@ -140,13 +133,12 @@ async function main() {
     assert.equal(sdkLoads, 0)
     assert.equal(cssLoads, 0)
     await page.getByRole('button', { name: 'Mappa', exact: true }).click()
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).waitFor()
-    assert.equal(sdkLoads, 0, 'SDK is not loaded while asking consent')
-    assert.equal(tokenCount, 0)
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
     const pins = page.locator('.saved-place-map-pin')
     await pins.first().waitFor()
     assert.equal(await pins.count(), 14)
+    assert.deepEqual(await page.evaluate(() => window.__maps.positions[0]), [12.5117658, 42.2370252],
+      'historical null position gets the exact Bunker pin without resaving')
+    assert.deepEqual(await page.evaluate(() => window.__maps.positions[1]), [1, 1], 'manual position wins')
     assert.ok(sdkLoads > 0)
     assert.equal(await pins.first().textContent(), '♧' + maliciousName)
     assert.equal(await page.locator('.saved-places-map img').count(), 0, 'labels use textContent, never HTML')
@@ -184,7 +176,6 @@ async function main() {
     const details = page.getByRole('region', { name: 'Dettagli luogo selezionato' })
     await details.getByText(maliciousName).waitFor()
     await details.getByText('Nota aggiornata con If-Match').waitFor()
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
     await pins.last().waitFor()
     await pins.last().click()
     await details.getByText('Categoria 13', { exact: true }).waitFor()
@@ -195,7 +186,6 @@ async function main() {
     await lastCard.waitFor({ state: 'detached' })
     await page.getByRole('button', { name: 'Mappa', exact: true }).click()
     assert.equal(await details.count(), 0, 'deleted selection cannot leave stale details')
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
     await pins.first().waitFor()
     assert.equal(await pins.count(), 13, 'deleted place has no pin')
     assert.deepEqual(mutations, [
@@ -203,15 +193,14 @@ async function main() {
       { id: 'place-13', method: 'DELETE', version: 1 },
     ])
 
-    await page.getByRole('button', { name: 'Revoca consenso e chiudi mappa' }).click()
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).waitFor()
+    await page.getByRole('button', { name: 'Lista', exact: true }).click()
     assert.equal(await page.evaluate(() => window.__maps.live), 0)
-    const tokensAfterRevoke = tokenCount
+    const tokensAfterClose = tokenCount
     await page.evaluate(() => window.__maps.maps.at(-1).options.authOptions.getToken(() => {}, () => {}))
-    assert.equal(tokenCount, tokensAfterRevoke, 'disposed callback cannot renew')
+    assert.equal(tokenCount, tokensAfterClose, 'disposed callback cannot renew')
 
     failToken = true
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
+    await page.getByRole('button', { name: 'Mappa', exact: true }).click()
     await page.getByRole('alert').filter({ hasText: "Non e' stato possibile caricare la mappa" }).waitFor()
     await page.getByRole('button', { name: 'Lista', exact: true }).click()
     await page.getByRole('heading', { name: maliciousName, exact: true }).waitFor()
@@ -220,9 +209,9 @@ async function main() {
     // Late token completion after changing view cannot revive the map.
     let release
     delayToken = new Promise(resolve => { release = resolve })
+    const pendingToken = page.waitForRequest('**/api/v1/maps/token')
     await page.getByRole('button', { name: 'Mappa', exact: true }).click()
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
-    await page.waitForRequest('**/api/v1/maps/token')
+    await pendingToken
     await page.getByRole('button', { name: 'Lista', exact: true }).click()
     release()
     delayToken = null
@@ -237,16 +226,21 @@ async function main() {
     await page.reload({ waitUntil: 'networkidle' })
     const sdkBeforeEmpty = sdkLoads
     const tokensBeforeEmpty = tokenCount
+    const emptyToken = page.waitForResponse('**/api/v1/maps/token')
     await page.getByRole('button', { name: 'Mappa', exact: true }).click()
-    await page.getByRole('button', { name: 'Consenti e apri mappa' }).click()
-    await page.getByText('Nessun luogo caricato ha coordinate valide. Aggiungile manualmente per vedere i pin.').waitFor()
-    assert.equal(sdkLoads, sdkBeforeEmpty, 'empty map never loads SDK')
-    assert.equal(tokenCount, tokensBeforeEmpty, 'empty map never acquires token')
+    await emptyToken
+    await page.getByText('Nessun luogo caricato ha coordinate valide. La mappa resta disponibile; aggiungi un link con coordinate o inseriscile manualmente per vedere i pin.').waitFor()
+    await page.waitForFunction(() => window.__maps?.live === 1)
+    assert.ok(sdkLoads >= sdkBeforeEmpty)
+    assert.ok(tokenCount > tokensBeforeEmpty, 'empty map acquires token and shows base map')
+    assert.equal(await pins.count(), 0)
+    assert.deepEqual(await page.evaluate(() => window.__maps.options.at(-1).center), [12, 42])
+    assert.equal(consentCalls, 0, 'no GET or POST consent, even when registry is unavailable')
     await page.setViewportSize({ width: 390, height: 844 })
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     assert.deepEqual(errors, [])
     assert.deepEqual(external, [], 'all external requests must remain absent')
-    console.log('saved-places-map-check: PASS (lazy consent, safe category pins, selection, pagination, revoke, errors, late response, StrictMode; no Azure).')
+    console.log('saved-places-map-check: PASS (direct lazy map, empty canvas, safe pins, CRUD, no consent, errors, late response, StrictMode; no Azure).')
   } catch (error) {
     console.error(serverOutput.slice(-2000))
     throw error

@@ -21,11 +21,18 @@ public sealed record SavedPlaceResponse(
             place.Id,
             place.Name,
             (int)place.Category,
-            SavedPlacePositionResponse.From(place.Position),
+            SavedPlacePositionResponse.From(place.Position ?? GoogleMapsPosition.Parse(place.GoogleMapsUrl)),
             place.Address,
             place.Notes,
             place.GoogleMapsUrl);
     }
+
+    /// <summary>Completa solo la rappresentazione, senza modificare dati o RowVersion.</summary>
+    public SavedPlaceResponse WithEffectivePosition() =>
+        Position is not null ? this : this with
+        {
+            Position = SavedPlacePositionResponse.From(GoogleMapsPosition.Parse(GoogleMapsUrl)),
+        };
 }
 
 /// <summary>Risposta con il token di versione da esporre come ETag nell'header.</summary>

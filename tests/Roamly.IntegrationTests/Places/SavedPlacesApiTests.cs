@@ -57,6 +57,85 @@ public sealed class SavedPlacesApiTests(SqlServerFixture sqlServer) : IAsyncLife
     }
 
     [Fact]
+    public async Task Link_coordinates_are_used_for_create_replay_and_update_but_manual_position_wins()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = NewId();
+        const string url = "https://www.google.com/maps/place/Bunker/@42.2370291,12.5091909,805m/data=!3d42.2370252!4d12.5117658";
+        var input = new { id, name = "Bunker Soratte", category = 8, googleMapsUrl = url };
+        using var created = await _client.PostJsonAsync("/api/v1/saved-places", input, ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var place = await created.Content.ReadFromJsonAsync<SavedPlaceResponse>(ct);
+        Assert.Equal(42.2370252m, place!.Position?.Latitude);
+        Assert.Equal(12.5117658m, place.Position?.Longitude);
+        Assert.Equal(url, place.GoogleMapsUrl);
+        using var replay = await _client.PostJsonAsync("/api/v1/saved-places", input, ct);
+        Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+        using var updated = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, $"/api/v1/saved-places/{id}", new
+            {
+                name = "Bunker", category = 8, googleMapsUrl = "https://maps.google.com/?q=1,2",
+            }, ETagOf(created), ct);
+        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+        Assert.Equal(1m, (await updated.Content.ReadFromJsonAsync<SavedPlaceResponse>(ct))!.Position?.Latitude);
+        using var manual = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, $"/api/v1/saved-places/{id}", new
+            {
+                name = "Bunker", category = 8, googleMapsUrl = url,
+                position = new { latitude = 9m, longitude = 8m },
+            }, ETagOf(updated), ct);
+        Assert.Equal(HttpStatusCode.OK, manual.StatusCode);
+        Assert.Equal(9m, (await manual.Content.ReadFromJsonAsync<SavedPlaceResponse>(ct))!.Position?.Latitude);
+        using var manualCreate = await _client.PostJsonAsync("/api/v1/saved-places", new
+        {
+            id = NewId(), name = "Posizione manuale", category = 8, googleMapsUrl = url,
+            position = new { latitude = 7m, longitude = 6m },
+        }, ct);
+        Assert.Equal(HttpStatusCode.Created, manualCreate.StatusCode);
+        using var manualRead = await _client.GetAsync(manualCreate.Headers.Location!.OriginalString, ct);
+        Assert.Equal(7m, (await manualRead.Content.ReadFromJsonAsync<SavedPlaceResponse>(ct))!.Position?.Latitude);
+    }
+
+    [Fact]
+    public async Task Historical_null_position_is_derived_on_reads_without_mutating_the_resource()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = NewId();
+        await using (var db = CreateOwnerContext())
+        {
+            db.SavedPlaces.Add(new SavedPlace
+            {
+                Id = id, OwnerId = _ownerId, Name = "Bunker Soratte", Category = SavedPlaceCategory.PointOfInterest,
+                GoogleMapsUrl = "https://www.google.com/maps/place/Bunker/@42.2370291,12.5091909,805m/data=!3d42.2370252!4d12.5117658",
+                CreatedAtUtc = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc),
+            });
+            db.SavedPlaces.Add(new SavedPlace
+            {
+                Id = NewId(), OwnerId = _ownerId, Name = "Link breve", Category = SavedPlaceCategory.City,
+                GoogleMapsUrl = "https://maps.app.goo.gl/example",
+                CreatedAtUtc = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc),
+            });
+            db.SavedPlaces.Add(new SavedPlace
+            {
+                Id = NewId(), OwnerId = _ownerId, Name = "Senza posizione", Category = SavedPlaceCategory.City,
+                CreatedAtUtc = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc),
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        using var read = await _client.GetAsync($"/api/v1/saved-places/{id}", ct);
+        Assert.Equal(42.2370252m, (await read.Content.ReadFromJsonAsync<SavedPlaceResponse>(ct))!.Position?.Latitude);
+        using var listed = await _client.GetAsync("/api/v1/saved-places", ct);
+        var page = await listed.Content.ReadFromJsonAsync<SavedPlacePage>(ct);
+        Assert.Equal(3, page!.Items.Count);
+        Assert.Equal(12.5117658m, Assert.Single(page.Items, p => p.Id == id).Position?.Longitude);
+        Assert.All(page.Items.Where(p => p.Id != id), place => Assert.Null(place.Position));
+        await using var verify = CreateOwnerContext();
+        var stored = await verify.SavedPlaces.AsNoTracking().SingleAsync(p => p.OwnerId == _ownerId && p.Id == id, ct);
+        Assert.Null(stored.Position);
+        Assert.Equal(ETagOf(read), Roamly.Api.Common.Http.RowVersionEtag.Format(stored.RowVersion));
+    }
+
+    [Fact]
     public async Task traveller_can_create_a_saved_place_and_find_its_manual_details_in_the_list()
     {
         var id = NewId();
