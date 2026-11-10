@@ -5895,9 +5895,19 @@
           },
           "odometerAxis": {
             "$ref": "#/components/schemas/CamperDashboardOdometerAxis"
+          },
+          "isRecurring": {
+            "type": "boolean",
+            "default": true
+          },
+          "lastServiceIsUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "Una manutenzione attiva con i due assi di scadenza indipendenti."
+        "description": "Una manutenzione attiva con i due assi di scadenza indipendenti o intervento non periodico."
       },
       "CamperDashboardOdometer": {
         "required": [
@@ -7153,6 +7163,19 @@
               "string"
             ],
             "format": "int16"
+          },
+          "performedOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "isUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "description": "Corpo di \u0060POST /api/v1/campers/{camperId}/maintenance\u0060."
@@ -7235,9 +7258,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastServiceIsUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "Rappresentazione API di una regola di manutenzione ricorrente."
+        "description": "Rappresentazione API di una regola di manutenzione ricorrente o intervento non periodico."
       },
       "CreateSavedPlaceRequest": {
         "required": [
@@ -7803,6 +7832,10 @@
               "null",
               "string"
             ]
+          },
+          "isUnderWarranty": {
+            "type": "boolean",
+            "default": false
           }
         },
         "description": "Voce dello storico immutabile degli interventi."
@@ -7885,6 +7918,12 @@
               "string"
             ],
             "format": "int32"
+          },
+          "lastServiceIsUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "description": "Voce di una pagina della collection delle manutenzioni."
@@ -8451,6 +8490,12 @@
               "null",
               "string"
             ]
+          },
+          "isUnderWarranty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
         "description": "Corpo di \u0060POST /api/v1/campers/{camperId}/maintenance/{itemId}/logs\u0060."
@@ -8509,6 +8554,10 @@
               "null",
               "string"
             ]
+          },
+          "isUnderWarranty": {
+            "type": "boolean",
+            "default": false
           }
         },
         "description": "Rappresentazione API del fatto immutabile registrato."

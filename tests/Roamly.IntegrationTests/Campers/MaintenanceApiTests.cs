@@ -98,6 +98,99 @@ public sealed class MaintenanceApiTests(SqlServerFixture sqlServer) : IAsyncLife
     }
 
     [Fact]
+    public async Task owner_can_create_non_periodic_maintenance_with_date_and_warranty_and_record_logs()
+    {
+        var camperId = await CreateCamperAsync();
+        var itemId = NewId();
+        var performedOn = new DateOnly(2026, 4, 10);
+        var payload = new
+        {
+            id = itemId,
+            name = "Richiamo Isofix",
+            category = (int)MaintenanceCategory.Bodywork,
+            intervalKm = (int?)null,
+            intervalMonths = (short?)null,
+            performedOnUtc = performedOn,
+            isUnderWarranty = true,
+        };
+
+        using var response = await _client.PostJsonAsync(
+            $"/api/v1/campers/{camperId:D}/maintenance",
+            payload,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<MaintenanceItemResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(created);
+        Assert.Equal(itemId, created.Id);
+        Assert.Equal("Richiamo Isofix", created.Name);
+        Assert.Equal(performedOn, created.LastServiceOnUtc);
+        Assert.True(created.LastServiceIsUnderWarranty);
+        Assert.Null(created.NextDueOnUtc);
+
+        using var replayResponse = await _client.PostJsonAsync(
+            $"/api/v1/campers/{camperId:D}/maintenance",
+            payload,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+
+        using var conflictResponse = await _client.PostJsonAsync(
+            $"/api/v1/campers/{camperId:D}/maintenance",
+            new
+            {
+                id = itemId,
+                name = "Richiamo Isofix",
+                category = (int)MaintenanceCategory.Bodywork,
+                intervalKm = (int?)null,
+                intervalMonths = (short?)null,
+                performedOnUtc = performedOn,
+                isUnderWarranty = false,
+            },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, conflictResponse.StatusCode);
+
+        var dashboard = await GetDashboardAsync(camperId);
+        var dashboardItem = Assert.Single(dashboard.Maintenance);
+        Assert.Equal(itemId, dashboardItem.Id);
+        Assert.True(dashboardItem.HasServiceHistory);
+        Assert.False(dashboardItem.IsRecurring);
+        Assert.Equal(performedOn, dashboardItem.LastServiceOnUtc);
+        Assert.True(dashboardItem.LastServiceIsUnderWarranty);
+        Assert.Equal("NotConfigured", dashboardItem.TimeAxis.Status);
+        Assert.Equal("NotConfigured", dashboardItem.OdometerAxis.Status);
+
+        var secondLogId = NewId();
+        var secondDate = new DateOnly(2026, 5, 15);
+        using var logResponse = await PostMaintenanceLogAsync(
+            camperId,
+            itemId,
+            new
+            {
+                id = secondLogId,
+                performedOnUtc = secondDate,
+                workshop = "Officina Autorizzata",
+                isUnderWarranty = false,
+            });
+        Assert.Equal(HttpStatusCode.Created, logResponse.StatusCode);
+        var recordedLog = await logResponse.Content.ReadFromJsonAsync<MaintenanceLogResponse>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(recordedLog);
+        Assert.False(recordedLog.IsUnderWarranty);
+
+        using var historyResponse = await _client.GetAsync(
+            $"/api/v1/campers/{camperId:D}/maintenance/{itemId:D}/logs",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        var history = await historyResponse.Content.ReadFromJsonAsync<PageResponse<MaintenanceLogHistoryItem>>(
+            TestContext.Current.CancellationToken);
+        Assert.NotNull(history);
+        Assert.Equal(2, history.Items.Count);
+        Assert.Contains(history.Items, log => log.PerformedOnUtc == performedOn && log.IsUnderWarranty);
+        Assert.Contains(history.Items, log => log.PerformedOnUtc == secondDate && !log.IsUnderWarranty);
+    }
+
+    [Fact]
     public async Task maintenance_validation_uses_json_field_names_and_requires_a_recurrence()
     {
         var camperId = await CreateCamperAsync();
@@ -1069,7 +1162,8 @@ public sealed class MaintenanceApiTests(SqlServerFixture sqlServer) : IAsyncLife
         Guid Id,
         string Name,
         DateOnly? LastServiceOnUtc,
-        DateOnly? NextDueOnUtc);
+        DateOnly? NextDueOnUtc,
+        bool? LastServiceIsUnderWarranty = null);
 
     private sealed record DashboardResponse(
         DashboardOdometer? Odometer,
@@ -1088,7 +1182,9 @@ public sealed class MaintenanceApiTests(SqlServerFixture sqlServer) : IAsyncLife
         bool HasServiceHistory,
         DateOnly? LastServiceOnUtc,
         DashboardAxis TimeAxis,
-        DashboardOdometerAxis OdometerAxis);
+        DashboardOdometerAxis OdometerAxis,
+        bool IsRecurring = true,
+        bool? LastServiceIsUnderWarranty = null);
 
     private sealed record DashboardAxis(string Status, DateOnly? DueOnUtc);
 
@@ -1100,9 +1196,10 @@ public sealed class MaintenanceApiTests(SqlServerFixture sqlServer) : IAsyncLife
         Guid Id,
         DateOnly PerformedOnUtc,
         int? OdometerKm,
-        CostResponse? Cost);
+        CostResponse? Cost,
+        bool IsUnderWarranty = false);
 
-    private sealed record MaintenanceLogHistoryItem(DateOnly PerformedOnUtc);
+    private sealed record MaintenanceLogHistoryItem(DateOnly PerformedOnUtc, bool IsUnderWarranty = false);
 
     private sealed record CostResponse(decimal Amount, string Currency);
 }

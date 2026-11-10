@@ -3,7 +3,7 @@ using Roamly.Domain.Enums;
 
 namespace Roamly.Api.Features.Campers.CreateMaintenance;
 
-/// <summary>Rappresentazione API di una regola di manutenzione ricorrente.</summary>
+/// <summary>Rappresentazione API di una regola di manutenzione ricorrente o intervento non periodico.</summary>
 public sealed record CreateMaintenanceResponse(
     Guid Id,
     string Name,
@@ -13,7 +13,8 @@ public sealed record CreateMaintenanceResponse(
     DateOnly? LastServiceOnUtc,
     int? LastServiceOdometerKm,
     DateOnly? NextDueOnUtc,
-    int? NextDueOdometerKm)
+    int? NextDueOdometerKm,
+    bool? LastServiceIsUnderWarranty = null)
 {
     /// <summary>Proietta i dati della manutenzione senza esporre l'entita' EF.</summary>
     public static CreateMaintenanceResponse From(MaintenanceItem item)
@@ -27,6 +28,7 @@ public sealed record CreateMaintenanceResponse(
             item.LastServiceOnUtc,
             item.LastServiceOdometerKm,
             item.NextDueOnUtc,
-            item.NextDueOdometerKm);
+            item.NextDueOdometerKm,
+            item.LastServiceIsUnderWarranty);
     }
 }

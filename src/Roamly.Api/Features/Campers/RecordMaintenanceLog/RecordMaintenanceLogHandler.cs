@@ -179,7 +179,7 @@ public sealed class RecordMaintenanceLogHandler(
             .OrderByDescending(log => log.PerformedOnUtc)
             .ThenByDescending(log => log.CreatedAtUtc)
             .ThenByDescending(log => log.Id)
-            .Select(log => new LatestService(log.PerformedOnUtc, log.OdometerKm))
+            .Select(log => new LatestService(log.PerformedOnUtc, log.OdometerKm, log.IsUnderWarranty))
             .FirstAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -198,6 +198,7 @@ public sealed class RecordMaintenanceLogHandler(
 
         item.LastServiceOnUtc = latest.PerformedOnUtc;
         item.LastServiceOdometerKm = latest.OdometerKm;
+        item.LastServiceIsUnderWarranty = latest.IsUnderWarranty;
         item.NextDueOnUtc = item.IntervalMonths.HasValue
             ? latest.PerformedOnUtc.AddMonths(item.IntervalMonths.Value)
             : null;
@@ -307,6 +308,7 @@ public sealed class RecordMaintenanceLogHandler(
             Cost = cost,
             Workshop = request.Workshop,
             Notes = request.Notes,
+            IsUnderWarranty = request.IsUnderWarranty ?? false,
             CreatedAtUtc = createdAt,
         };
     }
@@ -324,7 +326,8 @@ public sealed class RecordMaintenanceLogHandler(
             && existing.OdometerKm == request.OdometerKm
             && existing.Cost == requestCost
             && string.Equals(existing.Workshop, request.Workshop, StringComparison.Ordinal)
-            && string.Equals(existing.Notes, request.Notes, StringComparison.Ordinal);
+            && string.Equals(existing.Notes, request.Notes, StringComparison.Ordinal)
+            && existing.IsUnderWarranty == (request.IsUnderWarranty ?? false);
         return sameContent
             ? new RecordMaintenanceLogResult(
                 RecordMaintenanceLogOutcome.Replayed,
@@ -344,5 +347,5 @@ public sealed class RecordMaintenanceLogHandler(
         return exception.GetBaseException() is SqlException { Number: 2601 or 2627 };
     }
 
-    private sealed record LatestService(DateOnly PerformedOnUtc, int? OdometerKm);
+    private sealed record LatestService(DateOnly PerformedOnUtc, int? OdometerKm, bool IsUnderWarranty);
 }

@@ -25,6 +25,7 @@ public sealed class MaintenanceItemBuilder : IEntityBuilder
             IntervalMonths = 24,
             LastServiceOnUtc = context.Today.AddDays(-200),
             LastServiceOdometerKm = 48000,
+            LastServiceIsUnderWarranty = true,
             NextDueOnUtc = context.Today.AddDays(530),
             NextDueOdometerKm = 68000,
             Origin = MaintenanceOrigin.User,

@@ -20,6 +20,7 @@ public sealed class MaintenanceLogConfiguration(RoamlyDbContextBase context)
         builder.Property(e => e.OdometerKm).HasColumnType("int");
         builder.Property(e => e.Workshop).HasNvarchar(80);
         builder.Property(e => e.Notes).HasNvarchar(1000);
+        builder.Property(e => e.IsUnderWarranty).HasColumnType("bit").HasDefaultValue(false).IsRequired();
 
         // Il costo dell'intervento vive qui, non in Expense: per questo ExpenseCategory
         // non ha il valore Maintenance (CONTEXT.md §2.2).

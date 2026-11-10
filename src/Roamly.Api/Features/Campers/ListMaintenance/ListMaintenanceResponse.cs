@@ -10,4 +10,5 @@ public sealed record ListMaintenanceResponse(
     DateOnly? LastServiceOnUtc,
     int? LastServiceOdometerKm,
     DateOnly? NextDueOnUtc,
-    int? NextDueOdometerKm);
+    int? NextDueOdometerKm,
+    bool? LastServiceIsUnderWarranty = null);

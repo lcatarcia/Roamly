@@ -27,6 +27,7 @@ public sealed class MaintenanceLogBuilder : IEntityBuilder
             Cost = new Money(189.9m, "EUR"),
             Workshop = "Officina Bianchi",
             Notes = "Sostituito anche il filtro.",
+            IsUnderWarranty = true,
             CreatedAtUtc = context.UtcNow,
         };
     }

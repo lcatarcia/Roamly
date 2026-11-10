@@ -10,7 +10,8 @@ public sealed record ListMaintenanceLogsResponse(
     int? OdometerKm,
     CostResponse? Cost,
     string? Workshop,
-    string? Notes)
+    string? Notes,
+    bool IsUnderWarranty = false)
 {
     /// <summary>Proietta il log senza esporre l'entita' EF.</summary>
     public static ListMaintenanceLogsResponse From(MaintenanceLog log)
@@ -24,7 +25,8 @@ public sealed record ListMaintenanceLogsResponse(
             log.OdometerKm,
             cost,
             log.Workshop,
-            log.Notes);
+            log.Notes,
+            log.IsUnderWarranty);
     }
 }
 

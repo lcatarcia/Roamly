@@ -4,7 +4,7 @@ using Roamly.Domain.Enums;
 namespace Roamly.Domain.Entities;
 
 /// <summary>
-/// Regola di una manutenzione ricorrente piu' lo stato di scadenza denormalizzato (CONTEXT.md §2.2).
+/// Regola di una manutenzione ricorrente o intervento non periodico piu' lo stato di scadenza denormalizzato (CONTEXT.md §2.2).
 /// </summary>
 public class MaintenanceItem : IOwnedResource
 {
@@ -34,6 +34,9 @@ public class MaintenanceItem : IOwnedResource
 
     /// <summary>Denormalizzato dall'ultimo <see cref="MaintenanceLog"/>.</summary>
     public int? LastServiceOdometerKm { get; set; }
+
+    /// <summary>Denormalizzato dall'ultimo <see cref="MaintenanceLog"/>: indica se l'ultimo intervento e' stato eseguito in garanzia.</summary>
+    public bool? LastServiceIsUnderWarranty { get; set; }
 
     /// <summary>Scadenza temporale persistita, calcolata dal dominio.</summary>
     public DateOnly? NextDueOnUtc { get; set; }

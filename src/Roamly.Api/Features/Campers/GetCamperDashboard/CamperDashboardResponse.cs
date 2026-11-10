@@ -18,14 +18,16 @@ public sealed record CamperDashboardCamper(
 /// <summary>Lettura datata del contachilometri, qualificata rispetto ai 90 giorni.</summary>
 public sealed record CamperDashboardOdometer(int ReadingKm, DateOnly TakenOnUtc, bool IsStale);
 
-/// <summary>Una manutenzione attiva con i due assi di scadenza indipendenti.</summary>
+/// <summary>Una manutenzione attiva con i due assi di scadenza indipendenti o intervento non periodico.</summary>
 public sealed record CamperDashboardMaintenance(
     Guid Id,
     string Name,
     bool HasServiceHistory,
     DateOnly? LastServiceOnUtc,
     CamperDashboardTimeAxis TimeAxis,
-    CamperDashboardOdometerAxis OdometerAxis);
+    CamperDashboardOdometerAxis OdometerAxis,
+    bool IsRecurring = true,
+    bool? LastServiceIsUnderWarranty = null);
 
 /// <summary>Stato della sola soglia temporale.</summary>
 public sealed record CamperDashboardTimeAxis(string Status, DateOnly? DueOnUtc);
