@@ -11,6 +11,9 @@ const app = '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/
 const endpoint = `https://management.azure.com${app}/revisions`
 const first = `${endpoint}?api-version=2024-03-01`
 const second = `${first}&$skipToken=page2`
+// Observed ARM shape: api-version, pageSize=20, unprefixed skipToken with base64 padding.
+// The token is synthetic; never retain real continuation tokens or response bodies.
+const armSecond = `${first}&pageSize=20&skipToken=${Buffer.from('page2').toString('base64')}`
 const image = `ghcr.io/example/roamly@sha256:${'a'.repeat(64)}`
 const revision = (suffix = 'fixture', active = true) => ({
   id: `${app}/revisions/ca-roamly-prod--${suffix}`,
@@ -172,6 +175,32 @@ test('opaque encoded skip tokens and query reordering stay on the exact ARM endp
   assert.deepEqual(result.calls, [first, continuation])
 })
 
+test('observed ARM continuation collects twenty plus one revisions and a missing terminal nextLink', () => {
+  const firstPage = [revision(), ...Array.from({ length: 19 }, (_, index) => revision(`old-${index}`, false))]
+  for (const script of scripts()) {
+    const result = collect({
+      [first]: { body: { value: firstPage, nextLink: armSecond } },
+      [armSecond]: { body: { value: [revision('old-last', false)] } },
+    }, { script })
+    assert.equal(result.exitCode, 0, result.errors)
+    assert.deepEqual(result.calls, [first, armSecond])
+    const body = JSON.parse(result.output)
+    assert.equal(body.value.length, 21)
+    assert.equal(body.value.filter(item => item.properties.active).length, 1)
+  }
+})
+
+test('observed ARM continuation cannot hide another active revision on the second page', {
+  skip: !jqAvailable && 'Install jq or set ROAMLY_TEST_JQ to execute the real gate predicate',
+}, () => {
+  const result = collect({
+    [first]: { body: { value: [revision()], nextLink: armSecond } },
+    [armSecond]: { body: { value: [revision('other')] } },
+  })
+  assert.equal(result.exitCode, 0, result.errors)
+  assert.equal(passesGate(result.output), false)
+})
+
 for (const target of [
   'https://evil.example/next',
   second.replace('https:', 'http:'),
@@ -185,6 +214,14 @@ for (const target of [
   second.replace('2024-03-01', '2025-01-01'),
   `${second}&api-version=2024-03-01`,
   `${second}&unexpected=parameter`,
+  `${armSecond}&pageSize=20`,
+  armSecond.replace('pageSize=20', 'pageSize=21'),
+  armSecond.replace('pageSize=20', 'pageSize=0'),
+  armSecond.replace('pageSize=20', 'pageSize=20.0'),
+  armSecond.replace('pageSize=20', 'pageSize='),
+  `${armSecond}&unexpected=parameter`,
+  armSecond.replace('management.azure.com', 'evil.example'),
+  armSecond.replace('ca-roamly-prod/revisions', 'other-app/revisions'),
   `${second}#fragment`,
   `${second}%invalid`,
   `${first}&$skipToken=`,
@@ -242,6 +279,23 @@ test('a cyclic continuation stops before requesting the same page again', () => 
   assert.deepEqual(result.calls, [first, second])
   assert.match(result.errors, /ContinuationCycle/)
   assert.equal(result.output, '')
+})
+
+test('observed ARM continuation still rejects cycles, duplicate revisions and empty later pages', () => {
+  for (const [body, category] of [
+    [{ value: [revision('old', false)], nextLink: armSecond }, 'ContinuationCycle'],
+    [{ value: [revision()] }, 'DuplicateRevision'],
+    [{ value: [] }, 'InvalidPage'],
+  ]) {
+    const result = collect({
+      [first]: { body: { value: [revision()], nextLink: armSecond } },
+      [armSecond]: { body },
+    })
+    assert.notEqual(result.exitCode, 0)
+    assert.deepEqual(result.calls, [first, armSecond])
+    assert.equal(result.output, '')
+    assert.match(result.errors, new RegExp(category))
+  }
 })
 
 test('pagination stops at one hundred pages without publishing a truncated list', () => {
