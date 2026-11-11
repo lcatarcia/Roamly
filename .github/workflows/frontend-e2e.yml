@@ -85,8 +85,9 @@ jobs:
       - name: Installazione riproducibile delle dipendenze
         run: npm ci
 
-      - name: Installazione di Chromium e delle dipendenze di sistema
-        run: npx playwright install --with-deps chromium
+      # The hosted runner already supplies Chromium's native libraries.
+      - name: Installazione di Chromium
+        run: npx playwright install chromium
 
       - name: axe sui temi chiaro e scuro
         run: npm run design:axe
