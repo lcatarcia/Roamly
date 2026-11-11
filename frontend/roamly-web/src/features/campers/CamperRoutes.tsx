@@ -291,7 +291,7 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
   }
 
   return (
-    <PageContainer size="dashboard" className="justify-start gap-8">
+    <PageContainer size="dashboard" className="justify-start gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <BackToCampers />
@@ -311,7 +311,7 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
             {t('neutral.camper.profile.open')}
           </Link>
           <Link
-            className="inline-flex h-10 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-xs transition-colors hover:bg-primary/90"
+            className="inline-flex h-10 items-center justify-center rounded-full border border-border-strong bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
             to="/trips/new"
           >
             + Nuovo viaggio
@@ -320,8 +320,8 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
       </div>
 
       <header className="overflow-hidden rounded-3xl border border-border bg-card shadow-xs">
-        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] lg:items-center">
-          <div className="space-y-5">
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)] lg:items-center">
+          <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
                 <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
@@ -342,74 +342,54 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
                 </p>
               )}
             </div>
-
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-2xl border border-border bg-background p-3.5">
-                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lunghezza
-                </dt>
-                <dd className="mt-1 text-base font-bold text-foreground">
-                  {profile?.lengthMm ? `${formatKilometers(profile.lengthMm)} mm` : '—'}
-                </dd>
-                <dd className="mt-0.5 text-xs text-muted-foreground">
-                  {profile?.widthMm ? `Largh. ${formatKilometers(profile.widthMm)} mm` : 'Ingombro'}
-                </dd>
-              </div>
-              <div className="rounded-2xl border border-border bg-background p-3.5">
-                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Altezza
-                </dt>
-                <dd className="mt-1 text-base font-bold text-foreground">
-                  {profile?.heightMm ? `${formatKilometers(profile.heightMm)} mm` : '—'}
-                </dd>
-                <dd className="mt-0.5 text-xs text-muted-foreground">
-                  Fuori tutto
-                </dd>
-              </div>
-              <div className="rounded-2xl border border-border bg-background p-3.5">
-                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Acqua chiara
-                </dt>
-                <dd className="mt-1 text-base font-bold text-foreground">
-                  {profile?.freshWaterL ? `${profile.freshWaterL} L` : '—'}
-                </dd>
-                <dd className="mt-0.5 text-xs text-muted-foreground">
-                  {profile?.greyWaterL ? `Grigie ${profile.greyWaterL} L` : 'Serbatoi'}
-                </dd>
-              </div>
-              <div className="rounded-2xl border border-border bg-background p-3.5">
-                <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Autonomia
-                </dt>
-                <dd className="mt-1 text-base font-bold text-foreground">
-                  {profile?.fuelTankL ? `${profile.fuelTankL} L` : '—'}
-                </dd>
-                <dd className="mt-0.5 text-xs text-muted-foreground">
-                  {profile?.gasKg ? `Gas ${profile.gasKg} kg` : ' Impianto'}
-                </dd>
-              </div>
-            </dl>
           </div>
-
-          <div className="space-y-4">
-            <CamperHeroMedia
-              camperName={camper.name}
-              vehicleKind={camper.vehicleKind}
-              profile={profile}
-              canEditPhoto={Boolean(profile && profileEtag)}
-              isSavingPhoto={heroPhotoMutation.isPending}
-              onUploadPhoto={(file) => {
-                void handleHeroFileSelected(file)
-              }}
-              onResetPhoto={() => heroPhotoMutation.mutate(null)}
-            />
-            <OdometerPanel odometer={odometer} />
-          </div>
+          <OdometerPanel odometer={odometer} />
         </div>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border px-6 py-5 sm:grid-cols-4 sm:px-8">
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Lunghezza
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {profile?.lengthMm ? `${formatKilometers(profile.lengthMm)} mm` : '—'}
+            </dd>
+            <dd className="mt-0.5 text-xs text-muted-foreground">
+              {profile?.widthMm ? `Largh. ${formatKilometers(profile.widthMm)} mm` : 'Ingombro'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Altezza
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {profile?.heightMm ? `${formatKilometers(profile.heightMm)} mm` : '—'}
+            </dd>
+            <dd className="mt-0.5 text-xs text-muted-foreground">Fuori tutto</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Acqua chiara
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {profile?.freshWaterL ? `${profile.freshWaterL} L` : '—'}
+            </dd>
+            <dd className="mt-0.5 text-xs text-muted-foreground">
+              {profile?.greyWaterL ? `Grigie ${profile.greyWaterL} L` : 'Serbatoi'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Autonomia
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
+              {profile?.fuelTankL ? `${profile.fuelTankL} L` : '—'}
+            </dd>
+            <dd className="mt-0.5 text-xs text-muted-foreground">
+              {profile?.gasKg ? `Gas ${profile.gasKg} kg` : ' Impianto'}
+            </dd>
+          </div>
+        </dl>
       </header>
-
-      <CamperDashboardManualPanel camperId={camper.id} />
-      <EquipmentInventory camperId={camper.id} />
 
       <section aria-labelledby="maintenance-heading" className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -435,6 +415,31 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
         )}
         <CreateMaintenanceForm camperId={camper.id} />
       </section>
+
+      <section
+        aria-labelledby="camper-details-heading"
+        className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]"
+      >
+        <div className="space-y-3">
+          <h2 id="camper-details-heading" className="text-xl font-semibold">
+            {t('neutral.camper.profile.title')}
+          </h2>
+          <CamperHeroMedia
+            camperName={camper.name}
+            vehicleKind={camper.vehicleKind}
+            profile={profile}
+            canEditPhoto={Boolean(profile && profileEtag)}
+            isSavingPhoto={heroPhotoMutation.isPending}
+            onUploadPhoto={(file) => {
+              void handleHeroFileSelected(file)
+            }}
+            onResetPhoto={() => heroPhotoMutation.mutate(null)}
+          />
+        </div>
+        <CamperDashboardManualPanel camperId={camper.id} />
+      </section>
+
+      <EquipmentInventory camperId={camper.id} />
     </PageContainer>
   )
 }
@@ -670,7 +675,7 @@ function OdometerPanel({
 }) {
   return (
     <section
-      className="rounded-2xl border border-border bg-background p-4"
+      className="rounded-3xl bg-secondary p-5 sm:p-6"
       aria-labelledby="odometer-heading"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -688,12 +693,14 @@ function OdometerPanel({
         )}
       </div>
       {odometer === null ? (
-        <p className="mt-1.5 text-sm text-muted-foreground">
+        <p className="mt-3 text-sm text-muted-foreground">
           {t('neutral.camper.dashboard.noOdometer')}
         </p>
       ) : (
         <>
-          <p className="numeral-display mt-1">{formatKilometers(odometer.readingKm)} km</p>
+          <p className="numeral-display mt-3 text-numeral">
+            {formatKilometers(odometer.readingKm)} km
+          </p>
           {odometer.isStale && (
             <p className="mt-1.5 text-xs text-muted-foreground">
               {t('neutral.camper.dashboard.staleOdometer')}
