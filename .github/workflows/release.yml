@@ -213,9 +213,11 @@ jobs:
             let url
             try { url = new URL(next) } catch { fail('ContinuationTargetInvalid') }
             const query = [...url.searchParams]
+            const pageSizes = query.filter(([key]) => key === 'pageSize')
             if (url.origin !== 'https://management.azure.com' ||
                 query.filter(([key, value]) => key === 'api-version' && value === '2024-03-01').length !== 1 ||
-                query.length !== (page === 0 ? 1 : 2) ||
+                pageSizes.length > 1 || pageSizes.some(([, value]) => value !== '20') ||
+                query.length !== (page === 0 ? 1 : 2 + pageSizes.length) ||
                 (page > 0 && query.filter(([key, value]) => /^\$?skiptoken$/i.test(key) && value.length > 0).length !== 1)) {
               fail('ContinuationTargetInvalid')
             }
@@ -696,9 +698,11 @@ jobs:
             let url
             try { url = new URL(next) } catch { fail('ContinuationTargetInvalid') }
             const query = [...url.searchParams]
+            const pageSizes = query.filter(([key]) => key === 'pageSize')
             if (url.origin !== 'https://management.azure.com' ||
                 query.filter(([key, value]) => key === 'api-version' && value === '2024-03-01').length !== 1 ||
-                query.length !== (page === 0 ? 1 : 2) ||
+                pageSizes.length > 1 || pageSizes.some(([, value]) => value !== '20') ||
+                query.length !== (page === 0 ? 1 : 2 + pageSizes.length) ||
                 (page > 0 && query.filter(([key, value]) => /^\$?skiptoken$/i.test(key) && value.length > 0).length !== 1)) {
               fail('ContinuationTargetInvalid')
             }
