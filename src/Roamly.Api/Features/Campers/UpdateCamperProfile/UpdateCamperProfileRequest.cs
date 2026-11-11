@@ -136,7 +136,8 @@ public sealed record UpdateCamperProfileRequest(
         if (ManualViewImages is not null
             && (!IsValidViewImage(ManualViewImages.Side)
                 || !IsValidViewImage(ManualViewImages.Front)
-                || !IsValidViewImage(ManualViewImages.Top)))
+                || !IsValidViewImage(ManualViewImages.Top)
+                || !IsValidViewImage(ManualViewImages.Hero)))
         {
             yield return new ValidationResult(
                 "Ogni immagine delle viste deve essere un'immagine PNG, JPEG o WebP valida oppure un URL HTTP/HTTPS.",

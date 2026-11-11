@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { CamperManualSection } from '@/features/campers/CamperManualSection'
+import { resizeImageFileToDataUrl } from '@/features/campers/camperImageUtils'
 import { t } from '@/i18n/catalog'
 import {
   ApiError,
@@ -133,6 +134,59 @@ function CamperProfileEditor({
     setValues((current) => ({ ...current, [key]: value }))
   }
 
+  async function handleHeroPhotoSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+
+    const dataUrl = await resizeImageFileToDataUrl(file)
+    if (!dataUrl) {
+      return
+    }
+
+    const nextViewImages: CamperManualViewImages = {
+      ...manualViewImages,
+      hero: dataUrl,
+    }
+    setManualViewImages(nextViewImages)
+    if (values.name.trim()) {
+      saveMutation.mutate({
+        profile: toProfileInput(
+          values,
+          manualSourceName,
+          manualSourceUrl,
+          manualMeasurements,
+          nextViewImages,
+          true,
+        ),
+        etag: currentEtag,
+      })
+    }
+  }
+
+  function handleResetHeroPhoto() {
+    const nextViewImages: CamperManualViewImages = {
+      ...manualViewImages,
+      hero: null,
+    }
+    setManualViewImages(nextViewImages)
+    if (values.name.trim()) {
+      saveMutation.mutate({
+        profile: toProfileInput(
+          values,
+          manualSourceName,
+          manualSourceUrl,
+          manualMeasurements,
+          nextViewImages,
+          true,
+        ),
+        etag: currentEtag,
+      })
+    }
+  }
+
   function handleApplyParsedDraft(draft: CamperManualParseResponse, saveImmediately: boolean) {
     const nextValues = mergeDraftIntoValues(values, draft)
     const nextSourceName = draft.sourceName || manualSourceName
@@ -206,6 +260,57 @@ function CamperProfileEditor({
               onChange={updateField} />
             <SelectProfileField fieldKey="vehicleKind" label={t('neutral.camper.profile.vehicleKind')}
               value={values.vehicleKind} options={vehicleOptions()} onChange={updateField} />
+            <div className="sm:col-span-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5">
+              <div className="flex items-center gap-3">
+                {manualViewImages.hero && (
+                  <img
+                    src={manualViewImages.hero}
+                    alt={`Anteprima foto di ${values.name || 'camper'}`}
+                    className="h-14 w-24 rounded-lg border border-border object-cover"
+                  />
+                )}
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Foto principale (Hero Dashboard)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Carica una foto reale del tuo camper da mostrare nell&apos;intestazione della dashboard.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label
+                  htmlFor="camper-profile-hero-photo"
+                  className="inline-flex h-9 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-4 text-xs font-semibold text-secondary-foreground shadow-2xs transition-colors hover:bg-muted"
+                >
+                  {saveMutation.isPending
+                    ? 'Salvataggio…'
+                    : manualViewImages.hero
+                      ? 'Cambia foto'
+                      : 'Carica foto'}
+                </label>
+                <input
+                  id="camper-profile-hero-photo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  disabled={saveMutation.isPending}
+                  aria-label="Carica foto principale del camper"
+                  onChange={(event) => {
+                    void handleHeroPhotoSelected(event)
+                  }}
+                />
+                {manualViewImages.hero && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={saveMutation.isPending}
+                    onClick={handleResetHeroPhoto}
+                  >
+                    Rimuovi foto
+                  </Button>
+                )}
+              </div>
+            </div>
           </fieldset>
 
           <ProfileFieldset title={t('neutral.camper.profile.dimensions')} fields={DIMENSIONS}

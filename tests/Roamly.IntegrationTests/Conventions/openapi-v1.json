@@ -6575,9 +6575,17 @@
               "null",
               "string"
             ]
+          },
+          "hero": {
+            "maxLength": 600000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "Immagini personalizzate opzionali (data URL o URL HTTP/HTTPS) per le tre viste del camper."
+        "description": "Immagini personalizzate opzionali (data URL o URL HTTP/HTTPS) per le viste e la foto principale del camper."
       },
       "CamperProfileResponse": {
         "required": [

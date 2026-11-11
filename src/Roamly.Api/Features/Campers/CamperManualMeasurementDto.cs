@@ -15,11 +15,12 @@ public sealed record CamperManualMeasurementDto(
     [property: StringLength(300)] string? Description = null,
     [property: Range(1, 2000)] int? Page = null);
 
-/// <summary>Immagini personalizzate opzionali (data URL o URL HTTP/HTTPS) per le tre viste del camper.</summary>
+/// <summary>Immagini personalizzate opzionali (data URL o URL HTTP/HTTPS) per le viste e la foto principale del camper.</summary>
 public sealed record CamperManualViewImagesDto(
     [property: StringLength(600_000)] string? Side = null,
     [property: StringLength(600_000)] string? Front = null,
-    [property: StringLength(600_000)] string? Top = null);
+    [property: StringLength(600_000)] string? Top = null,
+    [property: StringLength(600_000)] string? Hero = null);
 
 /// <summary>Serializzazione JSON deterministica delle misure di dettaglio e delle viste personalizzate del camper.</summary>
 public static class CamperManualMeasurementsSerializer
@@ -125,12 +126,13 @@ public static class CamperManualMeasurementsSerializer
         var side = string.IsNullOrWhiteSpace(viewImages.Side) ? null : viewImages.Side.Trim();
         var front = string.IsNullOrWhiteSpace(viewImages.Front) ? null : viewImages.Front.Trim();
         var top = string.IsNullOrWhiteSpace(viewImages.Top) ? null : viewImages.Top.Trim();
+        var hero = string.IsNullOrWhiteSpace(viewImages.Hero) ? null : viewImages.Hero.Trim();
 
-        if (side is null && front is null && top is null)
+        if (side is null && front is null && top is null && hero is null)
         {
             return null;
         }
 
-        return new CamperManualViewImagesDto(side, front, top);
+        return new CamperManualViewImagesDto(side, front, top, hero);
     }
 }
