@@ -411,11 +411,11 @@ async function main() {
     assert.equal(observed.attachmentUploads, 1)
     assert.equal(observed.attachmentConflictReloaded, true)
 
-    await page.getByRole('button', { name: 'Mostra anteprima', exact: true }).click()
     const attachmentPreview = page.getByRole('img', { name: 'Anteprima immagine allegata.' })
     await attachmentPreview.waitFor()
     const downloadUrl = `https://storage.mock.test/${ATTACHMENT_ID}?sig=short-lived`
     assert.equal(await attachmentPreview.getAttribute('src'), downloadUrl)
+    await page.getByRole('button', { name: 'Mostra anteprima', exact: true }).click()
     const originalLink = page.getByRole('link', { name: 'Apri originale' })
     assert.equal(await originalLink.getAttribute('href'), downloadUrl)
     assert.equal(await originalLink.getAttribute('target'), '_blank')
@@ -437,8 +437,13 @@ async function main() {
       const uploaded = page.waitForResponse((response) =>
         response.request().method() === 'POST'
         && response.url().endsWith(`/journal-entries/${ENTRY_ID}/attachments`))
+      const downloaded = page.waitForResponse((response) =>
+        response.request().method() === 'GET'
+        && response.url().includes(`/journal-entries/${ENTRY_ID}/attachments/`)
+        && response.url().endsWith('/download'))
       await page.getByRole('button', { name: 'Carica immagine' }).click()
       assert.equal((await uploaded).status(), 201)
+      assert.equal((await downloaded).status(), 200)
       await page.getByText(`${count} di 10 immagini`, { exact: true }).waitFor()
     }
     assert.equal(await attachmentInput.isDisabled(), true, 'non si possono caricare più di 10 immagini')
@@ -564,7 +569,7 @@ async function main() {
       attachmentUploadRequests: 11,
       attachmentUploads: 10,
       attachmentConflictReloaded: true,
-      attachmentDownloads: 1,
+      attachmentDownloads: 10,
       attachmentDeleteRequests: 1,
       attachmentDeleted: true,
     })

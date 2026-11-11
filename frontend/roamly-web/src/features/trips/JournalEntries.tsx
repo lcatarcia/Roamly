@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
-import { Trash2 } from 'lucide-react'
+import { ExternalLink, Image as ImageIcon, Maximize2, Minimize2, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -146,7 +146,10 @@ export function JournalEntries({ tripId, etag, onEtagChanged, onReload }: Journa
           <p className="mt-1 text-sm text-muted-foreground">{t('narrative.trips.journalDescription')}</p>
         </div>
         {!creating && editingId === null && (
-          <Button onClick={() => setCreating(true)}>{t('neutral.journal.addEntry')}</Button>
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus aria-hidden="true" />
+            {t('neutral.journal.addEntry')}
+          </Button>
         )}
       </div>
 
@@ -392,41 +395,56 @@ function JournalEntryItem({
 
   return (
     <article className="space-y-4">
-      <header>
-        <time
-          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          dateTime={entry.entryOnUtc}
-        >
-          {formatDate(entry.entryOnUtc)}
-        </time>
-        {entry.title && <h3 className="mt-1 text-lg font-semibold">{entry.title}</h3>}
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{entry.body}</p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <time
+            className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-secondary-foreground"
+            dateTime={entry.entryOnUtc}
+          >
+            {formatDate(entry.entryOnUtc)}
+          </time>
+          {entry.title && <h3 className="mt-1.5 text-lg font-semibold">{entry.title}</h3>}
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{entry.body}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            title={t('neutral.journal.editEntry')}
+            onClick={onEdit}
+          >
+            <Pencil aria-hidden="true" />
+            <span className="sr-only">{t('neutral.journal.editEntry')}</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={onDelete}
+            disabled={deleteDisabled}
+            title={deleteDisabled ? t('neutral.journal.deleteEntryWithAttachments') : t('neutral.journal.deleteEntry')}
+            aria-describedby={deleteDisabled ? `journal-delete-note-${entry.id}` : undefined}
+          >
+            <Trash2 aria-hidden="true" />
+            <span className="sr-only">{t('neutral.journal.deleteEntry')}</span>
+          </Button>
+        </div>
       </header>
-      <div className="flex flex-wrap gap-3">
-        <Button variant="outline" onClick={onEdit}>{t('neutral.journal.editEntry')}</Button>
-        <Button
-          variant="outline"
-          onClick={onDelete}
-          disabled={deleteDisabled}
-          aria-describedby={deleteDisabled ? `journal-delete-note-${entry.id}` : undefined}
-        >
-          {t('neutral.journal.deleteEntry')}
-        </Button>
-      </div>
       {deleteDisabled && (
-        <p id={`journal-delete-note-${entry.id}`} className="text-sm text-muted-foreground">
+        <p id={`journal-delete-note-${entry.id}`} className="text-xs text-muted-foreground">
           {t('neutral.journal.deleteEntryWithAttachments')}
         </p>
       )}
       <section aria-label={t('neutral.journal.attachments')} className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className="font-medium">{t('neutral.journal.attachments')}</h4>
-          <span className="text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {t('neutral.journal.attachments')}
+          </h4>
+          <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
             {formatAttachmentCount(entry.attachments.length)}
           </span>
         </div>
         {entry.attachments.length > 0 && (
-          <ul className="space-y-3">
+          <ul className="grid gap-2.5 sm:grid-cols-2">
             {entry.attachments.map((attachment) => (
               <li key={attachment.id}>
                 <JournalAttachmentItem
@@ -440,28 +458,42 @@ function JournalEntryItem({
             ))}
           </ul>
         )}
-        <div className="space-y-2 rounded-lg border border-border p-3">
-          <Field>
-            <FieldLabel htmlFor={`journal-attachment-${entry.id}`}>
-              {t('neutral.journal.attachmentInput')}
-            </FieldLabel>
-            <FieldContent>
-              <Input
-                id={`journal-attachment-${entry.id}`}
-                ref={fileInputRef}
-                type="file"
-                accept={ATTACHMENT_ACCEPT}
-                aria-describedby={[
-                  `journal-attachment-help-${entry.id}`,
-                  validationError ? `journal-attachment-error-${entry.id}` : null,
-                ].filter(Boolean).join(' ')}
-                aria-invalid={Boolean(validationError)}
-                disabled={atAttachmentLimit || uploadPending}
-                onChange={selectFile}
-              />
-            </FieldContent>
-          </Field>
-          <p id={`journal-attachment-help-${entry.id}`} className="text-sm text-muted-foreground">
+        <div className="space-y-2.5 rounded-xl border border-border bg-background p-3">
+          <div className="flex flex-wrap items-end gap-2.5">
+            <Field className="min-w-52 flex-1">
+              <FieldLabel htmlFor={`journal-attachment-${entry.id}`} className="text-xs">
+                {t('neutral.journal.attachmentInput')}
+              </FieldLabel>
+              <FieldContent>
+                <Input
+                  id={`journal-attachment-${entry.id}`}
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ATTACHMENT_ACCEPT}
+                  aria-describedby={[
+                    `journal-attachment-help-${entry.id}`,
+                    validationError ? `journal-attachment-error-${entry.id}` : null,
+                  ].filter(Boolean).join(' ')}
+                  aria-invalid={Boolean(validationError)}
+                  disabled={atAttachmentLimit || uploadPending}
+                  onChange={selectFile}
+                />
+              </FieldContent>
+            </Field>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedFile || Boolean(validationError) || atAttachmentLimit || uploadPending}
+              onClick={() => void uploadSelectedFile()}
+            >
+              <Upload aria-hidden="true" />
+              {uploadPending
+                ? t('neutral.journal.attachmentUploading')
+                : t('neutral.journal.attachmentUpload')}
+            </Button>
+          </div>
+          <p id={`journal-attachment-help-${entry.id}`} className="text-xs text-muted-foreground">
             {atAttachmentLimit
               ? t('neutral.journal.attachmentLimitReached')
               : t('neutral.journal.attachmentHelp')}
@@ -475,16 +507,6 @@ function JournalEntryItem({
               {attachmentValidationText(validationError)}
             </p>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!selectedFile || Boolean(validationError) || atAttachmentLimit || uploadPending}
-            onClick={() => void uploadSelectedFile()}
-          >
-            {uploadPending
-              ? t('neutral.journal.attachmentUploading')
-              : t('neutral.journal.attachmentUpload')}
-          </Button>
         </div>
       </section>
     </article>
@@ -504,82 +526,118 @@ function JournalAttachmentItem({
   onDelete: () => void
   deleting: boolean
 }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [downloadFailed, setDownloadFailed] = useState(false)
-  const downloadMutation = useMutation({
-    mutationFn: () => fetchJournalAttachmentDownload(
-      tripId,
-      entryId,
-      attachment.id,
-    ),
-    onSuccess: ({ url }) => {
-      setPreviewUrl(url)
-      setDownloadFailed(false)
-    },
-    onError: () => setDownloadFailed(true),
+  const [expanded, setExpanded] = useState(false)
+  const previewQuery = useQuery({
+    queryKey: ['journal-attachment-download', tripId, entryId, attachment.id],
+    queryFn: () => fetchJournalAttachmentDownload(tripId, entryId, attachment.id),
+    staleTime: 4 * 60 * 1000,
+    retry: false,
   })
+  const previewUrl = previewQuery.data?.url ?? null
+  const downloadFailed = previewQuery.isError
+
+  const expandLabel = previewQuery.isPending
+    ? t('neutral.journal.attachmentDownloading')
+    : expanded
+      ? t('neutral.journal.attachmentHidePreview')
+      : t('neutral.journal.attachmentPreview')
 
   return (
-    <div className="space-y-2 rounded-lg border border-border p-3">
-      <p className="text-sm">
-        <span className="font-medium">{attachment.contentType}</span>
-        {' · '}
-        {formatAttachmentSize(attachment.sizeBytes)}
-        {' · '}
-        {formatAttachmentDate(attachment.createdAtUtc)}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={downloadMutation.isPending || deleting}
-          onClick={() => {
-            if (previewUrl) {
-              setPreviewUrl(null)
-              return
-            }
-            setDownloadFailed(false)
-            downloadMutation.mutate()
-          }}
-        >
-          {downloadMutation.isPending
-            ? t('neutral.journal.attachmentDownloading')
-            : previewUrl
-              ? t('neutral.journal.attachmentHidePreview')
-              : t('neutral.journal.attachmentPreview')}
-        </Button>
-        <Button type="button" variant="outline" disabled={deleting} onClick={onDelete}>
-          {deleting
-            ? t('neutral.journal.attachmentDeleting')
-            : t('neutral.journal.attachmentDelete')}
-        </Button>
-        {previewUrl && (
-          <a
-            className="inline-flex min-h-8 items-center rounded-lg px-2.5 text-sm font-medium text-accent-text underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
-            href={previewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="space-y-2.5 rounded-xl border border-border bg-background p-2.5">
+      <div className="flex items-center gap-3">
+        <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-card">
+          {previewUrl ? (
+            <img
+              className="h-full w-full object-cover"
+              src={previewUrl}
+              alt={t('neutral.journal.attachmentPreviewAlt')}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <ImageIcon className="size-5" aria-hidden="true" />
+            </div>
+          )}
+        </div>
+
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground tabular-nums">
+          <span className="font-semibold text-foreground">{attachment.contentType}</span>
+          {' · '}
+          {formatAttachmentSize(attachment.sizeBytes)}
+          {' · '}
+          {formatAttachmentDate(attachment.createdAtUtc)}
+        </p>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={previewQuery.isPending || deleting}
+            title={expandLabel}
+            onClick={() => {
+              if (downloadFailed) {
+                void previewQuery.refetch()
+                setExpanded(true)
+                return
+              }
+              setExpanded((current) => !current)
+            }}
           >
-            {t('neutral.journal.attachmentOpenOriginal')}
-          </a>
-        )}
+            {expanded ? (
+              <Minimize2 aria-hidden="true" />
+            ) : (
+              <Maximize2 aria-hidden="true" />
+            )}
+            <span className="sr-only">{expandLabel}</span>
+          </Button>
+          {previewUrl && (
+            <a
+              className="inline-flex size-8 items-center justify-center rounded-xl border border-transparent text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={t('neutral.journal.attachmentOpenOriginal')}
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              <span className="sr-only">{t('neutral.journal.attachmentOpenOriginal')}</span>
+            </a>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={deleting}
+            title={deleting ? t('neutral.journal.attachmentDeleting') : t('neutral.journal.attachmentDelete')}
+            onClick={onDelete}
+          >
+            <Trash2 aria-hidden="true" />
+            <span className="sr-only">
+              {deleting
+                ? t('neutral.journal.attachmentDeleting')
+                : t('neutral.journal.attachmentDelete')}
+            </span>
+          </Button>
+        </div>
       </div>
-      {downloadMutation.isPending && (
-        <p role="status" className="text-sm text-muted-foreground">
+      {previewQuery.isPending && (
+        <p role="status" className="sr-only">
           {t('neutral.journal.attachmentDownloading')}
         </p>
       )}
       {downloadFailed && (
-        <p role="alert" className="text-sm text-danger-text">
+        <p role="alert" className="text-xs text-danger-text">
           {t('neutral.journal.attachmentDownloadError')}
         </p>
       )}
-      {previewUrl && (
-        <img
-          className="max-h-80 max-w-full rounded-lg object-contain"
-          src={previewUrl}
-          alt={t('neutral.journal.attachmentPreviewAlt')}
-        />
+      {expanded && previewUrl && (
+        <div className="overflow-hidden rounded-lg border border-border bg-card p-2">
+          <img
+            className="max-h-80 w-full rounded-md object-contain"
+            src={previewUrl}
+            alt=""
+            aria-hidden="true"
+          />
+        </div>
       )}
     </div>
   )

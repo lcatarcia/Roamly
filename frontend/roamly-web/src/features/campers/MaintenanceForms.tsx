@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { History, Pencil, Trash2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -238,26 +239,34 @@ export function MaintenanceItemActions({
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="icon-sm"
           disabled={busy}
           aria-expanded={editingEtag !== null}
+          title={editingEtag !== null ? t('neutral.camper.maintenance.cancel') : t('neutral.camper.maintenance.edit')}
           onClick={() => void openEdit()}
         >
-          {editingEtag !== null ? t('neutral.camper.maintenance.cancel') : t('neutral.camper.maintenance.edit')}
+          {editingEtag !== null ? <X aria-hidden="true" /> : <Pencil aria-hidden="true" />}
+          <span className="sr-only">
+            {editingEtag !== null ? t('neutral.camper.maintenance.cancel') : t('neutral.camper.maintenance.edit')}
+          </span>
         </Button>
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="icon-sm"
           disabled={busy}
           aria-label={`${t('neutral.camper.maintenance.remove')} ${maintenanceName}`}
+          title={`${t('neutral.camper.maintenance.remove')} ${maintenanceName}`}
           onClick={() => void remove()}
         >
-          {deleteMutation.isPending ? t('neutral.camper.maintenance.removing') : t('neutral.camper.maintenance.remove')}
+          <Trash2 aria-hidden="true" />
+          <span className="sr-only">
+            {deleteMutation.isPending ? t('neutral.camper.maintenance.removing') : t('neutral.camper.maintenance.remove')}
+          </span>
         </Button>
         {updateMutation.isSuccess && (
           <p role="status" className="text-xs font-medium text-foreground">
@@ -599,6 +608,7 @@ export function MaintenanceLogHistory({
   return (
     <div className="w-full">
       <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
+        <History aria-hidden="true" />
         {expanded ? t('neutral.camper.maintenance.hideHistory') : t('neutral.camper.maintenance.showHistory')}
       </Button>
       {expanded && query.isPending && <p role="status" className="mt-2 text-sm text-muted-foreground">{t('neutral.camper.maintenance.historyLoading')}</p>}

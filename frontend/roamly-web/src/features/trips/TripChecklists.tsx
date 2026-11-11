@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
 import { useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -541,6 +542,7 @@ export function TripChecklists({ tripId, etag, onEtagChanged }: TripChecklistsPr
                 }
               }}
             >
+              <Trash2 aria-hidden="true" />
               {mutation.isPending
                 ? t('neutral.checklists.deleting')
                 : t('neutral.checklists.confirmDelete')}
@@ -676,26 +678,40 @@ function ChecklistCard({
     <article aria-label={checklist.name} className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-secondary-foreground">
             {checklistKindLabel(checklist.kind)}
-          </p>
-          <h3 className="mt-1 text-lg font-semibold">{checklist.name}</h3>
+          </span>
+          <h3 className="mt-1.5 text-lg font-semibold">{checklist.name}</h3>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy} onClick={onEdit}>
-            {t('neutral.checklists.edit')}
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={busy}
+            title={t('neutral.checklists.edit')}
+            onClick={onEdit}
+          >
+            <Pencil aria-hidden="true" />
+            <span className="sr-only">{t('neutral.checklists.edit')}</span>
           </Button>
-          <Button variant="outline" disabled={busy} onClick={onDelete}>
-            {t('neutral.checklists.delete')}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={busy}
+            title={t('neutral.checklists.delete')}
+            onClick={onDelete}
+          >
+            <Trash2 aria-hidden="true" />
+            <span className="sr-only">{t('neutral.checklists.delete')}</span>
           </Button>
         </div>
       </header>
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('neutral.checklists.itemsEmpty')}</p>
       ) : (
-        <ol className="divide-y divide-border rounded-lg border border-border">
+        <ol className="divide-y divide-border rounded-xl border border-border bg-background">
           {items.map((item, index) => (
-            <li key={item.id} className="flex flex-wrap items-center gap-3 p-3">
+            <li key={item.id} className="flex flex-wrap items-center gap-3 px-3.5 py-2.5">
               {editingItemId === item.id ? (
                 <ItemForm
                   item={item}
@@ -705,7 +721,7 @@ function ChecklistCard({
                 />
               ) : (
                 <>
-                  <label className="flex min-w-0 flex-1 items-center gap-3">
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
                     <input
                       type="checkbox"
                       checked={item.isDone}
@@ -720,32 +736,48 @@ function ChecklistCard({
                       {item.text}
                     </span>
                   </label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center gap-1">
                     <Button
-                      variant="outline"
+                      variant="ghost"
+                      size="icon-xs"
                       disabled={busy || index === 0}
                       aria-label={`${t('neutral.checklists.moveUp')}: ${item.text}`}
+                      title={t('neutral.checklists.moveUp')}
                       onClick={() => onMoveItem(index, -1)}
                     >
-                      {t('neutral.checklists.moveUp')}
+                      <ArrowUp aria-hidden="true" />
+                      <span className="sr-only">{t('neutral.checklists.moveUp')}</span>
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="ghost"
+                      size="icon-xs"
                       disabled={busy || index === items.length - 1}
                       aria-label={`${t('neutral.checklists.moveDown')}: ${item.text}`}
+                      title={t('neutral.checklists.moveDown')}
                       onClick={() => onMoveItem(index, 1)}
                     >
-                      {t('neutral.checklists.moveDown')}
-                    </Button>
-                    <Button variant="outline" disabled={busy} onClick={() => onEditItem(item.id)}>
-                      {t('neutral.checklists.editItem')}
+                      <ArrowDown aria-hidden="true" />
+                      <span className="sr-only">{t('neutral.checklists.moveDown')}</span>
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="ghost"
+                      size="icon-xs"
                       disabled={busy}
+                      title={t('neutral.checklists.editItem')}
+                      onClick={() => onEditItem(item.id)}
+                    >
+                      <Pencil aria-hidden="true" />
+                      <span className="sr-only">{t('neutral.checklists.editItem')}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={busy}
+                      title={t('neutral.checklists.deleteItem')}
                       onClick={() => onDeleteItem(item)}
                     >
-                      {t('neutral.checklists.deleteItem')}
+                      <Trash2 aria-hidden="true" />
+                      <span className="sr-only">{t('neutral.checklists.deleteItem')}</span>
                     </Button>
                   </div>
                 </>
@@ -762,7 +794,8 @@ function ChecklistCard({
         />
       )}
       {!addingItem && editingItemId === null && (
-        <Button variant="outline" disabled={busy} onClick={onAddItem}>
+        <Button variant="outline" size="sm" disabled={busy} onClick={onAddItem}>
+          <Plus aria-hidden="true" />
           {t('neutral.checklists.addItem')}
         </Button>
       )}
