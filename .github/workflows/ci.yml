@@ -293,6 +293,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/roamly-web/package-lock.json
 
+      - name: Contratti di release su Linux
+        working-directory: ${{ github.workspace }}
+        run: node --test infra/workflows/tests/release-*.test.mjs
+
       - name: Installazione riproducibile delle dipendenze
         run: npm ci
 
