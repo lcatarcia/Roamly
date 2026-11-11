@@ -1,5 +1,32 @@
 # Workflow OIDC di release
 
+## Paginazione revisioni ARM — 11 novembre 2026
+
+Preflight e smoke raccolgono ora tutte le pagine della lista revisioni
+`2024-03-01`, prima di valutare il risultato. Il collector Node inline e
+identico nei due step (verificato dai test); non richiede nuovi pacchetti.
+Ogni richiesta ha timeout massimo 10 secondi, ogni raccolta ha un budget
+totale di 20 secondi e un limite di 100 pagine. Nessuna lista parziale viene
+ammessa. Ogni continuazione deve essere HTTPS sullo stesso endpoint ARM
+della stessa app, con la stessa API e un solo skip token non vuoto;
+host, credenziali, porte, frammenti, percorsi o parametri diversi sono
+rifiutati prima della richiesta autenticata. Cicli, revisioni duplicate,
+pagine vuote/malformate e ID estranei falliscono chiusi.
+
+Lo smoke mantiene il gate finale su **esattamente una revisione attiva
+nell'intera lista**, con una sola immagine container identica al digest
+della release. Una seconda revisione attiva su una pagina successiva non
+puo essere ignorata. Nei log non vengono scritti token di continuazione,
+body delle risposte o dati ambiente delle revisioni.
+
+Regressioni offline: `node --test infra/workflows/tests/release-*.test.mjs`.
+La suite Node esegue il collector reale con un processo `az` mock locale
+e il predicato finale con `jq`; `ROAMLY_TEST_JQ` puo indicarne il percorso.
+I test Bash completi segnalano esplicitamente lo skip se jq o una shell
+capace di fork non sono disponibili; vanno eseguiti su Linux prima del
+rilascio. La modifica non esegue deploy, retention, cancellazioni o
+variazioni di RBAC/configurazione.
+
 ## Wiring Maps locale — 6 novembre 2026
 
 Il candidato aggiunge `mapsEnabled` e `mapsAccountClientId` al solo
@@ -124,7 +151,8 @@ tenant e subscription dell'account autenticato con le tre variabili OIDC non
 segrete, validate come GUID. Esegue GET ARM esplicite della app esistente,
 delle revisioni, dell'environment e della managed identity runtime, verificando
 gli ID restituiti, i collegamenti app/environment/identity e gli identificativi
-della identity. Una lista revisioni vuota, malformata o paginata viene rifiutata.
+della identity. Una lista revisioni vuota, malformata o incompleta viene rifiutata;
+le pagine sono raccolte e validate come descritto sopra.
 Qualsiasi richiesta fallita o identificativo assente/diverso interrompe il job,
 senza build/push né what-if. Non ci sono retry di autenticazione, token nei log,
 letture di secret, `listSecrets`, exec o probe distruttivi.
@@ -159,23 +187,24 @@ migration e non fa bootstrap.
 
 Dopo il completamento ARM, il job usa l'Azure CLI già autenticata per ritentare
 la discovery del FQDN fino a 6 volte (timeout per chiamata 10 secondi, pausa
-5 secondi). Interroga poi la lista ARM delle revisioni ACA con API
-`2024-03-01` e richiede, prima dei probe, esattamente una revisione attiva in
+5 secondi). Dopo i probe della nuova revisione, interroga la lista ARM
+completa delle revisioni ACA con API `2024-03-01` e richiede esattamente una revisione attiva in
 totale e una sola immagine container su quella revisione identica al digest di
 `RELEASE_IMAGE`. I campi verificati sono `value[].properties.active` e
-`value[].properties.template.containers[].image`; la risposta paginata (`nextLink`
-non nullo), revisioni attive multiple o un digest precedente non superano
-l'asserzione. Il contratto è documentato da
+`value[].properties.template.containers[].image`; revisioni attive multiple
+(anche su pagine diverse), liste incomplete o un digest precedente non
+superano l'asserzione. Il contratto è documentato da
 [Microsoft Learn — Container Apps Revisions: List Revisions](https://learn.microsoft.com/en-us/rest/api/resource-manager/containerapps/container-apps-revisions/list-revisions?view=rest-resource-manager-containerapps-2024-03-01).
 
-Solo dopo l'asserzione il job verifica via HTTPS pubblico `/health/live` e
+Prima dell'asserzione finale il job verifica sul FQDN della nuova revisione
+via HTTPS pubblico `/health/live` e
 `/health/ready`, entrambi HTTP 200: al massimo 5 tentativi, timeout di
 connessione 5 secondi e timeout complessivo 10 secondi per richiesta, pausa di
 10 secondi tra i tentativi. I body HTTP non vengono registrati né conservati.
-I due controlli di metadata hanno al massimo 6 tentativi ciascuno, timeout
-singolo 10 secondi e pausa 5 secondi. Il limite dello step resta 7 minuti:
-il tempo massimo nominale combinato di polling e probe è circa 310 secondi
-(5 minuti e 10 secondi), senza aumentare il timeout esistente. Non vengono
+La discovery FQDN mantiene 6 tentativi; il gate revisioni mantiene 7 raccolte
+complete, con pausa 5 secondi. Il limite dello step resta 7 minuti:
+il tempo massimo nominale combinato di polling e probe è circa 395 secondi
+(6 minuti e 35 secondi), senza aumentare il timeout esistente. Non vengono
 aggiunte action o dipendenze; si riusa l'identità OIDC e il set di permessi
 esistente, senza leggere secret o stamparne valori.
 

@@ -36,6 +36,8 @@ async function main() {
     await page.goto(`${BASE_URL}/places`, { waitUntil: 'networkidle' })
 
     await page.getByRole('heading', { name: 'Da visitare' }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Mappa', exact: true }).getAttribute('aria-pressed'), 'true')
+    await page.getByRole('button', { name: 'Lista', exact: true }).click()
     await page.getByLabel('Nome').fill('Borgo senza coordinate')
     await page.getByLabel('Categoria').selectOption('10')
     await page.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=Borgo')
@@ -61,8 +63,8 @@ async function main() {
     const editForm = page.getByRole('form', { name: 'Modifica luogo' })
     await editForm.getByLabel('Nome').fill('Borgo rinominato')
     await editForm.getByLabel('Link Google Maps').fill(BUNKER)
-    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '42.2370252')
-    assert.equal(await editForm.getByLabel('Longitudine').inputValue(), '12.5117658')
+    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '42.237')
+    assert.equal(await editForm.getByLabel('Longitudine').inputValue(), '12.512')
     await editForm.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=3,4')
     assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '3')
     assert.equal(await editForm.getByLabel('Longitudine').inputValue(), '4')
@@ -74,7 +76,7 @@ async function main() {
     await page.getByRole('heading', { name: 'Borgo rinominato' }).waitFor()
     assert.equal(observed.updateIfMatch, '"1"', 'la modifica deve inviare l’ETag letto')
     assert.equal(observed.updated.name, 'Borgo rinominato')
-    assert.deepEqual(observed.updated.position, { latitude: 42.2370252, longitude: 12.5117658 })
+    assert.deepEqual(observed.updated.position, { latitude: 42.237, longitude: 12.512 })
     assert.equal(observed.updated.googleMapsUrl, BUNKER)
     await page.getByRole('button', { name: 'Elimina', exact: true }).click()
     await page.getByRole('button', { name: 'Conferma eliminazione' }).click()
@@ -86,8 +88,8 @@ async function main() {
     await page.getByLabel('Nome').fill('Bunker automatico')
     await page.getByLabel('Categoria').selectOption('8')
     await page.getByLabel('Link Google Maps').fill(BUNKER)
-    assert.equal(await page.getByLabel('Latitudine').inputValue(), '42.2370252')
-    assert.equal(await page.getByLabel('Longitudine').inputValue(), '12.5117658')
+    assert.equal(await page.getByLabel('Latitudine').inputValue(), '42.237')
+    assert.equal(await page.getByLabel('Longitudine').inputValue(), '12.512')
     await page.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=1,2')
     assert.equal(await page.getByLabel('Latitudine').inputValue(), '1')
     await page.getByLabel('Link Google Maps').fill('https://maps.app.goo.gl/example')
@@ -96,24 +98,24 @@ async function main() {
     await page.getByLabel('Link Google Maps').fill(BUNKER)
     await page.getByRole('button', { name: 'Aggiungi luogo' }).click()
     await page.getByRole('heading', { name: 'Bunker automatico' }).waitFor()
-    assert.deepEqual(observed.created.position, { latitude: 42.2370252, longitude: 12.5117658 })
+    assert.deepEqual(observed.created.position, { latitude: 42.237, longitude: 12.512 })
     assert.equal(observed.created.googleMapsUrl, BUNKER)
     await page.getByRole('button', { name: 'Modifica', exact: true }).click()
     await editForm.getByLabel('Link Google Maps').fill('https://maps.google.com/?q=3,4')
-    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '42.2370252', 'saved position is treated as manual')
+    assert.equal(await editForm.getByLabel('Latitudine').inputValue(), '42.237', 'saved position is treated as manual')
     await editForm.getByLabel('Latitudine').fill('9')
     await editForm.getByLabel('Longitudine').fill('8')
     await editForm.getByLabel('Link Google Maps').fill(BUNKER)
     await editForm.getByRole('button', { name: 'Salva modifiche' }).click()
     await page.getByRole('heading', { name: 'Bunker automatico' }).waitFor()
     assert.deepEqual(observed.updated.position, { latitude: 9, longitude: 8 })
-    assert.deepEqual(remoteRequests, [], 'parsing and the default list never contact Google or Azure')
+    assert.deepEqual(remoteRequests, [], 'local parsing and unconfigured map never contact Google or Azure')
     await page.setViewportSize({ width: 390, height: 844 })
     assert.ok(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       'la pagina non deve avere overflow orizzontale su mobile',
     )
-    console.log('saved-places-flow-check: superato (autofill esatto create/edit, precedenza manuale, link brevi, CRUD If-Match e retry; nessuna chiamata esterna).')
+    console.log('saved-places-flow-check: superato (autofill arrotondato create/edit, precedenza manuale, link brevi, CRUD If-Match e retry; nessuna chiamata esterna).')
   } finally {
     await browser.close()
     preview.kill()
@@ -125,6 +127,11 @@ async function mockApi(page) {
   const versions = new Map()
   const observed = { createCount: 0, created: null, createRequests: [], savedPlaceCount: 0, updated: null, updateIfMatch: null, deleteIfMatch: null }
 
+  await page.route('**/api/v1/maps/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ isConfigured: false, accountClientId: null, domain: 'eu.atlas.microsoft.com' }),
+  }))
   await page.route('**/api/v1/me', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',

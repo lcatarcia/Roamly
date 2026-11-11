@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { googleMapsPosition, linkPositionFields } from '../../src/features/places/google-maps-position.mjs'
+import { googleMapsPosition, googleMapsPositionFields, linkPositionFields } from '../../src/features/places/google-maps-position.mjs'
 
 const bunker = 'https://www.google.com/maps/place/Bunker+Soratte/@42.2370291,12.5091909,805m/data=!3m2!1e3!4b1!4m6!3m5!1s0x132f14154ace8c1d:0x881d17f0b2739244!8m2!3d42.2370252!4d12.5117658!16s%2Fg%2F11gbfd5xfy?authuser=0&entry=tts'
 
@@ -47,4 +47,23 @@ test('link edits update only untouched automatically derived fields', () => {
     { latitude: '3', longitude: '4' })
   assert.deepEqual(linkPositionFields({ latitude: '', longitude: '2' }, old, next, { latitude: true }),
     { latitude: '', longitude: '4' }, 'a deliberately cleared manual field stays empty')
+})
+
+test('automatic fields round to at most three decimals without changing exact parsed positions', () => {
+  const empty = { latitude: '', longitude: '' }
+  const rounded = { latitude: '42.237', longitude: '12.512' }
+  assert.deepEqual(googleMapsPositionFields(bunker), rounded)
+  assert.deepEqual(linkPositionFields(empty, null, bunker), rounded)
+  assert.deepEqual(linkPositionFields(rounded, rounded, 'https://maps.google.com/?q=-42.2376,-12.5118'),
+    { latitude: '-42.238', longitude: '-12.512' })
+  assert.deepEqual(linkPositionFields(rounded, rounded, ''), empty)
+  assert.deepEqual(googleMapsPositionFields('https://maps.google.com/?q=0.0001,-0.0001'),
+    { latitude: '0', longitude: '0' })
+  assert.deepEqual(googleMapsPositionFields('https://maps.google.com/?q=89.9999,-179.9999'),
+    { latitude: '90', longitude: '-180' })
+  assert.deepEqual(googleMapsPositionFields('https://maps.google.com/?q=1.2,3'),
+    { latitude: '1.2', longitude: '3' })
+  assert.deepEqual(linkPositionFields({ latitude: '9.123456', longitude: '12.512' }, rounded, bunker, { latitude: true }),
+    { latitude: '9.123456', longitude: '12.512' })
+  assert.equal(googleMapsPositionFields('https://maps.app.goo.gl/example'), null)
 })

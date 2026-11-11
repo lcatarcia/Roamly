@@ -185,15 +185,93 @@ jobs:
           printf 'sql_secret_url=%s\n' "$sql_secret_url" >> "$GITHUB_OUTPUT"
           printf 'login_hmac_secret_url=%s\n' "$login_hmac_secret_url" >> "$GITHUB_OUTPUT"
 
-          az rest --method get \
-            --url "https://management.azure.com${app_id}/revisions?api-version=2024-03-01" \
-            --only-show-errors --output json |
-            jq -e --arg app "$app_id" '
-              (.nextLink == null) and (.value | type == "array" and length > 0) and
-              all(.value[];
-                (.name | type == "string" and test("^ca-roamly-prod--[a-zA-Z0-9-]+$")) and
-                ((.id | ascii_downcase) == (($app + "/revisions/" + .name) | ascii_downcase)))
-            ' > /dev/null || fail "GET revisioni non riuscita, incompleta o con ID non validi."
+          # Keep this collector identical to the smoke step; execution tests cover both.
+          read_revisions() {
+          node - "$app_id" <<'REVISIONS_NODE'
+          const { execFileSync } = require('node:child_process')
+          const app = process.argv[2]
+          const endpoint = `https://management.azure.com${app}/revisions`
+          const deadline = Date.now() + 20_000
+          const seenPages = new Set()
+          const seenRevisions = new Set()
+          const revisions = []
+          let complete = false
+          const fail = (message, code = 1) => {
+            process.stderr.write(`Lista revisioni ACA: ${message} (dettagli redatti)\n`)
+            process.exit(code)
+          }
+          const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+          let next = `${endpoint}?api-version=2024-03-01`
+          for (let page = 0; page < 100; page++) {
+            // Validate the raw endpoint as well as the parsed URL: no path normalization,
+            // credentials, ports, fragments, external hosts, or API/version swaps.
+            if (typeof next !== 'string' || /[\s#]|%(?![0-9a-f]{2})/i.test(next) ||
+                next.split('?').length !== 2 ||
+                next.split('?')[0].toLowerCase() !== endpoint.toLowerCase()) {
+              fail('ContinuationTargetInvalid')
+            }
+            let url
+            try { url = new URL(next) } catch { fail('ContinuationTargetInvalid') }
+            const query = [...url.searchParams]
+            if (url.origin !== 'https://management.azure.com' ||
+                query.filter(([key, value]) => key === 'api-version' && value === '2024-03-01').length !== 1 ||
+                query.length !== (page === 0 ? 1 : 2) ||
+                (page > 0 && query.filter(([key, value]) => /^\$?skiptoken$/i.test(key) && value.length > 0).length !== 1)) {
+              fail('ContinuationTargetInvalid')
+            }
+            url.searchParams.sort()
+            const pageKey = url.href
+            if (seenPages.has(pageKey)) fail('ContinuationCycle')
+            seenPages.add(pageKey)
+            const remaining = deadline - Date.now()
+            if (remaining <= 0) fail('Timeout', 124)
+            let raw
+            try {
+              raw = execFileSync('az', ['rest', '--method', 'get', '--url', next,
+                '--only-show-errors', '--output', 'json'], {
+                encoding: 'utf8', timeout: Math.min(10_000, remaining),
+                maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+              })
+            } catch (error) {
+              if (error.code === 'ETIMEDOUT') fail('Timeout', 124)
+              const categories = ['AuthorizationFailed', 'InvalidAuthenticationToken',
+                'AuthenticationFailed', 'SubscriptionNotFound', 'ResourceNotFound', 'TooManyRequests']
+              const category = categories.find(value => String(error.stderr).includes(value)) ?? 'CliFailure'
+              fail(category, Number.isInteger(error.status) && error.status > 0 && error.status < 256 ? error.status : 1)
+            }
+            let body
+            try { body = JSON.parse(raw) } catch { fail('InvalidJson') }
+            if (!object(body) || !Array.isArray(body.value) || body.value.length === 0) fail('InvalidPage')
+            for (const revision of body.value) {
+              if (!object(revision) || typeof revision.name !== 'string' ||
+                  !/^ca-roamly-prod--[a-zA-Z0-9-]+$/.test(revision.name) ||
+                  typeof revision.id !== 'string' ||
+                  revision.id.toLowerCase() !== `${app}/revisions/${revision.name}`.toLowerCase() ||
+                  !object(revision.properties) || typeof revision.properties.active !== 'boolean') {
+                fail('InvalidRevision')
+              }
+              const id = revision.id.toLowerCase()
+              if (seenRevisions.has(id)) fail('DuplicateRevision')
+              seenRevisions.add(id)
+              // Return only metadata used by the gate, never revision env/secret data.
+              revisions.push({ id: revision.id, name: revision.name, properties: {
+                active: revision.properties.active,
+                template: { containers: Array.isArray(revision.properties.template?.containers)
+                  ? revision.properties.template.containers.map(container => ({ image: container?.image })) : [] },
+              } })
+            }
+            if (Date.now() >= deadline) fail('Timeout', 124)
+            if (body.nextLink === undefined || body.nextLink === null) {
+              complete = true
+              break
+            }
+            next = body.nextLink
+          }
+          if (!complete) fail('PageLimitExceeded')
+          process.stdout.write(JSON.stringify({ value: revisions }))
+          REVISIONS_NODE
+          }
+          read_revisions > /dev/null || fail "GET revisioni non riuscita, incompleta o con ID non validi."
 
           read_resource "$environment_id" 2024-03-01 > /dev/null
           identity="$(read_resource "$identity_id" 2023-01-31)"
@@ -496,6 +574,13 @@ jobs:
               *ResourceNotFound*) category="ResourceNotFound" ;;
               *TooManyRequests*) category="TooManyRequests" ;;
               *"unrecognized arguments"*) category="InvalidArguments" ;;
+              *ContinuationTargetInvalid*) category="ContinuationTargetInvalid" ;;
+              *ContinuationCycle*) category="ContinuationCycle" ;;
+              *DuplicateRevision*) category="DuplicateRevision" ;;
+              *InvalidRevision*) category="InvalidRevision" ;;
+              *InvalidPage*) category="InvalidPage" ;;
+              *InvalidJson*) category="InvalidJson" ;;
+              *PageLimitExceeded*) category="PageLimitExceeded" ;;
             esac
             if [[ "$status" == "124" ]]; then category="Timeout"; fi
             printf 'Metadata ACA %s: CLI exit=%d; errore=%s (dettagli redatti)\n' \
@@ -582,14 +667,96 @@ jobs:
             exit 1
           fi
 
-          revisions_url="https://management.azure.com/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/containerApps/ca-roamly-prod/revisions?api-version=2024-03-01"
+          app_id="/subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/containerApps/ca-roamly-prod"
+          # Keep this collector identical to the preflight step; execution tests cover both.
+          read_revisions() {
+          node - "$app_id" <<'REVISIONS_NODE'
+          const { execFileSync } = require('node:child_process')
+          const app = process.argv[2]
+          const endpoint = `https://management.azure.com${app}/revisions`
+          const deadline = Date.now() + 20_000
+          const seenPages = new Set()
+          const seenRevisions = new Set()
+          const revisions = []
+          let complete = false
+          const fail = (message, code = 1) => {
+            process.stderr.write(`Lista revisioni ACA: ${message} (dettagli redatti)\n`)
+            process.exit(code)
+          }
+          const object = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+          let next = `${endpoint}?api-version=2024-03-01`
+          for (let page = 0; page < 100; page++) {
+            // Validate the raw endpoint as well as the parsed URL: no path normalization,
+            // credentials, ports, fragments, external hosts, or API/version swaps.
+            if (typeof next !== 'string' || /[\s#]|%(?![0-9a-f]{2})/i.test(next) ||
+                next.split('?').length !== 2 ||
+                next.split('?')[0].toLowerCase() !== endpoint.toLowerCase()) {
+              fail('ContinuationTargetInvalid')
+            }
+            let url
+            try { url = new URL(next) } catch { fail('ContinuationTargetInvalid') }
+            const query = [...url.searchParams]
+            if (url.origin !== 'https://management.azure.com' ||
+                query.filter(([key, value]) => key === 'api-version' && value === '2024-03-01').length !== 1 ||
+                query.length !== (page === 0 ? 1 : 2) ||
+                (page > 0 && query.filter(([key, value]) => /^\$?skiptoken$/i.test(key) && value.length > 0).length !== 1)) {
+              fail('ContinuationTargetInvalid')
+            }
+            url.searchParams.sort()
+            const pageKey = url.href
+            if (seenPages.has(pageKey)) fail('ContinuationCycle')
+            seenPages.add(pageKey)
+            const remaining = deadline - Date.now()
+            if (remaining <= 0) fail('Timeout', 124)
+            let raw
+            try {
+              raw = execFileSync('az', ['rest', '--method', 'get', '--url', next,
+                '--only-show-errors', '--output', 'json'], {
+                encoding: 'utf8', timeout: Math.min(10_000, remaining),
+                maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+              })
+            } catch (error) {
+              if (error.code === 'ETIMEDOUT') fail('Timeout', 124)
+              const categories = ['AuthorizationFailed', 'InvalidAuthenticationToken',
+                'AuthenticationFailed', 'SubscriptionNotFound', 'ResourceNotFound', 'TooManyRequests']
+              const category = categories.find(value => String(error.stderr).includes(value)) ?? 'CliFailure'
+              fail(category, Number.isInteger(error.status) && error.status > 0 && error.status < 256 ? error.status : 1)
+            }
+            let body
+            try { body = JSON.parse(raw) } catch { fail('InvalidJson') }
+            if (!object(body) || !Array.isArray(body.value) || body.value.length === 0) fail('InvalidPage')
+            for (const revision of body.value) {
+              if (!object(revision) || typeof revision.name !== 'string' ||
+                  !/^ca-roamly-prod--[a-zA-Z0-9-]+$/.test(revision.name) ||
+                  typeof revision.id !== 'string' ||
+                  revision.id.toLowerCase() !== `${app}/revisions/${revision.name}`.toLowerCase() ||
+                  !object(revision.properties) || typeof revision.properties.active !== 'boolean') {
+                fail('InvalidRevision')
+              }
+              const id = revision.id.toLowerCase()
+              if (seenRevisions.has(id)) fail('DuplicateRevision')
+              seenRevisions.add(id)
+              // Return only metadata used by the gate, never revision env/secret data.
+              revisions.push({ id: revision.id, name: revision.name, properties: {
+                active: revision.properties.active,
+                template: { containers: Array.isArray(revision.properties.template?.containers)
+                  ? revision.properties.template.containers.map(container => ({ image: container?.image })) : [] },
+              } })
+            }
+            if (Date.now() >= deadline) fail('Timeout', 124)
+            if (body.nextLink === undefined || body.nextLink === null) {
+              complete = true
+              break
+            }
+            next = body.nextLink
+          }
+          if (!complete) fail('PageLimitExceeded')
+          process.stdout.write(JSON.stringify({ value: revisions }))
+          REVISIONS_NODE
+          }
           expected_revision_active=false
           for ((attempt = 1; attempt <= revision_max_attempts; attempt++)); do
-            if revisions_json="$(timeout "${metadata_timeout_seconds}s" az rest \
-              --method get \
-              --url "$revisions_url" \
-              --output json \
-              --only-show-errors 2>&1)"; then
+            if revisions_json="$(read_revisions 2>&1)"; then
               revisions_cli_status=0
             else
               revisions_cli_status=$?

@@ -330,7 +330,7 @@ function SavedPlaceCollection({
   onRetry: () => void
   onLoadMore: () => void
 }) {
-  const [view, setView] = useState<'list' | 'map'>('list')
+  const [view, setView] = useState<'list' | 'map'>('map')
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null)
   const selectedId = places.some(place => place.id === selectedPlaceId) ? selectedPlaceId : null
   if (loading) return <CollectionMessage>{t('neutral.savedPlaces.loading')}</CollectionMessage>

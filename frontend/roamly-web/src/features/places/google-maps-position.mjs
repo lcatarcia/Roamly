@@ -42,12 +42,20 @@ function readPosition(path, params) {
     Number.isFinite(longitude) && Math.abs(longitude) <= 180 ? { latitude, longitude } : null
 }
 
+export function googleMapsPositionFields(url) {
+  const position = googleMapsPosition(url)
+  return position ? {
+    latitude: String(Number(position.latitude.toFixed(3))),
+    longitude: String(Number(position.longitude.toFixed(3))),
+  } : null
+}
+
 // Empty fields can be filled; a nonempty field changes only while still equal to
 // this editing session's last automatic value. Existing saved positions are manual.
 export function linkPositionFields(current, previous, url, manual = {}) {
-  const position = googleMapsPosition(url)
+  const position = googleMapsPositionFields(url)
   return Object.fromEntries(['latitude', 'longitude'].map(key => [
     key, !manual[key] && (current[key] === '' || current[key] === previous?.[key])
-      ? position ? String(position[key]) : '' : current[key],
+      ? position ? position[key] : '' : current[key],
   ]))
 }
