@@ -2,6 +2,7 @@ import { useState, type FormEvent, type HTMLAttributes } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertDialog } from '@base-ui/react/alert-dialog'
+import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { PageContainer } from '@/components/layout/PageContainer'
 import { Button } from '@/components/ui/button'
@@ -531,17 +532,22 @@ function TripActions({
     <AlertDialog.Root open={confirmCancel} onOpenChange={setConfirmCancel}>
       <section aria-label={t('neutral.trips.actions')} className="space-y-3 py-4">
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={onEdit}>{t('neutral.trips.edit')}</Button>
+          <Button variant="outline" size="sm" onClick={onEdit}>
+            <Pencil aria-hidden="true" />
+            {t('neutral.trips.edit')}
+          </Button>
           {targets.map(({ status, label }) => status === TRIP_STATUS.cancelled ? (
             <AlertDialog.Trigger
               key={status}
-              render={<Button variant="outline" disabled={pending} />}
+              render={<Button variant="outline" size="sm" disabled={pending} />}
             >
+              <Trash2 aria-hidden="true" />
               {label}
             </AlertDialog.Trigger>
           ) : (
             <Button
               key={status}
+              size="sm"
               disabled={pending}
               onClick={() => onTransition(status)}
             >
@@ -866,30 +872,39 @@ function TripEditor({
               onChange={(value) => updateStop(index, { notes: value })}
               maxLength={1000}
             />
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 type="button"
                 variant="outline"
+                size="icon-sm"
+                title={`${t('neutral.trips.moveUp')} ${index + 1}`}
                 disabled={pending || index === 0}
                 onClick={() => moveStop(index, -1)}
               >
-                {t('neutral.trips.moveUp')} {index + 1}
+                <ArrowUp aria-hidden="true" />
+                <span className="sr-only">{t('neutral.trips.moveUp')} {index + 1}</span>
               </Button>
               <Button
                 type="button"
                 variant="outline"
+                size="icon-sm"
+                title={`${t('neutral.trips.moveDown')} ${index + 1}`}
                 disabled={pending || index === stops.length - 1}
                 onClick={() => moveStop(index, 1)}
               >
-                {t('neutral.trips.moveDown')} {index + 1}
+                <ArrowDown aria-hidden="true" />
+                <span className="sr-only">{t('neutral.trips.moveDown')} {index + 1}</span>
               </Button>
               <Button
                 type="button"
                 variant="outline"
+                size="icon-sm"
+                title={`${t('neutral.trips.removeStop')} ${index + 1}`}
                 disabled={pending || stops.length === 1}
                 onClick={() => setStops((current) => current.filter((_, stopIndex) => stopIndex !== index))}
               >
-                {t('neutral.trips.removeStop')} {index + 1}
+                <Trash2 aria-hidden="true" />
+                <span className="sr-only">{t('neutral.trips.removeStop')} {index + 1}</span>
               </Button>
             </div>
           </fieldset>
@@ -900,6 +915,7 @@ function TripEditor({
           <Button
             type="button"
             variant="outline"
+            size="sm"
             disabled={pending}
             onClick={() => setStops((current) => [...current, {
               name: '',
@@ -909,6 +925,7 @@ function TripEditor({
               notes: '',
             }])}
           >
+            <Plus aria-hidden="true" />
             {t('neutral.trips.addStop')}
           </Button>
         )}

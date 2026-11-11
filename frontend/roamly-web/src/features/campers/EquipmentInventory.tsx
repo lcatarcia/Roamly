@@ -1,4 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useRef, useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -183,14 +184,28 @@ export function EquipmentInventory({ camperId }: { camperId: string }) {
                     )}
                     {item.notes && <p className="mt-2 text-sm text-muted-foreground">{item.notes}</p>}
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
-                    <Button type="button" variant="outline" size="sm" onClick={() => void beginEdit(item)}>
-                      {t('neutral.camper.equipment.edit')}
+                  <div className="mt-4 flex items-center justify-end gap-1.5 border-t border-border pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      title={t('neutral.camper.equipment.edit')}
+                      onClick={() => void beginEdit(item)}
+                    >
+                      <Pencil aria-hidden="true" />
+                      <span className="sr-only">{t('neutral.camper.equipment.edit')}</span>
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" disabled={deleteMutation.isPending}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={deleteMutation.isPending}
                       aria-label={`${t('neutral.camper.equipment.remove')} ${item.name}`}
-                      onClick={() => void removeItem(item)}>
-                      {t('neutral.camper.equipment.remove')}
+                      title={`${t('neutral.camper.equipment.remove')} ${item.name}`}
+                      onClick={() => void removeItem(item)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      <span className="sr-only">{t('neutral.camper.equipment.remove')}</span>
                     </Button>
                   </div>
                 </li>

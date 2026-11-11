@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ExternalLink, Pencil, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -426,19 +427,21 @@ function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedP
           {place.notes && <p className="mt-2 break-words text-sm text-muted-foreground">{place.notes}</p>}
           {place.googleMapsUrl && (
             <a
-              className="mt-3 inline-block max-w-full break-all text-sm text-accent-text underline underline-offset-4"
+              className="mt-3 inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-accent-text underline underline-offset-4"
               href={place.googleMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
+              <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
               {t('neutral.savedPlaces.googleMapsUrl')}
             </a>
           )}
           {mode === 'confirmDelete' ? (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-3 rounded-xl border border-border bg-background p-3">
               <p className="text-sm">{t('neutral.savedPlaces.deleteQuestion')}</p>
               <div className="flex flex-wrap gap-2">
                 <Button variant="destructive" size="sm" onClick={() => void handleDelete()} disabled={busy}>
+                  <Trash2 aria-hidden="true" />
                   {pending ? t('neutral.savedPlaces.deleting') : t('neutral.savedPlaces.confirmDelete')}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setMode('view')} disabled={busy}>
@@ -447,12 +450,26 @@ function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedP
               </div>
             </div>
           ) : (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => void openWithVersion('edit')} disabled={busy}>
-                {t('neutral.savedPlaces.edit')}
+            <div className="mt-4 flex items-center justify-end gap-1.5 border-t border-border pt-3">
+              <Button
+                variant="outline"
+                size="icon-sm"
+                title={t('neutral.savedPlaces.edit')}
+                onClick={() => void openWithVersion('edit')}
+                disabled={busy}
+              >
+                <Pencil aria-hidden="true" />
+                <span className="sr-only">{t('neutral.savedPlaces.edit')}</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => void openWithVersion('confirmDelete')} disabled={busy}>
-                {t('neutral.savedPlaces.delete')}
+              <Button
+                variant="outline"
+                size="icon-sm"
+                title={t('neutral.savedPlaces.delete')}
+                onClick={() => void openWithVersion('confirmDelete')}
+                disabled={busy}
+              >
+                <Trash2 aria-hidden="true" />
+                <span className="sr-only">{t('neutral.savedPlaces.delete')}</span>
               </Button>
             </div>
           )}

@@ -6,6 +6,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -149,7 +150,10 @@ export function TripExpenses({ camperId, tripId, tripCancelled }: TripExpensesPr
           <p className="mt-1 text-sm text-muted-foreground">{t('neutral.expenses.description')}</p>
         </div>
         {!tripCancelled && !creating && editingId === null && (
-          <Button onClick={() => setCreating(true)}>{t('neutral.expenses.add')}</Button>
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus aria-hidden="true" />
+            {t('neutral.expenses.add')}
+          </Button>
         )}
       </div>
       {tripCancelled && (
@@ -251,6 +255,7 @@ export function TripExpenses({ camperId, tripId, tripCancelled }: TripExpensesPr
                 if (deleteTarget) deleteMutation.mutate(deleteTarget)
               }}
             >
+              <Trash2 aria-hidden="true" />
               {deleteMutation.isPending
                 ? t('neutral.expenses.deleting')
                 : t('neutral.expenses.confirmDelete')}
@@ -454,23 +459,33 @@ function ExpenseItem({
   onDelete: () => void
 }) {
   return (
-    <article className="space-y-3">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <time dateTime={expense.incurredOnUtc}>{formatExpenseDate(expense.incurredOnUtc)}</time>
-          {' · '}{expenseCategoryLabel(expense.category)}
-        </p>
-        <p className="mt-1 text-lg font-semibold tabular-nums">{formatExpenseAmount(expense.amount)}</p>
-        {expense.description && <p className="mt-1 text-sm">{expense.description}</p>}
+    <article className="flex flex-wrap items-start justify-between gap-3">
+      <header className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-secondary-foreground">
+            {expenseCategoryLabel(expense.category)}
+          </span>
+          <time className="text-xs font-medium text-muted-foreground tabular-nums" dateTime={expense.incurredOnUtc}>
+            {formatExpenseDate(expense.incurredOnUtc)}
+          </time>
+        </div>
+        <p className="text-lg font-bold tabular-nums">{formatExpenseAmount(expense.amount)}</p>
+        {expense.description && <p className="text-sm">{expense.description}</p>}
         {expense.odometerKm !== null && (
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground tabular-nums">
             {t('neutral.expenses.odometerValue')} {new Intl.NumberFormat('it-IT').format(expense.odometerKm)} km
           </p>
         )}
       </header>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={onEdit}>{t('neutral.expenses.edit')}</Button>
-        <Button variant="destructive" onClick={onDelete}>{t('neutral.expenses.delete')}</Button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button variant="outline" size="icon-sm" title={t('neutral.expenses.edit')} onClick={onEdit}>
+          <Pencil aria-hidden="true" />
+          <span className="sr-only">{t('neutral.expenses.edit')}</span>
+        </Button>
+        <Button variant="outline" size="icon-sm" title={t('neutral.expenses.delete')} onClick={onDelete}>
+          <Trash2 aria-hidden="true" />
+          <span className="sr-only">{t('neutral.expenses.delete')}</span>
+        </Button>
       </div>
     </article>
   )

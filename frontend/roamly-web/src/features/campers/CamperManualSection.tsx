@@ -1,5 +1,6 @@
 import { useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Field, FieldContent, FieldLabel } from '@/components/ui/field'
@@ -1444,8 +1445,15 @@ function MeasurementDetailCard({
       </dl>
 
       {canDelete && (
-        <Button type="button" variant="destructive" size="sm" onClick={onDelete}>
-          Rimuovi questa misura
+        <Button
+          type="button"
+          variant="destructive"
+          size="icon-sm"
+          title="Rimuovi questa misura"
+          onClick={onDelete}
+        >
+          <Trash2 aria-hidden="true" />
+          <span className="sr-only">Rimuovi questa misura</span>
         </Button>
       )}
     </section>
