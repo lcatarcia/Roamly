@@ -48,9 +48,11 @@ const page = pages[args[args.indexOf('--url') + 1]]
 if (!page) process.exit(99)
 if (page.hang) await new Promise(resolve => setTimeout(resolve, 30_000))
 if (page.stderr) process.stderr.write(page.stderr)
-if (page.raw !== undefined) process.stdout.write(page.raw)
-else process.stdout.write(JSON.stringify(page.body))
-process.exit(page.status ?? 0)
+const stdout = page.raw !== undefined ? page.raw : JSON.stringify(page.body)
+if (page.deferStdout) setImmediate(() => process.stdout.write(stdout))
+else process.stdout.write(stdout)
+// Let stdout/stderr drain; process.exit() truncates asynchronous Linux pipe writes.
+process.exitCode = page.status ?? 0
 `)
     const external = (command, args, options) => {
       assert.equal(command, 'az')
@@ -153,7 +155,8 @@ test('a single unpaginated page is accepted; revision env/secret data is never r
 test('large revision response is reduced to gate metadata without exposing environment data', () => {
   const item = revision()
   item.properties.template.containers[0].env = [{ name: 'secret', value: 'DO-NOT-LOG'.repeat(150_000) }]
-  const result = collect({ [first]: { body: { value: [item] } } })
+  // Exercise queued pipe output deterministically, including on Windows.
+  const result = collect({ [first]: { body: { value: [item] }, deferStdout: true } })
   assert.equal(result.exitCode, 0, result.errors)
   assert.ok(result.output.length < 1_000)
   assert.doesNotMatch(result.output + result.errors, /DO-NOT-LOG/)
