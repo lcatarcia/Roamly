@@ -229,6 +229,7 @@ export interface CamperManualViewImages {
   side?: string | null
   front?: string | null
   top?: string | null
+  hero?: string | null
 }
 
 export interface CamperManualMeasurement {

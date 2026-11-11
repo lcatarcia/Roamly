@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { lazy, Suspense, type ChangeEvent } from 'react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { t } from '@/i18n/catalog'
 import { CreateCamperForm } from '@/features/campers/CreateCamperForm'
 import { CamperDashboardManualPanel } from '@/features/campers/CamperManualSection'
+import { resizeImageFileToDataUrl } from '@/features/campers/camperImageUtils'
 import { CamperProfileForm } from '@/features/campers/CamperProfileForm'
 import { EquipmentInventory } from '@/features/campers/EquipmentInventory'
 import {
@@ -18,8 +19,10 @@ import {
   fetchCamperDashboard,
   fetchCamperProfile,
   fetchCampers,
+  updateCamperProfile,
   type CamperDashboardAxisStatus,
   type CamperDashboardResponse,
+  type CamperProfile,
 } from '@/lib/api'
 import {
   CAMPER_DASHBOARD_QUERY_KEY,
@@ -218,6 +221,7 @@ function CamperDashboardPage() {
 
 function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) {
   const { camper, odometer, maintenance } = dashboard
+  const queryClient = useQueryClient()
   const profileQuery = useQuery({
     queryKey: camperProfileQueryKey(camper.id),
     queryFn: () => fetchCamperProfile(camper.id),
@@ -225,7 +229,66 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
     retry: false,
   })
   const profile = profileQuery.data?.profile
+  const profileEtag = profileQuery.data?.etag
   const description = [camper.brand, camper.model, camper.year].filter(Boolean).join(' · ')
+
+  const heroPhotoMutation = useMutation({
+    mutationFn: async (nextHeroImage: string | null) => {
+      if (!profile || !profileEtag) {
+        throw new Error('Profilo non ancora pronto.')
+      }
+
+      const nextViewImages = {
+        side: profile.manualViewImages?.side ?? null,
+        front: profile.manualViewImages?.front ?? null,
+        top: profile.manualViewImages?.top ?? null,
+        hero: nextHeroImage,
+      }
+
+      return updateCamperProfile(
+        camper.id,
+        {
+          name: profile.name,
+          brand: profile.brand,
+          model: profile.model,
+          year: profile.year,
+          plateNumber: profile.plateNumber,
+          vehicleKind: profile.vehicleKind,
+          lengthMm: profile.lengthMm,
+          widthMm: profile.widthMm,
+          heightMm: profile.heightMm,
+          kerbWeightKg: profile.kerbWeightKg,
+          maxWeightKg: profile.maxWeightKg,
+          freshWaterL: profile.freshWaterL,
+          greyWaterL: profile.greyWaterL,
+          fuelTankL: profile.fuelTankL,
+          gasKg: profile.gasKg,
+          fuelKind: profile.fuelKind,
+          averageConsumptionLPer100Km: profile.averageConsumptionLPer100Km,
+          manualSourceName: profile.manualSourceName ?? null,
+          manualSourceUrl: profile.manualSourceUrl ?? null,
+          manualMeasurements: profile.manualMeasurements ?? [],
+          manualViewImages: nextViewImages,
+        },
+        profileEtag,
+      )
+    },
+    onSuccess: async (result) => {
+      queryClient.setQueryData(camperProfileQueryKey(camper.id), {
+        profile: result.value,
+        etag: result.etag,
+      })
+      await queryClient.invalidateQueries({ queryKey: CAMPER_DASHBOARD_QUERY_KEY })
+    },
+  })
+
+  async function handleHeroFileSelected(file: File) {
+    const dataUrl = await resizeImageFileToDataUrl(file)
+    if (!dataUrl) {
+      return
+    }
+    heroPhotoMutation.mutate(dataUrl)
+  }
 
   return (
     <PageContainer size="dashboard" className="justify-start gap-8">
@@ -329,7 +392,17 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
           </div>
 
           <div className="space-y-4">
-            <CamperHeroIllustration />
+            <CamperHeroMedia
+              camperName={camper.name}
+              vehicleKind={camper.vehicleKind}
+              profile={profile}
+              canEditPhoto={Boolean(profile && profileEtag)}
+              isSavingPhoto={heroPhotoMutation.isPending}
+              onUploadPhoto={(file) => {
+                void handleHeroFileSelected(file)
+              }}
+              onResetPhoto={() => heroPhotoMutation.mutate(null)}
+            />
             <OdometerPanel odometer={odometer} />
           </div>
         </div>
@@ -366,94 +439,154 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
   )
 }
 
-function CamperHeroIllustration() {
+function CamperHeroMedia({
+  camperName,
+  vehicleKind,
+  profile,
+  canEditPhoto,
+  isSavingPhoto,
+  onUploadPhoto,
+  onResetPhoto,
+}: {
+  camperName: string
+  vehicleKind: number
+  profile?: CamperProfile
+  canEditPhoto: boolean
+  isSavingPhoto: boolean
+  onUploadPhoto: (file: File) => void
+  onResetPhoto: () => void
+}) {
+  const customHeroUrl =
+    profile?.manualViewImages?.hero ?? profile?.manualViewImages?.side ?? null
+  const hasExplicitHero = Boolean(profile?.manualViewImages?.hero)
+  const fileInputId = `camper-hero-photo-${profile?.id ?? 'main'}`
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+    onUploadPhoto(file)
+  }
+
   return (
-    <div
-      aria-hidden="true"
-      className="overflow-hidden rounded-2xl border border-border bg-muted p-4"
-    >
-      <svg viewBox="0 0 420 175" className="h-auto w-full">
-        {/* Sole caldo terracotta */}
-        <circle cx="342" cy="46" r="24" fill="var(--color-primary)" opacity="0.85" />
-        {/* Montagne e colline sullo sfondo */}
-        <path
-          d="M0 138 L78 72 L152 126 L236 58 L328 132 L420 88 L420 175 L0 175 Z"
-          fill="var(--color-surface-raised-2)"
-        />
-        <path
-          d="M0 148 Q110 112 220 138 T420 130 L420 175 L0 175 Z"
-          fill="var(--color-surface-raised)"
-        />
-        {/* Strada panoramica */}
-        <line
-          x1="24"
-          y1="152"
-          x2="396"
-          y2="152"
-          stroke="var(--color-border-strong)"
-          strokeWidth="2.5"
-          strokeDasharray="6 6"
-        />
-        {/* Silhouette editoriale del camper van */}
-        <g transform="translate(88, 56)">
-          <path
-            d="M14 82 V30 C14 16 25 6 40 6 H166 C182 6 196 14 206 28 L228 56 L244 62 C250 64 254 70 254 76 V82 Z"
-            fill="var(--color-card)"
-            stroke="var(--color-foreground)"
-            strokeWidth="3"
-            strokeLinejoin="round"
+    <div className="space-y-2.5 overflow-hidden rounded-2xl border border-border bg-muted p-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {customHeroUrl ? 'Foto del tuo camper' : `Profilo tecnico · ${vehicleKindLabel(vehicleKind)}`}
+        </span>
+        {canEditPhoto && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <label
+              htmlFor={fileInputId}
+              className="inline-flex h-7 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-3 text-xs font-semibold text-secondary-foreground shadow-2xs transition-colors hover:bg-muted"
+            >
+              {isSavingPhoto
+                ? 'Salvataggio…'
+                : customHeroUrl
+                  ? 'Cambia foto'
+                  : 'Carica foto'}
+            </label>
+            <input
+              id={fileInputId}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="sr-only"
+              disabled={isSavingPhoto}
+              aria-label="Carica foto del camper"
+              onChange={handleFileChange}
+            />
+            {hasExplicitHero && (
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                disabled={isSavingPhoto}
+                onClick={onResetPhoto}
+              >
+                Rimuovi foto
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {customHeroUrl ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-background">
+          <img
+            src={customHeroUrl}
+            alt={`Foto di ${camperName}`}
+            className="h-44 w-full object-cover sm:h-48"
           />
-          {/* Fascia terracotta laterale */}
-          <path d="M16 62 H252 V71 H16 Z" fill="var(--color-primary)" />
-          {/* Finestrini */}
-          <rect
-            x="34"
-            y="20"
-            width="54"
-            height="28"
-            rx="6"
-            fill="var(--color-surface-raised)"
-            stroke="var(--color-foreground)"
-            strokeWidth="2.5"
-          />
-          <rect
-            x="100"
-            y="20"
-            width="48"
-            height="28"
-            rx="6"
-            fill="var(--color-surface-raised)"
-            stroke="var(--color-foreground)"
-            strokeWidth="2.5"
-          />
-          <path
-            d="M162 20 H194 L214 48 H162 Z"
-            fill="var(--color-surface-raised)"
-            stroke="var(--color-foreground)"
-            strokeWidth="2.5"
-            strokeLinejoin="round"
-          />
-          {/* Ruote */}
-          <circle
-            cx="64"
-            cy="84"
-            r="16"
-            fill="var(--color-surface-raised-2)"
-            stroke="var(--color-foreground)"
-            strokeWidth="3"
-          />
-          <circle cx="64" cy="84" r="6" fill="var(--color-card)" />
-          <circle
-            cx="202"
-            cy="84"
-            r="16"
-            fill="var(--color-surface-raised-2)"
-            stroke="var(--color-foreground)"
-            strokeWidth="3"
-          />
-          <circle cx="202" cy="84" r="6" fill="var(--color-card)" />
-        </g>
-      </svg>
+        </div>
+      ) : (
+        <div
+          aria-hidden="true"
+          className="overflow-hidden rounded-xl border border-border bg-background px-3 py-2"
+        >
+          <svg viewBox="0 0 540 205" className="h-auto w-full text-foreground">
+            {/* Griglia di riferimento leggera */}
+            <line x1="28" y1="36" x2="512" y2="36" stroke="currentColor" strokeWidth="1" strokeDasharray="3 5" opacity="0.18" />
+            <line x1="28" y1="168" x2="512" y2="168" stroke="currentColor" strokeWidth="1.5" strokeDasharray="6 6" opacity="0.35" />
+
+            {/* Quota superiore lunghezza */}
+            <g className="text-muted-foreground" stroke="currentColor" fill="currentColor" strokeWidth="1.2">
+              <line x1="48" y1="24" x2="492" y2="24" />
+              <line x1="48" y1="18" x2="48" y2="30" />
+              <line x1="492" y1="18" x2="492" y2="30" />
+              <text x="270" y="18" textAnchor="middle" fontSize="11" fontWeight="600" stroke="none">
+                {profile?.lengthMm
+                  ? `L ${formatKilometers(profile.lengthMm)} mm`
+                  : 'Vista laterale tecnica'}
+                {profile?.heightMm ? ` · H ${formatKilometers(profile.heightMm)} mm` : ''}
+              </text>
+            </g>
+
+            {/* Disegno tecnico dettagliato del camper */}
+            <g
+              transform="translate(0, -42)"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {/* Oblò sul tetto */}
+              <path d="M110 82h44l5 8h-54l5-8Z" fill="var(--color-surface-raised)" />
+              <path d="M262 82h52l5 8h-62l5-8Z" fill="var(--color-surface-raised)" />
+              {/* Scocca principale */}
+              <path
+                d="M48 202V104c0-12 9-21 21-21h270c26 0 47 10 64 30l42 47 41 11c10 3 17 11 17 21v10H48Z"
+                fill="var(--color-card)"
+              />
+              {/* Fascia inferiore e paraurti */}
+              <path d="M44 191h463v12c0 3-2 5-5 5H49c-3 0-5-2-5-5v-12Z" fill="var(--color-surface-raised)" />
+              {/* Tendalino esterno */}
+              <rect x="162" y="96" width="172" height="8" rx="4" fill="var(--color-surface-raised-2)" />
+              {/* Finestrino cabina e parabrezza */}
+              <path d="M354 100v60h81l-36-41c-11-12-26-19-45-19Z" fill="var(--color-surface-raised)" />
+              <line x1="387" y1="102" x2="387" y2="160" strokeWidth="1.8" />
+              {/* Porta scorrevole e finestra dinette */}
+              <rect x="238" y="106" width="98" height="95" rx="5" fill="none" strokeWidth="1.8" />
+              <rect x="250" y="114" width="74" height="40" rx="5" fill="var(--color-surface-raised)" />
+              <rect x="244" y="162" width="13" height="4" rx="2" fill="var(--color-primary)" />
+              {/* Finestra posteriore zona notte */}
+              <rect x="82" y="116" width="108" height="38" rx="5" fill="var(--color-surface-raised)" />
+              {/* Griglie e sportelli tecnici */}
+              <rect x="74" y="166" width="40" height="20" rx="3" fill="var(--color-surface-raised)" />
+              <rect x="126" y="168" width="28" height="18" rx="3" fill="var(--color-surface-raised)" />
+              {/* Fanali */}
+              <path d="M484 174h16v12h-16a5 5 0 0 1-5-5v-2a5 5 0 0 1 5-5Z" fill="var(--color-primary)" />
+              <rect x="48" y="150" width="6" height="28" rx="3" fill="var(--color-primary)" />
+              {/* Ruote */}
+              <circle cx="144" cy="205" r="22" fill="var(--color-surface-raised-2)" />
+              <circle cx="144" cy="205" r="10" fill="var(--color-card)" />
+              <circle cx="414" cy="205" r="22" fill="var(--color-surface-raised-2)" />
+              <circle cx="414" cy="205" r="10" fill="var(--color-card)" />
+            </g>
+          </svg>
+        </div>
+      )}
     </div>
   )
 }

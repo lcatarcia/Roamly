@@ -274,6 +274,9 @@ public sealed class CamperProfileApiTests(SqlServerFixture sqlServer) : IAsyncLi
         var etag = read.Headers.ETag?.ToString();
         Assert.NotNull(etag);
 
+        const string sampleHeroDataUrl =
+            "data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=";
+
         using var update = await SendJsonAsync(
             HttpMethod.Put,
             CamperPath,
@@ -297,6 +300,10 @@ public sealed class CamperProfileApiTests(SqlServerFixture sqlServer) : IAsyncLi
                 manualSourceName = parsed.SourceName,
                 manualSourceUrl = parsed.SourceUrl,
                 manualMeasurements = parsed.Measurements,
+                manualViewImages = new
+                {
+                    hero = sampleHeroDataUrl,
+                },
             });
 
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
@@ -307,6 +314,8 @@ public sealed class CamperProfileApiTests(SqlServerFixture sqlServer) : IAsyncLi
         Assert.Equal("https://ch-it.adria-mobil.com/campervans/twin", saved.ManualSourceUrl);
         Assert.NotNull(saved.ManualMeasurements);
         Assert.Equal(10, saved.ManualMeasurements!.Count);
+        Assert.NotNull(saved.ManualViewImages);
+        Assert.Equal(sampleHeroDataUrl, saved.ManualViewImages!.Hero);
     }
 
     private string CamperPath => $"/api/v1/campers/{_camperId:D}";
@@ -418,7 +427,14 @@ public sealed class CamperProfileApiTests(SqlServerFixture sqlServer) : IAsyncLi
         decimal? AverageConsumptionLPer100Km,
         string? ManualSourceName = null,
         string? ManualSourceUrl = null,
-        IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null);
+        IReadOnlyList<CamperManualMeasurementDto>? ManualMeasurements = null,
+        CamperManualViewImagesDto? ManualViewImages = null);
+
+    private sealed record CamperManualViewImagesDto(
+        string? Side = null,
+        string? Front = null,
+        string? Top = null,
+        string? Hero = null);
 
     private sealed record CamperManualMeasurementDto(
         string Id,
