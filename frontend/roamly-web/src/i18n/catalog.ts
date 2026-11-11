@@ -560,7 +560,7 @@ export const catalog = {
   'neutral.savedPlaces.positionHelp': "Le coordinate sono facoltative: inseriscile entrambe oppure lascia vuoti entrambi i campi.",
   'neutral.savedPlaces.positionLabel': "Posizione facoltativa",
   'neutral.savedPlaces.googleMapsUrl': "Link Google Maps",
-  'neutral.savedPlaces.googleMapsHelp': "Le coordinate esplicite del luogo vengono lette dal link, senza contattare Google. Puoi correggerle: i campi modificati o gia' salvati hanno priorita'. Link brevi o con sola vista @: inserisci le coordinate manualmente. Il link originale resta conservato.",
+  'neutral.savedPlaces.googleMapsHelp': "Le coordinate esplicite del luogo vengono lette dal link e arrotondate a un massimo di 3 decimali, senza contattare Google. Puoi correggerle: i campi modificati o gia' salvati hanno priorita'. Link brevi o con sola vista @: inserisci le coordinate manualmente. Il link originale resta conservato.",
   'neutral.savedPlaces.add': "Aggiungi luogo",
   'neutral.savedPlaces.adding': "Salvataggio in corso...",
   'neutral.savedPlaces.added': "Luogo aggiunto alla tua lista.",

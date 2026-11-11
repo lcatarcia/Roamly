@@ -2,6 +2,22 @@
 
 Stato: vista lista/mappa personale implementata e revisionata; integrazione non ancora attivata sull'host. Piano iniziale: 2026-11-03; aggiornamento del perimetro: 2026-11-06.
 
+## Aggiornamento locale — 2026-11-11
+
+La vista iniziale di «Da visitare» diventa **Mappa**; Lista resta selezionabile.
+L'apertura carica direttamente la mappa secondo il percorso personale esistente,
+anche quando la raccolta e' vuota. Nessuna modifica ai controlli del provider.
+
+Nei form create/edit le coordinate estratte automaticamente dai link Google Maps
+sono arrotondate a un massimo di **tre decimali**, senza zeri finali obbligatori:
+per Bunker Soratte, **42.237, 12.512**. Cambio link, svuotamento e reset continuano
+a seguire i valori automatici arrotondati; i campi modificati manualmente e le
+posizioni gia' salvate non vengono arrotondati o sovrascritti. Parser esatto,
+fallback storico in lettura, precisione SQL e API restano invariati. Link brevi
+o senza coordinate esplicite richiedono ancora inserimento manuale, senza fetch.
+Questo aggiornamento supera il default Lista e la precisione automatica del form
+descritti sotto; non e' ancora distribuito.
+
 ## Aggiornamento richiesto e implementato localmente — 2026-11-10
 
 Richiesta esplicita: «vorrei che quando si inserisce il link di ggogle maps poi tali coordinate vengano estratte automaticamente per visualizzare il pin sulla mappa. Inoltre vorrei vedere la mappa subito disponibile senza autorizzare la visualizzazione in più procedimenti».

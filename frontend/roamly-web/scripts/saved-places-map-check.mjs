@@ -130,9 +130,8 @@ async function main() {
       return route.continue()
     })
     await page.goto(`${origin}/places`, { waitUntil: 'networkidle' })
-    assert.equal(sdkLoads, 0)
-    assert.equal(cssLoads, 0)
-    await page.getByRole('button', { name: 'Mappa', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'Mappa', exact: true }).getAttribute('aria-pressed'), 'true')
+    assert.equal(await page.getByRole('button', { name: 'Lista', exact: true }).getAttribute('aria-pressed'), 'false')
     const pins = page.locator('.saved-place-map-pin')
     await pins.first().waitFor()
     assert.equal(await pins.count(), 14)
@@ -140,6 +139,7 @@ async function main() {
       'historical null position gets the exact Bunker pin without resaving')
     assert.deepEqual(await page.evaluate(() => window.__maps.positions[1]), [1, 1], 'manual position wins')
     assert.ok(sdkLoads > 0)
+    assert.ok(cssLoads > 0)
     assert.equal(await pins.first().textContent(), '♧' + maliciousName)
     assert.equal(await page.locator('.saved-places-map img').count(), 0, 'labels use textContent, never HTML')
     assert.equal(new Set(await pins.locator('span:first-child').allTextContents()).size, 14)
@@ -223,11 +223,10 @@ async function main() {
     assert.equal(await page.getByRole('button', { name: 'Consenti e apri mappa' }).count(), 0)
     configured = true
     places.splice(0)
-    await page.reload({ waitUntil: 'networkidle' })
     const sdkBeforeEmpty = sdkLoads
     const tokensBeforeEmpty = tokenCount
     const emptyToken = page.waitForResponse('**/api/v1/maps/token')
-    await page.getByRole('button', { name: 'Mappa', exact: true }).click()
+    await page.reload({ waitUntil: 'networkidle' })
     await emptyToken
     await page.getByText('Nessun luogo caricato ha coordinate valide. La mappa resta disponibile; aggiungi un link con coordinate o inseriscile manualmente per vedere i pin.').waitFor()
     await page.waitForFunction(() => window.__maps?.live === 1)

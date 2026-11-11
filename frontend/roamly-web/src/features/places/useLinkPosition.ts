@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react'
-import { googleMapsPosition, linkPositionFields, type PositionFields } from './google-maps-position.mjs'
+import { googleMapsPositionFields, linkPositionFields, type PositionFields } from './google-maps-position.mjs'
 import type { SavedPlace } from '@/lib/api'
 
 // Persisted positions are deliberately treated as manual: no provenance is
 // inferred from equality with a URL. Editing either field locks that field.
 export function useLinkPosition(place?: SavedPlace) {
-  const initial = place?.position ?? googleMapsPosition(place?.googleMapsUrl)
+  const initial = place?.position ?? googleMapsPositionFields(place?.googleMapsUrl)
   const [fields, setFields] = useState<PositionFields>({
     latitude: initial ? String(initial.latitude) : '',
     longitude: initial ? String(initial.longitude) : '',
@@ -23,8 +23,7 @@ export function useLinkPosition(place?: SavedPlace) {
     const last = previous.current
     const locked = { ...manual.current }
     setFields(current => linkPositionFields(current, last, url, locked))
-    const position = googleMapsPosition(url)
-    previous.current = position ? { latitude: String(position.latitude), longitude: String(position.longitude) } : null
+    previous.current = googleMapsPositionFields(url)
   }
   function reset() {
     setFields({ latitude: '', longitude: '' })
