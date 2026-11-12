@@ -320,30 +320,47 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
       </div>
 
       <header className="overflow-hidden rounded-3xl border border-border bg-card shadow-xs">
-        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)] lg:items-center">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
-                <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
-                {t('neutral.camper.dashboard.title')} · {vehicleKindLabel(camper.vehicleKind)}
-              </span>
-              {profile?.plateNumber && (
-                <span className="inline-flex items-center rounded-lg border border-border-strong bg-background px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider text-foreground">
-                  {profile.plateNumber}
+        <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(22rem,0.95fr)] lg:items-center">
+          <div className="min-w-0 space-y-5">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
+                  <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                  {t('neutral.camper.dashboard.title')} · {vehicleKindLabel(camper.vehicleKind)}
                 </span>
-              )}
+                {profile?.plateNumber && (
+                  <span className="inline-flex items-center rounded-lg border border-border-strong bg-background px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider text-foreground">
+                    {profile.plateNumber}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h1 className="page-title">{camper.name}</h1>
+                {description && (
+                  <p className="mt-1 text-base font-medium text-muted-foreground">
+                    {description}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <div>
-              <h1 className="page-title">{camper.name}</h1>
-              {description && (
-                <p className="mt-1 text-base font-medium text-muted-foreground">
-                  {description}
-                </p>
-              )}
-            </div>
+            <OdometerPanel odometer={odometer} />
           </div>
-          <OdometerPanel odometer={odometer} />
+
+          <div className="min-w-0">
+            <CamperHeroMedia
+              camperName={camper.name}
+              vehicleKind={camper.vehicleKind}
+              profile={profile}
+              canEditPhoto={Boolean(profile && profileEtag)}
+              isSavingPhoto={heroPhotoMutation.isPending}
+              onUploadPhoto={(file) => {
+                void handleHeroFileSelected(file)
+              }}
+              onResetPhoto={() => heroPhotoMutation.mutate(null)}
+            />
+          </div>
         </div>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-border px-6 py-5 sm:grid-cols-4 sm:px-8">
           <div>
@@ -416,28 +433,7 @@ function CamperDashboard({ dashboard }: { dashboard: CamperDashboardResponse }) 
         <CreateMaintenanceForm camperId={camper.id} />
       </section>
 
-      <section
-        aria-labelledby="camper-details-heading"
-        className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]"
-      >
-        <div className="space-y-3">
-          <h2 id="camper-details-heading" className="text-xl font-semibold">
-            {t('neutral.camper.profile.title')}
-          </h2>
-          <CamperHeroMedia
-            camperName={camper.name}
-            vehicleKind={camper.vehicleKind}
-            profile={profile}
-            canEditPhoto={Boolean(profile && profileEtag)}
-            isSavingPhoto={heroPhotoMutation.isPending}
-            onUploadPhoto={(file) => {
-              void handleHeroFileSelected(file)
-            }}
-            onResetPhoto={() => heroPhotoMutation.mutate(null)}
-          />
-        </div>
-        <CamperDashboardManualPanel camperId={camper.id} />
-      </section>
+      <CamperDashboardManualPanel camperId={camper.id} />
 
       <EquipmentInventory camperId={camper.id} />
     </PageContainer>
@@ -485,7 +481,7 @@ function CamperHeroMedia({
           <div className="flex flex-wrap items-center gap-1.5">
             <label
               htmlFor={fileInputId}
-              className="inline-flex h-7 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-3 text-xs font-semibold text-secondary-foreground shadow-2xs transition-colors hover:bg-muted"
+              className="inline-flex min-h-7 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-3 py-1 text-center text-xs font-semibold text-secondary-foreground shadow-2xs transition-colors hover:bg-muted"
             >
               {isSavingPhoto
                 ? 'Salvataggio…'
@@ -522,7 +518,7 @@ function CamperHeroMedia({
           <img
             src={customHeroUrl}
             alt={`Foto di ${camperName}`}
-            className="h-44 w-full object-cover sm:h-48"
+            className="h-48 w-full object-cover sm:h-56"
           />
         </div>
       ) : (
