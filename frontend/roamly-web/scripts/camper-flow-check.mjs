@@ -55,10 +55,74 @@ async function main() {
 
     await page.getByRole('link', { name: 'Torna alla dashboard' }).click()
     await page.getByRole('heading', { name: 'Il Grigio' }).waitFor()
+    await page.getByRole('heading', { name: 'Manuale PDF, link esterno e mappa delle misure' }).waitFor()
     const dashboardWidth = await page.locator('.max-w-7xl.min-w-0').evaluate((element) =>
       element.getBoundingClientRect().width,
     )
     assert.ok(dashboardWidth > 1100, `Expected a wide desktop dashboard, got ${dashboardWidth}px`)
+
+    const desktopLayout = await page.evaluate(() => {
+      const heroInput = document.querySelector('input[aria-label="Carica foto del camper"]')
+      const heroControl =
+        heroInput instanceof HTMLInputElement && heroInput.labels?.[0]
+          ? heroInput.labels[0]
+          : null
+      const maintenanceSection = document.querySelector('section[aria-labelledby="maintenance-heading"]')
+      const manualSection = document.querySelector('section[aria-labelledby="camper-manual-heading"]')
+      const diagramSvg = manualSection?.querySelector('svg[role="group"][aria-label^="Schema illustrativo"]')
+      const diagramContainer = diagramSvg?.parentElement ?? null
+      const mapColumn = diagramContainer?.parentElement ?? null
+      const diagramUploadInput = diagramContainer?.querySelector(
+        'input[aria-label^="Carica immagine personalizzata"]',
+      )
+      const diagramUploadLabel =
+        diagramUploadInput instanceof HTMLInputElement && diagramUploadInput.labels?.[0]
+          ? diagramUploadInput.labels[0]
+          : null
+
+      const heroRect = heroControl?.getBoundingClientRect()
+      const maintRect = maintenanceSection?.getBoundingClientRect()
+      const manualRect = manualSection?.getBoundingClientRect()
+      const mapColRect = mapColumn?.getBoundingClientRect()
+      const diagramRect = diagramContainer?.getBoundingClientRect()
+      const uploadLabelRect = diagramUploadLabel?.getBoundingClientRect()
+
+      return {
+        heroTop: heroRect ? Math.round(heroRect.top) : null,
+        maintTop: maintRect ? Math.round(maintRect.top) : null,
+        manualWidth: manualRect ? Math.round(manualRect.width) : null,
+        mapColWidth: mapColRect ? Math.round(mapColRect.width) : null,
+        hasDiagramAndUploadLabel: Boolean(diagramRect && uploadLabelRect),
+        uploadLabelClipped:
+          Boolean(diagramRect && uploadLabelRect) &&
+          uploadLabelRect.right > diagramRect.right,
+      }
+    })
+    assert.ok(
+      desktopLayout.heroTop !== null &&
+        desktopLayout.maintTop !== null &&
+        desktopLayout.heroTop < desktopLayout.maintTop,
+      `Camper hero media should appear above maintenance (heroTop=${desktopLayout.heroTop}, maintTop=${desktopLayout.maintTop})`,
+    )
+    assert.ok(
+      desktopLayout.manualWidth !== null && desktopLayout.manualWidth > 1000,
+      `Manual section should span full dashboard width (>1000px), got ${desktopLayout.manualWidth}px`,
+    )
+    assert.ok(
+      desktopLayout.mapColWidth !== null && desktopLayout.mapColWidth > 500,
+      `Interactive map column should remain wide and readable (>500px), got ${desktopLayout.mapColWidth}px`,
+    )
+    assert.equal(
+      desktopLayout.hasDiagramAndUploadLabel,
+      true,
+      'Diagram container and upload control must be present in interactive map view',
+    )
+    assert.equal(
+      desktopLayout.uploadLabelClipped,
+      false,
+      'Diagram image upload button should not clip horizontally inside map column',
+    )
+
     await page.setViewportSize({ width: 390, height: 844 })
     const dashboardFitsMobile = await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

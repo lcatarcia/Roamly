@@ -350,7 +350,7 @@ export function CamperManualSection({
   return (
     <section
       aria-labelledby="camper-manual-heading"
-      className="space-y-6 rounded-3xl border border-border bg-card p-6 shadow-xs"
+      className="@container min-w-0 space-y-6 rounded-3xl border border-border bg-card p-6 shadow-xs"
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
         <div className="space-y-1.5">
@@ -617,8 +617,8 @@ export function CamperManualSection({
 
       {/* Blocco 2: Mappa interattiva / Elenco / Zone */}
       {selectedMeasurement && displayMode === 'map' && (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
-          <div className="space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
+        <div className="grid min-w-0 gap-5 @4xl:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
+          <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h3 className="font-semibold">Mappa delle misure del camper</h3>
@@ -691,8 +691,8 @@ export function CamperManualSection({
       )}
 
       {selectedMeasurement && displayMode === 'list' && (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <div className="space-y-4">
+        <div className="grid min-w-0 gap-5 @4xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="min-w-0 space-y-4">
             <MainDimensionCards dimensions={dimensions} />
             <div className="rounded-lg border border-border bg-background p-4 sm:p-5">
               <h3 className="font-semibold">Tutte le misure a portata di mano ({effectiveMeasurements.length})</h3>
@@ -707,7 +707,7 @@ export function CamperManualSection({
             </div>
           </div>
 
-          <div className="space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
+          <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
             <CamperDiagram
               view={selectedMeasurement.view}
               dimensions={dimensions}
@@ -966,8 +966,8 @@ function ZonesExplorer({
   const zoneMeasurements = measurements.filter((m) => m.zone === selectedMeasurement.zone)
 
   return (
-    <div className="grid gap-5 md:grid-cols-[minmax(12rem,0.68fr)_minmax(0,1.32fr)]">
-      <nav aria-label="Zone del camper" className="rounded-lg border border-border bg-background p-4">
+    <div className="grid min-w-0 gap-5 @3xl:grid-cols-[minmax(12rem,0.68fr)_minmax(0,1.32fr)]">
+      <nav aria-label="Zone del camper" className="min-w-0 rounded-lg border border-border bg-background p-4">
         <h3 className="mb-3 font-semibold">Zone del camper</h3>
         <ul className="space-y-2">
           {zones.map((zone) => {
@@ -993,7 +993,7 @@ function ZonesExplorer({
         </ul>
       </nav>
 
-      <div className="space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
+      <div className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5">
         <header>
           <p className="text-sm text-muted-foreground">Zona selezionata · {camperName || 'Camper'}</p>
           <h3 className="text-lg font-semibold">{selectedMeasurement.zone}</h3>
@@ -1079,7 +1079,7 @@ function CamperDiagram({
     <div className={`space-y-3 overflow-hidden rounded-2xl border border-border bg-muted ${compact ? 'p-2.5' : 'p-3.5 sm:p-5'}`}>
       {onUploadImage && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2">
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex min-w-0 items-center gap-2 text-xs">
             <span className="font-semibold text-foreground">
               {customImageUrl
                 ? `Immagine personalizzata · Vista ${viewLabel(view).toLowerCase()}`
@@ -1089,7 +1089,7 @@ function CamperDiagram({
           <div className="flex flex-wrap items-center gap-2">
             <label
               htmlFor={fileInputId}
-              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-3.5 text-xs font-semibold text-secondary-foreground shadow-2xs hover:bg-muted"
+              className="inline-flex min-h-8 cursor-pointer items-center justify-center rounded-full border border-border-strong bg-secondary px-3.5 py-1 text-center text-xs font-semibold text-secondary-foreground shadow-2xs hover:bg-muted"
             >
               {isSaving
                 ? 'Salvataggio…'
@@ -1393,7 +1393,7 @@ function MeasurementDetailCard({
 }) {
   return (
     <section
-      className="space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5"
+      className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4 sm:p-5"
       aria-live="polite"
       aria-label="Dettaglio misura selezionata"
     >
