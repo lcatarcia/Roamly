@@ -215,6 +215,7 @@ async function mockApi(page) {
     if (!saved) {
       saved = {
         ...observed.created,
+        isVisited: false,
         position: observed.created.position ?? null,
         address: null,
         notes: null,

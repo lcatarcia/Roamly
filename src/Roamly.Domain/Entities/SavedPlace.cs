@@ -22,6 +22,9 @@ public class SavedPlace : IOwnedResource
     /// <summary>Categoria del luogo.</summary>
     public SavedPlaceCategory Category { get; set; }
 
+    /// <summary>Indica se l'utente ha visitato il luogo.</summary>
+    public bool IsVisited { get; set; }
+
     /// <summary>Posizione, complex type opzionale.</summary>
     public Coordinates? Position { get; set; }
 

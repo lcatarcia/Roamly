@@ -183,6 +183,11 @@ public sealed class AccountPrivacyApiTests(SqlServerFixture sqlServer) : IAsyncL
             {
                 AssertJsonObjectMatchesEntityType(record, entityType);
                 Assert.Equal(_ownerId, record.GetProperty("ownerId").GetGuid());
+                if (entityType.ClrType == typeof(SavedPlace))
+                {
+                    Assert.True(record.GetProperty("isVisited").GetBoolean());
+                }
+
                 var recordText = record.GetRawText();
                 Assert.DoesNotContain(_otherOwnerId.ToString("D"), recordText, StringComparison.OrdinalIgnoreCase);
                 exportedRecords.Add(recordText);
@@ -583,6 +588,7 @@ public sealed class AccountPrivacyApiTests(SqlServerFixture sqlServer) : IAsyncL
             OwnerId = ownerId,
             Name = $"{marker}-place",
             Category = SavedPlaceCategory.Aire,
+            IsVisited = true,
             CreatedAtUtc = createdAtUtc,
         });
         db.TripStops.Add(new TripStop

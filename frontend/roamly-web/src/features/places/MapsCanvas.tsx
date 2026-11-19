@@ -14,9 +14,13 @@ export default function MapsCanvas({ places, configuration, selectedId, onSelect
 }) {
   const container = useRef<HTMLDivElement>(null)
   const select = useRef(onSelect)
+  const lastFit = useRef<{ map: atlas.Map; camera: string } | null>(null)
   const [readyMap, setReadyMap] = useState<atlas.Map | null>(null)
   const [failed, setFailed] = useState(false)
   const { accountClientId, domain } = configuration
+  const selectedPosition = positionedPlaces(places).find(place => place.id === selectedId)?.position
+  const latitude = selectedPosition?.latitude
+  const longitude = selectedPosition?.longitude
   useEffect(() => { select.current = onSelect }, [onSelect])
 
   useEffect(() => {
@@ -78,24 +82,40 @@ export default function MapsCanvas({ places, configuration, selectedId, onSelect
       const name = document.createElement('span')
       name.textContent = place.name
       button.append(icon, name)
+      if (place.isVisited) {
+        button.dataset.visited = 'true'
+        button.setAttribute('aria-label', `${place.name}: ${t('neutral.savedPlaces.visited')}`)
+        const check = document.createElement('span')
+        check.setAttribute('aria-hidden', 'true')
+        check.textContent = '✓'
+        button.append(check)
+      }
       button.addEventListener('click', () => select.current(place.id))
       return new atlas.HtmlMarker({ htmlContent: button,
         position: [place.position!.longitude, place.position!.latitude], anchor: 'bottom' })
     })
     readyMap.markers.add(markers)
     const camera = mapCamera(places)
-    if (camera) readyMap.setCamera(camera)
+    const cameraKey = JSON.stringify(camera)
+    if (lastFit.current?.map !== readyMap || lastFit.current.camera !== cameraKey) {
+      lastFit.current = { map: readyMap, camera: cameraKey }
+      if (camera) readyMap.setCamera(camera)
+    }
     return () => { if (readyMap.getMapContainer()) readyMap.markers.remove(markers) }
   }, [readyMap, places])
 
   useEffect(() => {
-    if (!readyMap || !selectedId) return
+    if (!readyMap) return
     for (const button of container.current?.querySelectorAll<HTMLButtonElement>('.saved-place-map-pin') ?? []) {
       button.setAttribute('aria-pressed', String(button.dataset.placeId === selectedId))
     }
-    const place = positionedPlaces(places).find(item => item.id === selectedId)
-    if (place) readyMap.setCamera({ center: [place.position!.longitude, place.position!.latitude] })
   }, [readyMap, selectedId, places])
+
+  useEffect(() => {
+    if (readyMap && longitude !== undefined && latitude !== undefined) {
+      readyMap.setCamera({ center: [longitude, latitude] })
+    }
+  }, [readyMap, selectedId, longitude, latitude])
 
   return (
     <>

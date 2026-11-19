@@ -24,6 +24,12 @@
 }
 
 .saved-place-map-pin > span:first-child { font-size: 1.4rem; }
+.saved-place-map-pin[data-visited="true"] {
+  border-style: dashed;
+  background: var(--color-surface-raised);
+  color: var(--color-foreground);
+}
+
 .saved-place-map-pin:is(:focus-visible, [aria-pressed="true"]) {
   outline: 3px solid var(--color-ring);
   outline-offset: 2px;

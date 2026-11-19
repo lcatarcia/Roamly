@@ -21,7 +21,8 @@ internal static class BootstrapMigrationHistory
         "20261104093558_AddSavedPlaceRowVersion",
         "20261106091448_AddIdentityConsentRegistry",
         "20261106105835_AddMapsEconomicGate",
-        "20261110085016_AddNonPeriodicMaintenanceAndWarranty"
+        "20261110085016_AddNonPeriodicMaintenanceAndWarranty",
+        "20261119083756_AddSavedPlaceIsVisited"
     ]);
 
     internal static MigrationHistoryDifference Compare(
