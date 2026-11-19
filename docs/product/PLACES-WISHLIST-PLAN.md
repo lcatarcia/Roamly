@@ -1,6 +1,6 @@
 # Da visitare: piano della prima versione
 
-Stato: vista lista/mappa personale implementata, revisionata e distribuita con Maps abilitato sull'host. Piano iniziale: 2026-11-03; rilascio: 2026-11-06. Rendering nel browser autenticato ancora da verificare.
+Stato: vista lista/mappa personale implementata e revisionata; integrazione non ancora attivata sull'host. Piano iniziale: 2026-11-03; aggiornamento del perimetro: 2026-11-06.
 
 ## Luoghi visitati — 2026-11-19
 
