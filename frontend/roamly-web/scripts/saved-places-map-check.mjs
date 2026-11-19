@@ -34,7 +34,7 @@ export class Map {
     }, () => {});
   }
   getMapContainer() { return this.disposed ? null : this.container; }
-  setCamera(camera) { this.camera = camera; }
+  setCamera(camera) { this.camera = camera; this.cameraUpdates = (this.cameraUpdates ?? 0) + 1; }
   dispose() {
     if (this.disposed) throw new Error('double dispose');
     this.disposed = true; state.disposed++; state.live--; this.container.replaceChildren();
@@ -62,12 +62,13 @@ async function main() {
     let cssLoads = 0
     let configured = true
     let failToken = false
+    let failVisit = false
     let delayToken = null
     const versions = new Map()
     const mutations = []
     const places = Array.from({ length: 14 }, (_, category) => ({
       id: `place-${category}`, name: category === 0 ? maliciousName : `Categoria ${category}`,
-      category, position: { latitude: category, longitude: category }, notes: 'Nota locale', address: null,
+      category, position: { latitude: category, longitude: category }, notes: 'Nota locale', address: null, isVisited: false,
     }))
     places[0].position = null
     places[0].googleMapsUrl = 'https://www.google.com/maps/place/Bunker/@42.2370291,12.5091909,805m/data=!3d42.2370252!4d12.5117658'
@@ -110,6 +111,7 @@ async function main() {
         })
         assert.equal(request.headers()['if-match'], `"${version}"`)
         assert.equal(request.headers()['x-xsrf-token'], 'csrf')
+        if (failVisit && request.method() === 'PUT') return json({}, 503)
         mutations.push({ id, method: request.method(), version })
         if (request.method() === 'PUT') {
           Object.assign(place, request.postDataJSON())
@@ -159,10 +161,6 @@ async function main() {
     assert.equal(options.disableTelemetry, true)
     assert.equal(options.enableAccessibilityLocationFallback, false)
     assert.equal(options.showLogo, true)
-    const accessibility = await new AxeBuilder({ page }).include('.saved-places-map')
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
-    assert.deepEqual(accessibility.violations.map(item => item.id), [], 'map pins have accessible names and contrast')
-
     // Maps selection survives list CRUD; details and pins use the refreshed resource.
     await pins.first().click()
     await page.getByRole('button', { name: 'Lista', exact: true }).click()
@@ -176,7 +174,38 @@ async function main() {
     const details = page.getByRole('region', { name: 'Dettagli luogo selezionato' })
     await details.getByText(maliciousName).waitFor()
     await details.getByText('Nota aggiornata con If-Match').waitFor()
+    await pins.first().waitFor()
+    const savedPosition = places[0].position
+    const cameraUpdates = await page.evaluate(() => window.__maps.maps.at(-1).cameraUpdates)
+    const visit = details.getByRole('checkbox', { name: /Visitato/ })
+    await visit.focus()
+    failVisit = true
+    await page.keyboard.press('Space')
+    await details.getByRole('alert').getByText('Impossibile aggiornare la spunta. Riprova.').waitFor()
+    assert.equal(await visit.evaluate(input => document.activeElement === input), true, 'failed save retains keyboard focus')
+    assert.equal(await visit.isChecked(), false)
+    failVisit = false
+    await page.keyboard.press('Space')
+    await pins.first().getByText('✓', { exact: true }).waitFor()
+    assert.equal(await visit.evaluate(input => document.activeElement === input), true, 'successful save retains keyboard focus')
+    assert.match(await pins.first().getAttribute('aria-label'), /Visitato/)
+    assert.equal(await pins.first().evaluate(pin => getComputedStyle(pin).borderStyle), 'dashed')
+    assert.equal(places[0].isVisited, true)
+    assert.equal(places[0].notes, 'Nota aggiornata con If-Match')
+    assert.deepEqual(places[0].position, savedPosition, 'marking a visit must not change the saved position')
+    assert.equal(await page.evaluate(() => window.__maps.maps.at(-1).cameraUpdates), cameraUpdates,
+      'marking a visit must not reset the map view')
+    const accessibility = await new AxeBuilder({ page }).include('.saved-places-map')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
+    assert.deepEqual(accessibility.violations.map(item => item.id), [], 'visited and unvisited map pins have accessible names and contrast')
+    await page.getByRole('button', { name: 'Lista', exact: true }).click()
+    assert.equal(await firstCard.getByRole('checkbox', { name: /Visitato/ }).isChecked(), true)
+    await firstCard.getByRole('checkbox', { name: /Visitato/ }).click()
+    await firstCard.getByRole('checkbox', { name: /Visitato/, checked: false, disabled: false }).waitFor()
+    await page.getByRole('button', { name: 'Mappa', exact: true }).click()
+    await details.getByRole('checkbox', { name: /Visitato/, checked: false }).waitFor()
     await pins.last().waitFor()
+    assert.equal(await pins.first().getByText('✓', { exact: true }).count(), 0)
     await pins.last().click()
     await details.getByText('Categoria 13', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Lista', exact: true }).click()
@@ -190,6 +219,8 @@ async function main() {
     assert.equal(await pins.count(), 13, 'deleted place has no pin')
     assert.deepEqual(mutations, [
       { id: 'place-0', method: 'PUT', version: 1 },
+      { id: 'place-0', method: 'PUT', version: 2 },
+      { id: 'place-0', method: 'PUT', version: 3 },
       { id: 'place-13', method: 'DELETE', version: 1 },
     ])
 

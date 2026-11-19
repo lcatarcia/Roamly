@@ -221,5 +221,5 @@ Nessuna UX consenso, testo privacy definitivo, credenziale Maps, SDK, nuova dipe
 - Le categorie devono coprire città, paesi, locali, musei e attrazioni, oltre ai tipi di sosta e servizio già previsti.
 - Un luogo senza coordinate resta consultabile nell'elenco e non appare come segnaposto.
 - Il riuso come tappa sfrutta il collegamento previsto tra `TripStop` e `SavedPlace`; la tappa mantiene il proprio snapshot.
-- Raccolte tematiche, stato «visitato», recensioni, suggerimenti AI e routing non sono requisiti approvati per la prima versione.
+- Raccolte tematiche, recensioni, suggerimenti AI e routing non sono requisiti approvati per la prima versione. Lo stato «visitato», inizialmente escluso, è stato [approvato il 19 novembre](PLACES-WISHLIST-PLAN.md#luoghi-visitati--2026-11-19).
 - La decisione sul provider geografico resta un gate HIGH: nessuna mappa live o trasmissione di posizioni a terzi prima della decisione e delle verifiche di privacy.

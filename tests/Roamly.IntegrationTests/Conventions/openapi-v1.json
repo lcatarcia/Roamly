@@ -9129,7 +9129,8 @@
           "position",
           "address",
           "notes",
-          "googleMapsUrl"
+          "googleMapsUrl",
+          "isVisited"
         ],
         "type": "object",
         "properties": {
@@ -9175,6 +9176,9 @@
               "null",
               "string"
             ]
+          },
+          "isVisited": {
+            "type": "boolean"
           }
         },
         "description": "Dettagli manuali esposti per un luogo salvato."
@@ -9960,6 +9964,12 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "isVisited": {
+            "type": [
+              "null",
+              "boolean"
             ]
           }
         },

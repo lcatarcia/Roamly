@@ -6,6 +6,7 @@ import {
   type MapsConfiguration, type SavedPlace,
 } from '@/lib/api'
 import { categorySymbols, positionedPlaces } from './map-model.mjs'
+import { SavedPlaceVisitControl } from './SavedPlaceVisitControl'
 
 const MapsCanvas = lazy(() => import('./MapsCanvas').catch(() => ({
   default: () => <p role="alert" className="rounded-lg bg-background p-2 text-sm text-danger-text">{t('neutral.maps.renderError')}</p>,
@@ -53,13 +54,15 @@ export function SavedPlacesMapPanel({ places, categoryLabel, selectedId, onSelec
             <li key={category}><span aria-hidden="true">{symbol} </span>{categoryLabel(category)}</li>
           ))}
         </ul>
+        <p className="mt-2 text-sm"><span aria-hidden="true">✓ </span>{t('neutral.savedPlaces.visited')}</p>
       </details>
       <ul aria-label={t('neutral.maps.accessiblePlaces')} className="flex flex-wrap gap-2">
         {places.map(place => (
           <li key={place.id}>
-            <Button variant="outline" aria-pressed={selectedId === place.id} onClick={() => onSelect(place.id)}>
+            <Button variant="outline" className={place.isVisited ? 'border-dashed' : undefined} aria-pressed={selectedId === place.id} onClick={() => onSelect(place.id)}>
               <span aria-hidden="true">{categorySymbols[place.category] ?? '◆'}</span>
               <span className="max-w-56 truncate">{place.name}</span>
+              {place.isVisited && <><span aria-hidden="true">✓</span><span className="sr-only">{t('neutral.savedPlaces.visited')}</span></>}
             </Button>
           </li>
         ))}
@@ -71,6 +74,7 @@ export function SavedPlacesMapPanel({ places, categoryLabel, selectedId, onSelec
           {selected.address && <p className="break-words">{selected.address}</p>}
           {selected.notes && <p className="break-words">{selected.notes}</p>}
           <p>{selected.position ? `${selected.position.latitude}, ${selected.position.longitude}` : t('neutral.savedPlaces.positionMissing')}</p>
+          <SavedPlaceVisitControl key={selected.id} place={selected} />
         </section>
       )}
     </div>

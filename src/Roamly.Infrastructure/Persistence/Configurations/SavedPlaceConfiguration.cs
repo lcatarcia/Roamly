@@ -17,6 +17,7 @@ public sealed class SavedPlaceConfiguration(RoamlyDbContextBase context) : IEnti
 
         builder.Property(e => e.Name).HasNvarchar(120).IsRequired();
         builder.Property(e => e.Category).HasTinyint().IsRequired();
+        builder.Property(e => e.IsVisited).HasDefaultValue(false).IsRequired();
         builder.Property(e => e.Address).HasNvarchar(300);
         builder.Property(e => e.Notes).HasNvarchar(1000);
         builder.Property(e => e.GoogleMapsUrl).HasNvarchar(2048);

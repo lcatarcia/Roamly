@@ -1,6 +1,19 @@
 # Da visitare: piano della prima versione
 
-Stato: vista lista/mappa personale implementata e revisionata; integrazione non ancora attivata sull'host. Piano iniziale: 2026-11-03; aggiornamento del perimetro: 2026-11-06.
+Stato: vista lista/mappa personale implementata, revisionata e distribuita con Maps abilitato sull'host. Piano iniziale: 2026-11-03; rilascio: 2026-11-06. Rendering nel browser autenticato ancora da verificare.
+
+## Luoghi visitati — 2026-11-19
+
+La spunta **Visitato** e' reversibile e salvata sull'account per ogni luogo.
+I luoghi nuovi ed esistenti partono senza spunta. La Lista mostra una scheda
+con bordo tratteggiato; nella Mappa il pin mantiene nome e simbolo della
+categoria e aggiunge una spunta. La si puo' cambiare dalla Lista o dal
+dettaglio del luogo selezionato in Mappa, anche se privo di coordinate.
+Non si registra una data di visita e non si deduce lo stato dalle tappe.
+
+L'API restituisce `isVisited`; l'aggiornamento riusa `If-Match` e lascia lo
+stato invariato se il campo e' omesso. L'aggiornamento richiede una migrazione
+additiva; non e' ancora distribuito.
 
 ## Aggiornamento locale — 2026-11-11
 
@@ -232,7 +245,7 @@ Validazione locale del blocco: cicli TDD al confine HTTP, 24 casi del registro (
 
 Prove richieste nella vera implementazione: due owner con accessi incrociati e 404 uniforme; validazione URL e coordinate; assenza di richieste remote dal salvataggio di un link; pagine e filtri senza duplicati/omissioni; selezione coerente; 428/412 per concorrenza; conflitto sulla cancellazione referenziata; snapshot e stato del Trip; export/erasure completi; assenza di chiamate Azure prima dell'apertura autorizzata; indisponibilità e disattivazione; accessibilità tastiera/mobile. Usare L0 durante il lavoro e suite completa prima della consegna, più controlli frontend pertinenti. Janus valida l'implementazione prima di qualunque dichiarazione di production readiness.
 
-Esclusi: ricerca esterna, import automatico Google, routing, geolocalizzazione automatica, AI, foto/recensioni, raccolte e stato «visitato». Si rivalutano solo se il lavoro manuale diventa un limite reale.
+Esclusi: ricerca esterna, import automatico Google, routing, geolocalizzazione automatica, AI, foto/recensioni e raccolte. Si rivalutano solo se il lavoro manuale diventa un limite reale. L'esclusione iniziale dello stato «visitato» è superata dall'[aggiornamento del 19 novembre](#luoghi-visitati--2026-11-19).
 
 ## Riferimenti
 

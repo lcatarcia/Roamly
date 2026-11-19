@@ -325,6 +325,7 @@ export interface SavedPlace {
   id: string
   name: string
   category: number
+  isVisited: boolean
   position: { latitude: number; longitude: number } | null
   address: string | null
   notes: string | null
@@ -341,7 +342,7 @@ export interface SavedPlaceInput {
   googleMapsUrl: string | null
 }
 
-export type SavedPlaceUpdateInput = Omit<SavedPlaceInput, 'id'>
+export type SavedPlaceUpdateInput = Omit<SavedPlaceInput, 'id'> & { isVisited?: boolean }
 
 /** Luogo letto insieme al suo ETag, da restituire in If-Match alla modifica o eliminazione. */
 export interface SavedPlaceVersion {

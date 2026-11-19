@@ -71,7 +71,8 @@ public sealed class ListSavedPlacesHandler(RoamlyDbContext db)
                         place.Position.Value.Longitude),
                 place.Address,
                 place.Notes,
-                place.GoogleMapsUrl))
+                place.GoogleMapsUrl,
+                place.IsVisited))
             .Take(limit + 1)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);

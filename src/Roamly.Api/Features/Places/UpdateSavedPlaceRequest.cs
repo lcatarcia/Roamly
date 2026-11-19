@@ -14,7 +14,8 @@ public sealed record UpdateSavedPlaceRequest(
     SavedPlacePositionRequest? Position,
     [property: StringLength(300)] string? Address,
     [property: StringLength(1000)] string? Notes,
-    [property: StringLength(2048)] string? GoogleMapsUrl) : IValidatableObject
+    [property: StringLength(2048)] string? GoogleMapsUrl,
+    bool? IsVisited = null) : IValidatableObject
 {
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

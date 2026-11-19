@@ -36,6 +36,8 @@ public sealed class SavedPlaceMapsMigrationTests(SqlServerFixture sqlServer)
         Assert.Contains(columns, column => column.TableName == "SavedPlaces"
             && column.ColumnName == "RowVersion" && column.TypeName is "timestamp" or "rowversion");
         Assert.Contains(columns, column => column.TableName == "SavedPlaces" && column.ColumnName == "GoogleMapsUrl");
+        Assert.Contains(columns, column => column.TableName == "SavedPlaces"
+            && column.ColumnName == "IsVisited" && column.TypeName == "bit");
         Assert.Contains(columns, column => column.TableName == "ConsentTransitions");
         Assert.Contains(columns, column => column.TableName == "MapsEconomicStates");
         Assert.False(context.Database.HasPendingModelChanges());
@@ -75,6 +77,8 @@ public sealed class SavedPlaceMapsMigrationTests(SqlServerFixture sqlServer)
             $"SELECT [Name] AS [Value] FROM [SavedPlaces] WHERE [Id] = {placeId}").SingleAsync(Cancellation));
         Assert.Equal("https://maps.google.com/?q=main", await context.Database.SqlQuery<string>(
             $"SELECT [GoogleMapsUrl] AS [Value] FROM [SavedPlaces] WHERE [Id] = {placeId}").SingleAsync(Cancellation));
+        Assert.False(await context.Database.SqlQuery<bool>(
+            $"SELECT [IsVisited] AS [Value] FROM [SavedPlaces] WHERE [Id] = {placeId}").SingleAsync(Cancellation));
     }
 
     private static async Task AssertMigrationHistoryAsync(RoamlyDbContext context)

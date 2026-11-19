@@ -136,6 +136,48 @@ public sealed class SavedPlacesApiTests(SqlServerFixture sqlServer) : IAsyncLife
     }
 
     [Fact]
+    public async Task Visited_update_does_not_store_derived_coordinates_for_an_unchanged_link()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = NewId();
+        const string url = "https://maps.google.com/?q=42,12";
+        await using (var db = CreateOwnerContext())
+        {
+            db.SavedPlaces.Add(new SavedPlace
+            {
+                Id = id, OwnerId = _ownerId, Name = "Bunker", Category = SavedPlaceCategory.PointOfInterest,
+                GoogleMapsUrl = url,
+                CreatedAtUtc = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc),
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var path = $"/api/v1/saved-places/{id:D}";
+        using var read = await _client.GetAsync(path, ct);
+        var effectivePosition = (await read.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("position");
+        using var visited = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, path,
+            new { name = "Bunker", category = 8, position = effectivePosition, googleMapsUrl = $" {url} ", isVisited = true },
+            ETagOf(read), ct);
+        Assert.Equal(HttpStatusCode.OK, visited.StatusCode);
+        var body = await visited.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.True(body.GetProperty("isVisited").GetBoolean());
+        Assert.Equal(42m, body.GetProperty("position").GetProperty("latitude").GetDecimal());
+
+        // The API intentionally exposes the effective position, so only a DB read distinguishes stored coordinates.
+        await using var verify = CreateOwnerContext();
+        Assert.Null((await verify.SavedPlaces.AsNoTracking().SingleAsync(place => place.Id == id, ct)).Position);
+
+        using var legacy = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, path, new { name = "Bunker rinominato", category = 8, googleMapsUrl = url },
+            ETagOf(visited), ct);
+        Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
+        var stored = await verify.SavedPlaces.AsNoTracking().SingleAsync(place => place.Id == id, ct);
+        Assert.Equal(42m, stored.Position?.Latitude);
+        Assert.True(stored.IsVisited);
+    }
+
+    [Fact]
     public async Task traveller_can_create_a_saved_place_and_find_its_manual_details_in_the_list()
     {
         var id = NewId();
@@ -306,6 +348,43 @@ public sealed class SavedPlacesApiTests(SqlServerFixture sqlServer) : IAsyncLife
         Assert.Single(secondPage.Items);
         Assert.Null(secondPage.NextCursor);
         Assert.Equal(ids, firstPage.Items.Concat(secondPage.Items).Select(place => place.Id));
+    }
+
+    [Fact]
+    public async Task Traveller_can_mark_a_place_visited_edit_with_a_legacy_body_and_mark_it_unvisited()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var created = await CreatePlaceAsync(_client, NewId(), "Bunker");
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.False((await created.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("isVisited").GetBoolean());
+        var path = created.Headers.Location!.OriginalString;
+
+        using var visited = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, path, new { name = "Bunker", category = 9, isVisited = true }, ETagOf(created), ct);
+        Assert.Equal(HttpStatusCode.OK, visited.StatusCode);
+        Assert.True((await visited.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("isVisited").GetBoolean());
+
+        using var legacy = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, path, EditBody("Bunker modificato"), ETagOf(visited), ct);
+        Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
+        var edited = await legacy.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("Bunker modificato", edited.GetProperty("name").GetString());
+        Assert.True(edited.GetProperty("isVisited").GetBoolean());
+
+        using var listed = await _client.GetAsync("/api/v1/saved-places", ct);
+        listed.EnsureSuccessStatusCode();
+        var items = (await listed.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("items");
+        Assert.True(Assert.Single(items.EnumerateArray()).GetProperty("isVisited").GetBoolean());
+
+        using var unvisited = await _client.SendUnsafeWithCsrfAsync(
+            HttpMethod.Put, path, new { name = "Bunker modificato", category = 12, isVisited = false },
+            ETagOf(legacy), ct);
+        Assert.Equal(HttpStatusCode.OK, unvisited.StatusCode);
+        Assert.False((await unvisited.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("isVisited").GetBoolean());
+
+        using var details = await _client.GetAsync(path, ct);
+        details.EnsureSuccessStatusCode();
+        Assert.False((await details.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("isVisited").GetBoolean());
     }
 
     [Fact]

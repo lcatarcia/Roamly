@@ -583,6 +583,8 @@ export const catalog = {
   'neutral.savedPlaces.stale': "Il luogo è stato modificato o eliminato altrove. Chiudi e riapri il luogo per vedere la versione aggiornata.",
   'neutral.savedPlaces.referenced': "Il luogo è usato in una tappa di un viaggio, quindi non può essere eliminato. Rimuovi prima la tappa.",
   'neutral.savedPlaces.actionError': "Non e' stato possibile completare l'operazione. Riprova.",
+  'neutral.savedPlaces.visited': "Visitato",
+  'neutral.savedPlaces.visitSaveError': "Impossibile aggiornare la spunta. Riprova.",
   'neutral.savedPlaces.category.aire': "Area di sosta",
   'neutral.savedPlaces.category.campsite': "Campeggio",
   'neutral.savedPlaces.category.parking': "Parcheggio",

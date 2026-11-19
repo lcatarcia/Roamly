@@ -8,6 +8,7 @@ import { PageContainer } from '@/components/layout/PageContainer'
 import { Input } from '@/components/ui/input'
 import { SAVED_PLACES_QUERY_KEY } from '@/features/places/queryKeys'
 import { SavedPlacesMapPanel } from './SavedPlacesMapPanel'
+import { SavedPlaceVisitControl } from './SavedPlaceVisitControl'
 import { useLinkPosition } from './useLinkPosition'
 import { googleMapsPosition } from './google-maps-position.mjs'
 import { t } from '@/i18n/catalog'
@@ -402,7 +403,7 @@ function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedP
   }
 
   return (
-    <li className="min-w-0 rounded-2xl border border-border bg-card p-5 shadow-2xs">
+    <li className={`min-w-0 rounded-2xl border border-border p-5 ${place.isVisited ? 'border-dashed bg-surface-raised' : 'bg-card shadow-2xs'}`}>
       {mode === 'edit' ? (
         <SavedPlaceEditForm
           place={place}
@@ -450,27 +451,30 @@ function SavedPlaceCard({ place, actions }: { place: SavedPlace; actions: SavedP
               </div>
             </div>
           ) : (
-            <div className="mt-4 flex items-center justify-end gap-1.5 border-t border-border pt-3">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                title={t('neutral.savedPlaces.edit')}
-                onClick={() => void openWithVersion('edit')}
-                disabled={busy}
-              >
-                <Pencil aria-hidden="true" />
-                <span className="sr-only">{t('neutral.savedPlaces.edit')}</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                title={t('neutral.savedPlaces.delete')}
-                onClick={() => void openWithVersion('confirmDelete')}
-                disabled={busy}
-              >
-                <Trash2 aria-hidden="true" />
-                <span className="sr-only">{t('neutral.savedPlaces.delete')}</span>
-              </Button>
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-2 border-t border-border pt-3">
+              <SavedPlaceVisitControl place={place} disabled={busy} />
+              <div className="ml-auto flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  title={t('neutral.savedPlaces.edit')}
+                  onClick={() => void openWithVersion('edit')}
+                  disabled={busy}
+                >
+                  <Pencil aria-hidden="true" />
+                  <span className="sr-only">{t('neutral.savedPlaces.edit')}</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  title={t('neutral.savedPlaces.delete')}
+                  onClick={() => void openWithVersion('confirmDelete')}
+                  disabled={busy}
+                >
+                  <Trash2 aria-hidden="true" />
+                  <span className="sr-only">{t('neutral.savedPlaces.delete')}</span>
+                </Button>
+              </div>
             </div>
           )}
         </>

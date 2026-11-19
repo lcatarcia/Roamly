@@ -11,7 +11,8 @@ public sealed record SavedPlaceResponse(
     SavedPlacePositionResponse? Position,
     string? Address,
     string? Notes,
-    string? GoogleMapsUrl)
+    string? GoogleMapsUrl,
+    bool IsVisited)
 {
     /// <summary>Converte la risorsa persistita nel contratto API.</summary>
     public static SavedPlaceResponse From(SavedPlace place)
@@ -24,7 +25,8 @@ public sealed record SavedPlaceResponse(
             SavedPlacePositionResponse.From(place.Position ?? GoogleMapsPosition.Parse(place.GoogleMapsUrl)),
             place.Address,
             place.Notes,
-            place.GoogleMapsUrl);
+            place.GoogleMapsUrl,
+            place.IsVisited);
     }
 
     /// <summary>Completa solo la rappresentazione, senza modificare dati o RowVersion.</summary>

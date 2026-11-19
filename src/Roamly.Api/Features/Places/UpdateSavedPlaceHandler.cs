@@ -36,10 +36,21 @@ public sealed class UpdateSavedPlaceHandler(RoamlyDbContext db, TimeProvider clo
 
         place.Name = request.Name!.Trim();
         place.Category = request.Category!.Value;
-        place.Position = SavedPlaceContent.ToPosition(request.Position, request.GoogleMapsUrl);
+        var googleMapsUrl = SavedPlaceContent.NormalizeOptional(request.GoogleMapsUrl);
+        var position = SavedPlaceContent.ToPosition(request.Position, googleMapsUrl);
+        // The detail response can echo a derived position even when no coordinates are stored.
+        if (!(request.IsVisited.HasValue
+            && place.Position is null
+            && string.Equals(googleMapsUrl, SavedPlaceContent.NormalizeOptional(place.GoogleMapsUrl), StringComparison.Ordinal)
+            && (request.Position is null || position == GoogleMapsPosition.Parse(googleMapsUrl))))
+        {
+            place.Position = position;
+        }
+
         place.Address = SavedPlaceContent.NormalizeOptional(request.Address);
         place.Notes = SavedPlaceContent.NormalizeOptional(request.Notes);
-        place.GoogleMapsUrl = SavedPlaceContent.NormalizeOptional(request.GoogleMapsUrl);
+        place.GoogleMapsUrl = googleMapsUrl;
+        place.IsVisited = request.IsVisited ?? place.IsVisited;
         place.UpdatedAtUtc = clock.GetUtcNow().UtcDateTime;
         db.Entry(place).Property(candidate => candidate.RowVersion).OriginalValue = originalRowVersion;
 
